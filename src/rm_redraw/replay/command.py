@@ -10,12 +10,15 @@ import json
 import math
 import subprocess
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from io import BytesIO
+from numbers import Real
 from pathlib import Path
 from typing import Literal
 
 from PIL import __version__ as pillow_version
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError, PdfStreamError
 
 from rm_redraw.parsing import GeometryResolutionError, parse_page, resolve_page_geometry
 from rm_redraw.parsing.geometry import AffineTransform
@@ -52,6 +55,69 @@ class LocalReplayInput:
 class ReplayResult:
     output_directory: Path
     manifest_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class PairedExportEvidence:
+    """Locally verifiable native-PDF target-canvas evidence."""
+
+    native_pdf_path: Path
+    native_pdf_sha256: str
+    page: int
+    media_box_points: tuple[float, float]
+    canvas: tuple[int, int]
+
+
+def _load_paired_export_evidence(
+    *,
+    paired_native_pdf: str | Path | None,
+    paired_pdf_page: int,
+    export_canvas: tuple[int, int] | None,
+) -> PairedExportEvidence | None:
+    if (paired_native_pdf is None) != (export_canvas is None):
+        raise ReplayCommandError(
+            "--paired-native-pdf and --export-canvas must be supplied together"
+        )
+    if paired_native_pdf is None:
+        return None
+    if paired_pdf_page <= 0:
+        raise ReplayCommandError("--paired-pdf-page must be positive")
+
+    pdf_path = Path(paired_native_pdf)
+    try:
+        pdf_bytes = pdf_path.read_bytes()
+        reader = PdfReader(BytesIO(pdf_bytes))
+        page = reader.pages[paired_pdf_page - 1]
+    except (OSError, IndexError, PdfReadError, PdfStreamError, ValueError) as error:
+        raise ReplayCommandError(
+            f"cannot validate paired native PDF page {paired_pdf_page}: {error}"
+        ) from error
+    media_box = page.mediabox
+    try:
+        media_box_points = (float(media_box.width), float(media_box.height))
+    except (TypeError, ValueError) as error:
+        raise ReplayCommandError("paired native PDF has an invalid page MediaBox") from error
+    try:
+        canvas_values = tuple(export_canvas)
+    except TypeError as error:
+        raise ReplayCommandError("invalid --export-canvas") from error
+    if len(canvas_values) != 2 or any(
+        isinstance(dimension, bool)
+        or not isinstance(dimension, Real)
+        or not math.isfinite(float(dimension))
+        or not float(dimension).is_integer()
+        or dimension <= 0
+        for dimension in canvas_values
+    ):
+        raise ReplayCommandError("invalid --export-canvas: dimensions must be positive integers")
+    canvas = (int(canvas_values[0]), int(canvas_values[1]))
+    return PairedExportEvidence(
+        native_pdf_path=pdf_path,
+        native_pdf_sha256=_sha256(pdf_bytes),
+        page=paired_pdf_page,
+        media_box_points=media_box_points,
+        canvas=canvas,
+    )
 
 
 def _sha256(data: bytes) -> str:
@@ -123,13 +189,46 @@ def _resolve_geometry_or_error(
     *,
     paper_size: tuple[int, int] | None,
     source_affine: AffineTransform | None,
+    paired_export: PairedExportEvidence | None,
 ):
     """Adapt shared geometry errors to CLI option names without duplicating resolution."""
+    selected_paper_size = paper_size
+    selected_source_affine = source_affine
+    paper_size_evidence: str | None = None
+    transform_evidence: str | None = None
+    if paired_export is not None and paper_size is None:
+        source_paper_size = parsed_page.paper_size  # type: ignore[attr-defined]
+        if source_paper_size is not None and tuple(source_paper_size) != paired_export.canvas:
+            raise ReplayCommandError(
+                "SceneInfo.paper_size conflicts with --export-canvas; "
+                "supply --paper-size WIDTH HEIGHT to select a page canvas"
+            )
+        if source_paper_size is None:
+            selected_paper_size = paired_export.canvas
+            paper_size_evidence = (
+                "Paired native PDF export canvas; SceneInfo.paper_size was absent."
+            )
+    if (
+        paired_export is not None
+        and source_affine is None
+        and parsed_page.source_to_page_transform is None  # type: ignore[attr-defined]
+    ):
+        selected_source_affine = (1, 0, 0, 1, paired_export.canvas[0] / 2, 0)
+        transform_evidence = (
+            "Centered source frame inferred from paired native PDF export canvas width."
+        )
     try:
-        return resolve_page_geometry(
+        geometry = resolve_page_geometry(
             parsed_page,  # type: ignore[arg-type]
-            paper_size=paper_size,
-            source_to_page_transform=source_affine,
+            paper_size=selected_paper_size,
+            source_to_page_transform=selected_source_affine,
+        )
+        return replace(
+            geometry,
+            paper_size_evidence=paper_size_evidence or geometry.paper_size_evidence,
+            source_to_page_transform_evidence=(
+                transform_evidence or geometry.source_to_page_transform_evidence
+            ),
         )
     except GeometryResolutionError as error:
         detail = str(error)
@@ -210,6 +309,9 @@ def run_local_replay(
     page_id: str | None = None,
     paper_size: tuple[int, int] | None = None,
     source_affine: AffineTransform | None = None,
+    paired_native_pdf: str | Path | None = None,
+    paired_pdf_page: int = 1,
+    export_canvas: tuple[int, int] | None = None,
     mode: ReplayMode = "stroke-step",
     fps: int = 30,
     seconds_per_stroke: float | None = None,
@@ -219,6 +321,11 @@ def run_local_replay(
 ) -> ReplayResult:
     """Parse and replay one local page into a new deterministic output directory."""
     source_input = _load_input(Path(source), page_id)
+    paired_export = _load_paired_export_evidence(
+        paired_native_pdf=paired_native_pdf,
+        paired_pdf_page=paired_pdf_page,
+        export_canvas=export_canvas,
+    )
     parsed_page = parse_page(
         BytesIO(source_input.page_bytes)
         if source_input.page_bytes is not None
@@ -230,6 +337,7 @@ def run_local_replay(
         parsed_page,
         paper_size=paper_size,
         source_affine=source_affine,
+        paired_export=paired_export,
     )
     render_page = to_render_page(
         parsed_page,
@@ -289,6 +397,28 @@ def run_local_replay(
             "source_to_page_transform": list(geometry.source_to_page_transform),
             "transform_evidence": geometry.source_to_page_transform_evidence,
         },
+        "paired_export": (
+            {
+                "native_pdf": {
+                    "path": str(paired_export.native_pdf_path),
+                    "sha256": paired_export.native_pdf_sha256,
+                    "page": paired_export.page,
+                    "media_box_points": {
+                        "width": paired_export.media_box_points[0],
+                        "height": paired_export.media_box_points[1],
+                    },
+                },
+                "canvas": {
+                    "width": paired_export.canvas[0],
+                    "height": paired_export.canvas[1],
+                },
+                "canvas_evidence": (
+                    "Caller-supplied target canvas; no DPI or device scale inferred."
+                ),
+            }
+            if paired_export is not None
+            else None
+        ),
         "replay": {
             "mode": mode,
             "fps": fps,

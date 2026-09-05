@@ -26,6 +26,24 @@ def _parser() -> argparse.ArgumentParser:
         help="source-to-page affine transform override",
     )
     parser.add_argument(
+        "--paired-native-pdf",
+        type=Path,
+        help="local paired native PDF to hash and validate as export evidence",
+    )
+    parser.add_argument(
+        "--paired-pdf-page",
+        type=int,
+        default=1,
+        help="one-based paired native PDF page (default: 1)",
+    )
+    parser.add_argument(
+        "--export-canvas",
+        type=int,
+        nargs=2,
+        metavar=("WIDTH", "HEIGHT"),
+        help="caller-validated target canvas; does not infer DPI or device scale",
+    )
+    parser.add_argument(
         "--mode",
         choices=("stroke-step", "seconds-per-stroke", "distance-per-second"),
         default="stroke-step",
@@ -52,6 +70,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             page_id=args.page_id,
             paper_size=tuple(args.paper_size) if args.paper_size is not None else None,
             source_affine=tuple(args.source_affine) if args.source_affine is not None else None,
+            paired_native_pdf=args.paired_native_pdf,
+            paired_pdf_page=args.paired_pdf_page,
+            export_canvas=tuple(args.export_canvas) if args.export_canvas is not None else None,
             mode=args.mode,
             fps=args.fps,
             seconds_per_stroke=args.seconds_per_stroke,

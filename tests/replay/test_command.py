@@ -7,6 +7,7 @@ import zipfile
 from io import BytesIO
 
 import pytest
+from PIL import Image
 from rmscene import (
     CrdtId,
     CrdtSequenceItem,
@@ -20,6 +21,7 @@ from rmscene import (
 )
 from rmscene import scene_items as si
 
+from rm_redraw.replay.__main__ import main
 from rm_redraw.replay.command import ReplayCommandError, run_local_replay
 
 END = CrdtId(0, 0)
@@ -96,6 +98,108 @@ def test_missing_source_affine_requires_explicit_override(tmp_path) -> None:
 
     with pytest.raises(ReplayCommandError, match="--source-affine"):
         run_local_replay(source, output_directory=tmp_path / "output")
+
+
+def test_paired_export_canvas_resolves_missing_page_geometry(tmp_path) -> None:
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=None))
+    native_pdf = tmp_path / "native.pdf"
+    Image.new("RGB", (594, 1946), "white").save(native_pdf, "PDF")
+
+    result = run_local_replay(
+        source,
+        output_directory=tmp_path / "output",
+        paired_native_pdf=native_pdf,
+        paired_pdf_page=1,
+        export_canvas=(1872, 6136),
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["geometry"]["paper_size"] == [1872, 6136]
+    assert manifest["geometry"]["source_to_page_transform"] == [1.0, 0.0, 0.0, 1.0, 936.0, 0.0]
+    assert manifest["geometry"]["paper_size_evidence"] == (
+        "Paired native PDF export canvas; SceneInfo.paper_size was absent."
+    )
+    assert manifest["geometry"]["transform_evidence"] == (
+        "Centered source frame inferred from paired native PDF export canvas width."
+    )
+    assert manifest["paired_export"]["canvas"] == {"width": 1872, "height": 6136}
+    assert manifest["paired_export"]["native_pdf"]["page"] == 1
+
+
+def test_cli_accepts_locally_verifiable_paired_export_canvas(tmp_path) -> None:
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=None))
+    native_pdf = tmp_path / "native.pdf"
+    Image.new("RGB", (594, 1946), "white").save(native_pdf, "PDF")
+    output = tmp_path / "output"
+
+    exit_code = main(
+        [
+            str(source),
+            "--output",
+            str(output),
+            "--paired-native-pdf",
+            str(native_pdf),
+            "--paired-pdf-page",
+            "1",
+            "--export-canvas",
+            "1872",
+            "6136",
+        ]
+    )
+
+    assert exit_code == 0
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["paired_export"]["native_pdf"]["media_box_points"] == {
+        "width": 594.0,
+        "height": 1946.0,
+    }
+
+
+def test_paired_export_canvas_rejects_fractional_dimensions(tmp_path) -> None:
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=None))
+    native_pdf = tmp_path / "native.pdf"
+    Image.new("RGB", (594, 1946), "white").save(native_pdf, "PDF")
+
+    with pytest.raises(ReplayCommandError, match=r"--export-canvas.*positive integers"):
+        run_local_replay(
+            source,
+            output_directory=tmp_path / "output",
+            paired_native_pdf=native_pdf,
+            export_canvas=(1872.5, 6136),
+        )
+
+
+def test_paired_export_rejects_malformed_native_pdf_actionably(tmp_path) -> None:
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=None))
+    native_pdf = tmp_path / "native.pdf"
+    native_pdf.write_bytes(b"not a PDF")
+
+    with pytest.raises(ReplayCommandError, match="cannot validate paired native PDF page 1"):
+        run_local_replay(
+            source,
+            output_directory=tmp_path / "output",
+            paired_native_pdf=native_pdf,
+            export_canvas=(1872, 6136),
+        )
+
+
+def test_stale_scene_paper_size_requires_explicit_canvas_selection(tmp_path) -> None:
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=(1404, 1872)))
+    native_pdf = tmp_path / "native.pdf"
+    Image.new("RGB", (594, 1946), "white").save(native_pdf, "PDF")
+
+    with pytest.raises(ReplayCommandError, match=r"SceneInfo\.paper_size conflicts.*--paper-size"):
+        run_local_replay(
+            source,
+            output_directory=tmp_path / "output",
+            paired_native_pdf=native_pdf,
+            export_canvas=(1872, 6136),
+        )
 
 
 def test_fractional_paper_size_override_reports_the_cli_option(tmp_path) -> None:
