@@ -21,7 +21,7 @@ Verified 2026-09-05. Ready to start acquisition, parser, and baseline replay wor
 - Two other items share the name Drawings: one notebook and an empty nested collection. Select the root collection by UUID, not the first name match.
 - Six page headers sampled from notebook `1f7a7562-680e-452d-a9f7-da2c23e8717a` were `.rm` version 6. This is not an inventory of every page or pen.
 - Device has `tar`, `sha256sum`, and `dd`. `python3` and `curl` were not found on its PATH. BusyBox `head` does not support `-c`; use `dd` for bounded byte reads.
-- HTTP request to `http://10.11.99.1/documents/` failed; `/proc/net/tcp` and `/proc/net/tcp6` showed no port 80 listener. USB API exports are unverified and currently unavailable.
+- USB web interface was rechecked after the user enabled it: listing, Drawings folder listing, raw `.rmdoc` export, and native PDF export all return HTTP 200. The optional thumbnail route returns HTTP 500 for the selected notebook and is not an acquisition blocker.
 - Local Git 2.47.1, Node 26.4.0/npm 11.17.0, FFmpeg 7.1 with libx264, and Poppler pdftoppm 26.07.0 execute. GitHub CLI is authenticated. The project uses uv-managed CPython 3.13.15, the current 3.13 maintenance release as of 2026-09-05.
 - PIL, numpy, skimage, and pypdf are discoverable in the local Python interpreter. rmscene and rmc are absent there. No project dependency environment exists yet.
 - At initial inspection the workspace contained only the brief and was not a Git repository. This document is the only review artifact added. No applicable ancestor AGENTS.md was found.
