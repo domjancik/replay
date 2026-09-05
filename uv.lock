@@ -193,6 +193,7 @@ dependencies = [
     { name = "pypdf" },
     { name = "rmscene" },
     { name = "scikit-image" },
+    { name = "scipy" },
 ]
 
 [package.dev-dependencies]
@@ -209,6 +210,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=5,<7" },
     { name = "rmscene", specifier = "==0.8.0" },
     { name = "scikit-image", specifier = ">=0.25,<0.27" },
+    { name = "scipy", specifier = ">=1.14,<2" },
 ]
 
 [package.metadata.requires-dev]

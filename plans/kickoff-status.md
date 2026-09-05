@@ -19,6 +19,8 @@
 | Geometry follow-up | GPT-5.6 Sol, high | Evidence-carrying geometry resolver, unknown-transform correction, page-2 outlier diagnosis |
 | Independent acquisition | GPT-5.6 Terra, medium | Three immutable SSH snapshots, 27 v6 pages, validated hashes; no paired native exports |
 | End-to-end replay | GPT-5.6 Terra, high plus coordinator review | Local `.rm`/`.rmdoc` CLI, deterministic frames/static/manifest/H.264, encoded-timeline and equality gates |
+| Native comparison tooling | GPT-5.6 Terra, medium plus coordinator review | Supported PNG/PDF comparison CLI, fixed Poppler rasterization, global/ink-ROI/edge metrics, diffs and overlay |
+| Source-affine evidence audit | GPT-5.6 Sol, high | Same-device `+702` convention strongly supported; evidence remains too narrow for an automatic parser default |
 
 Acquisition verification fixture: `fixtures/private/verification/8aba68ff-00e9-400b-9772-b96322e000f0/` (ignored). The USB archive and five-page native PDF pass structural checks. Poppler rasterized five 890×1188 PNGs at 144 DPI. It emitted non-fatal unknown `ExtGState GSa` warnings.
 
@@ -42,11 +44,32 @@ The local replay command is available through `python -m rm_redraw.replay`. It a
 
 Follow-up read-only acquisition created three immutable SSH snapshots under `fixtures/private/independent-validation/ssh-v1/`: 27 v6 pages with validated manifest sizes and SHA-256 hashes. The USB API was connection-refused during this follow-up, so these snapshots have no paired native PDF. They contain no anchored groups and only one typed character, so they validate parser/replay breadth and geometry failure semantics but provide no evidence for or against the `+63` anchor origin or 69.5-unit plain-paragraph spacing.
 
+A renewed USB check plus two bounded retries were actively refused on `10.11.99.1:80`. Read-only SSH inspection found no port-80 listener or HTTP/web-interface process; SSH and xochitl remained healthy, and no process was restarted or tablet setting changed. A read-only scan covered all 58 immediate non-deleted notebook children of Drawings. The best independent validation target is `dreams` (`d1c4c1ae-78cb-4fe4-9873-3eae049df7a8`), page `a709e2d0-f34c-4e61-8878-e531e9aab80c`: 48 typed paragraphs including non-plain style 2, two anchored groups, 48 strokes and 1,886 points. The ignored private probe has SHA-256 `D4426567A68EF7E8F6658B4D95A68AAD09F28EE595643C872C1FCA7926D6C068`. It is ready for paired export as soon as the web interface is listening again.
+
+The supported comparison command is available through `python -m rm_redraw.comparison`. It accepts a candidate PNG plus a same-size native PNG or selected native PDF page, rejects implicit resize/crop/colour conversion, and writes normalized inputs, absolute/high-gain differences, overlay, and schema-versioned metrics with hashes and rasterization provenance. A full-resolution 1404×1872 run against the current paired page, using the explicit `(1, 0, 0, 1, 702, 0)` affine, produced global SSIM 0.7652, ink-ROI SSIM 0.7295 and 1.652-pixel symmetric mean edge distance. Visual review shows the main geometry aligned; most residual error is the Pillow baseline's darker, coarser stroke and shading treatment. Evidence is under ignored `artifacts/comparison-current-page1-full/`.
+
+The source-affine evidence audit covered 32 v6 pages across four documents. All 11 available `SceneInfo.paper_size` values are 1404×1872, all four document metadata sets independently record the same dimensions and a `(0, 936)` custom-zoom center, and none of the parsed pages carries an affine. Paired native registration selects `tx=702` on the one repeated coordinate sequence, with per-page estimates of 702–702.25 and a large improvement over identity. This strongly supports a centered source-coordinate convention for the sampled device, but the five paired pages repeat one geometric sample and best-fit metadata may be inactive. The parser therefore keeps the transform unknown until a second paired document or a distinct width/orientation provides independent evidence.
+
+## Recommended model allocation
+
+| Task | Model and effort | Price/performance reason |
+| --- | --- | --- |
+| USB listener probe and known-command retries | GPT-5.6 Luna, medium | Cheapest choice for short, deterministic checks; escalate the same thread if evidence becomes ambiguous |
+| Read-only paired acquisition and corpus inventory | GPT-5.6 Terra, medium | Best default for bounded shell/API work with validation and structured manifests |
+| Parser, anchor calibration, affine inference | GPT-5.6 Sol, high | Worth the higher rate for format ambiguity, competing geometric hypotheses and evidence-sensitive conclusions |
+| Comparison CLI, diagnostics and routine renderer changes | GPT-5.6 Terra, medium | Strong implementation value for well-frozen contracts and focused tests |
+| Cross-module integration and adversarial review | GPT-5.6 Sol, high | Use when failures span parser, replay ordering, rendering and provenance contracts |
+| Simple-pen fidelity | GPT-5.6 Sol, high | Requires visual/algorithmic judgment but has a bounded tool model and measurable target |
+| Pencil/brush texture research or a stalled geometry investigation | GPT-6 Astra, high | Reserve the premium model for the hardest open-ended research where Terra/Sol evidence has stopped converging |
+| Documentation, manifest summaries and repetitive report refreshes | GPT-5.6 Luna, medium | High-volume, low-ambiguity work benefits most from the lowest rate |
+
+The allocation uses current API pricing as a relative cost proxy: Luna is $0.20 input/$1.20 output, Terra $2/$12, Sol $4/$20, and Astra $10/$50 per million tokens. Codex plan metering may differ from direct API billing.
+
 ## Next coordination queue
 
-1. Restore USB connectivity and acquire a paired notebook with anchored non-empty text and non-plain paragraph styles; the independent SSH corpus cannot validate the calibrated anchor constants.
-2. Confirm the source coordinate origin/affine transform from independent evidence instead of promoting the fixture-specific `+702` X translation into a default.
-3. Promote the existing comparison diagnostics into supported tooling on GPT-5.6 Terra, medium: fixed Poppler settings, global and ink-ROI metrics, diffs and overlays.
+1. Re-enable the tablet web interface, then acquire a paired `.rmdoc`/native PDF export of the identified `dreams` page without modifying tablet content.
+2. Run the supported parser/replay/comparison path on that independent anchored, styled-text sample and decide whether the anchor constants generalize.
+3. Use the second paired document to retest the centered-coordinate inference before considering an evidence-backed geometry default.
 4. Treat eraser semantics and textured pens as known Pillow-baseline limitations while beginning simple-pen fidelity work.
 5. Build controlled fixture tooling only after explicit device-write opt-in. Then assign simple-pen work to Sol high and pencil/brush research to Astra high.
 

@@ -36,3 +36,16 @@ uv run python -m rm_redraw.replay path/to/page.rm `
 The geometry values above are explicit example inputs, not device defaults. Omit `--paper-size` only when the page contains `SceneInfo.paper_size`; supply a source affine transform unless parsed metadata provides one. Multi-page `.rmdoc` archives also require `--page-id`.
 
 Each successful run creates deterministic numbered PNG frames, `static.png`, H.264 `replay.mp4`, and `manifest.json`. The manifest records input and output hashes, geometry evidence, timing, viewport, backend, and the final-frame equality result. The command fails if its final frame is not byte-identical to the static render.
+
+## Local comparison command
+
+Compare a candidate PNG with either a same-size native PNG or one page of a native PDF:
+
+```powershell
+uv run python -m rm_redraw.comparison artifacts/replay-example/static.png `
+  --native-pdf fixtures/private/example/native.pdf `
+  --page 1 `
+  --output artifacts/comparison-example
+```
+
+Use `--native-png` instead of `--native-pdf` for a pre-rasterized reference. PNG inputs must have identical dimensions and must both use RGB or both use RGBA; convert them explicitly before comparison when their modes differ. Each run requires a new output directory and writes normalized input copies, absolute and high-gain differences, a red/native–blue/candidate overlay, and a provenance-rich `metrics.json` report with global, ink-ROI, and edge-geometry measurements.
