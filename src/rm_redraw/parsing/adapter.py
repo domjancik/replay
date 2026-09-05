@@ -117,12 +117,12 @@ def _identity_resolution(evidence: str) -> TransformResolution:
 def _anchor_positions(
     root_text_block: RootTextBlock | None,
     paper_size: tuple[int, int] | None,
-) -> tuple[dict[CrdtId, float], str]:
+) -> tuple[dict[CrdtId, float], str, bool]:
     if root_text_block is None:
         positions = {_SPECIAL_TOP_ANCHOR: 0.0}
         if paper_size is not None:
             positions[_SPECIAL_BOTTOM_ANCHOR] = float(paper_size[1])
-        return positions, "special page anchors without root text"
+        return positions, "special page anchors without root text", True
 
     text = root_text_block.value
     document = TextDocument.from_scene_item(text)
@@ -138,9 +138,11 @@ def _anchor_positions(
         y_position += _LINE_HEIGHT_BY_STYLE.get(style_code, 70.0)
     positions[_SPECIAL_TOP_ANCHOR] = top_of_text
     positions[_SPECIAL_BOTTOM_ANCHOR] = y_position
-    return positions, (
+    return (
+        positions,
         "root text anchor positions calibrated against the five-page paired native PDF "
-        "fixture 8aba68ff-00e9-400b-9772-b96322e000f0"
+        "fixture 8aba68ff-00e9-400b-9772-b96322e000f0",
+        False,
     )
 
 
@@ -148,6 +150,7 @@ def _local_group_transform(
     group: object,
     anchor_positions: dict[CrdtId, float],
     anchor_evidence: str,
+    anchor_positions_resolved: bool,
 ) -> TransformResolution:
     anchor = group.anchor_id
     if anchor is None:
@@ -163,10 +166,18 @@ def _local_group_transform(
             evidence=f"Unresolved text anchor {anchor_id}; retained X origin and used zero Y.",
             anchor_ids=(_crdt(anchor_id),),
         )
+    if anchor_positions_resolved:
+        evidence = f"Resolved text anchor {anchor_id} from {anchor_evidence}."
+    else:
+        evidence = (
+            f"Unverified heuristic text anchor {anchor_id} from {anchor_evidence}; "
+            "retained calibrated matrix for diagnostics, but full text layout semantics "
+            "are unresolved."
+        )
     return TransformResolution(
         matrix=(1.0, 0.0, 0.0, 1.0, origin_x, anchor_y),
-        resolved=True,
-        evidence=f"Resolved text anchor {anchor_id} from {anchor_evidence}.",
+        resolved=anchor_positions_resolved,
+        evidence=evidence,
         anchor_ids=(_crdt(anchor_id),),
     )
 
@@ -312,7 +323,7 @@ def _parse_stream(
     root_text_block = next(
         (block for block in reversed(blocks) if isinstance(block, RootTextBlock)), None
     )
-    anchor_positions, anchor_evidence = _anchor_positions(
+    anchor_positions, anchor_evidence, anchor_positions_resolved = _anchor_positions(
         root_text_block,
         scene_info.paper_size if scene_info is not None else None,
     )
@@ -323,7 +334,12 @@ def _parse_stream(
     }
     parents = {node_id: block.parent_id for node_id, block in tree_blocks.items()}
     local_transforms = {
-        node_id: _local_group_transform(group, anchor_positions, anchor_evidence)
+        node_id: _local_group_transform(
+            group,
+            anchor_positions,
+            anchor_evidence,
+            anchor_positions_resolved,
+        )
         for node_id, group in node_details.items()
     }
     effective_transforms: dict[CrdtId, TransformResolution] = {
@@ -516,13 +532,29 @@ def _parse_stream(
         key=lambda anchor_id: anchor_id.as_tuple(),
     )
     if unresolved_anchor_ids:
+        local_resolution_by_anchor = {
+            anchor_id: group.local_transform
+            for group in groups
+            if not group.local_transform.resolved
+            for anchor_id in group.local_transform.anchor_ids
+        }
+
+        def unresolved_anchor_warning(anchor_id: CrdtIdentifier) -> str:
+            resolution = local_resolution_by_anchor.get(anchor_id)
+            if resolution is not None and "heuristic text anchor" in resolution.evidence:
+                tx, ty = resolution.matrix[-2:]
+                return (
+                    f"Unverified group anchor {anchor_id}; retained heuristic translation "
+                    f"({tx}, {ty}), but full text layout semantics are unresolved."
+                )
+            return (
+                f"Unresolved group anchor {anchor_id}; retained X origin and used zero Y."
+            )
+
         diagnostics = PageDiagnostics(
             blocks=diagnostics.blocks,
             warnings=diagnostics.warnings
-            + tuple(
-                f"Unresolved group anchor {anchor_id}; retained X origin and used zero Y."
-                for anchor_id in unresolved_anchor_ids
-            ),
+            + tuple(unresolved_anchor_warning(anchor_id) for anchor_id in unresolved_anchor_ids),
         )
 
     return NormalizedPage(

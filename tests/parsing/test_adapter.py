@@ -99,6 +99,8 @@ def test_parse_page_retains_complete_stroke_metadata() -> None:
     assert layer.label.value == "Ink"
     assert layer.label.timestamp.as_tuple() == (7, 93)
     assert layer.scene_order.item_id.as_tuple() == (7, 101)
+    assert layer.effective_transform.resolved is True
+    assert layer.effective_transform.matrix == (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
     assert len(page.strokes) == 1
     stroke = page.strokes[0]
@@ -311,11 +313,18 @@ def test_anchored_group_translation_is_exposed_without_changing_raw_points() -> 
     stroke = next(stroke for stroke in page.strokes if stroke.stroke_id.as_tuple() == (14, 110))
     assert group.local_transform.matrix == (1.0, 0.0, 0.0, 1.0, 10.0, 366.5)
     assert group.effective_transform == group.local_transform
-    assert group.effective_transform.resolved is True
-    assert "text anchor" in group.effective_transform.evidence
+    assert group.effective_transform.resolved is False
+    assert "heuristic text anchor" in group.effective_transform.evidence
     assert "paired native PDF fixture" in group.effective_transform.evidence
+    assert "full text layout semantics are unresolved" in group.effective_transform.evidence
     assert stroke.effective_transform == group.effective_transform
     assert (stroke.points[0].x, stroke.points[0].y) == (110.0, 1.0)
+    assert any(
+        "Unverified group anchor 1:17" in warning
+        and "retained heuristic translation (10.0, 366.5)" in warning
+        and "full text layout semantics are unresolved" in warning
+        for warning in page.diagnostics.warnings
+    )
 
 
 def test_plain_text_anchor_positions_use_native_pdf_calibrated_origin_and_spacing() -> None:
@@ -363,6 +372,60 @@ def test_plain_text_anchor_positions_use_native_pdf_calibrated_origin_and_spacin
         (17, 100): (-464.0, 297.0),
         (17, 200): (-464.0, 366.5),
     }
+
+
+def test_special_page_anchors_without_root_text_remain_resolved() -> None:
+    top_group_id = CrdtId(18, 100)
+    bottom_group_id = CrdtId(18, 200)
+
+    def anchored_group(node_id: CrdtId, anchor_id: CrdtId, origin_x: float) -> si.Group:
+        return si.Group(
+            node_id,
+            label=LwwValue(CrdtId(node_id.part1, node_id.part2 + 1), "Anchored"),
+            visible=LwwValue(CrdtId(node_id.part1, node_id.part2 + 2), True),
+            anchor_id=LwwValue(CrdtId(node_id.part1, node_id.part2 + 3), anchor_id),
+            anchor_type=LwwValue(CrdtId(node_id.part1, node_id.part2 + 4), 2),
+            anchor_threshold=LwwValue(CrdtId(node_id.part1, node_id.part2 + 5), 35.75),
+            anchor_origin_x=LwwValue(CrdtId(node_id.part1, node_id.part2 + 6), origin_x),
+        )
+
+    blocks = [
+        SceneInfo(
+            current_layer=LwwValue(CrdtId(18, 1), top_group_id),
+            background_visible=LwwValue(CrdtId(18, 2), True),
+            root_document_visible=LwwValue(CrdtId(18, 3), True),
+            paper_size=(1404, 1872),
+        ),
+        SceneTreeBlock(top_group_id, top_group_id, False, ROOT),
+        TreeNodeBlock(
+            anchored_group(top_group_id, CrdtId(0, 281474976710654), 4.0)
+        ),
+        SceneGroupItemBlock(
+            ROOT, CrdtSequenceItem(CrdtId(18, 110), END, END, 0, top_group_id)
+        ),
+        SceneTreeBlock(bottom_group_id, bottom_group_id, False, ROOT),
+        TreeNodeBlock(
+            anchored_group(bottom_group_id, CrdtId(0, 281474976710655), 8.0)
+        ),
+        SceneGroupItemBlock(
+            ROOT, CrdtSequenceItem(CrdtId(18, 210), END, END, 0, bottom_group_id)
+        ),
+    ]
+    data = BytesIO()
+    write_blocks(data, blocks, options={"version": "3.27.3"})
+    data.seek(0)
+
+    page = parse_page(data, page_id="special-page-anchors")
+
+    transforms = {
+        group.node_id.as_tuple(): group.local_transform for group in page.groups
+    }
+    assert transforms[(18, 100)].matrix[-2:] == (4.0, 0.0)
+    assert transforms[(18, 200)].matrix[-2:] == (8.0, 1872.0)
+    assert transforms[(18, 100)].resolved is True
+    assert transforms[(18, 200)].resolved is True
+    assert "special page anchors without root text" in transforms[(18, 100)].evidence
+    assert not any("group anchor" in warning for warning in page.diagnostics.warnings)
 
 
 def test_nested_group_translations_compose_parent_before_child() -> None:
