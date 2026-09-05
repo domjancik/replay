@@ -6,7 +6,7 @@ The source brief is [Codex Brief — reMarkable Stroke Replay + High-Fidelity Re
 
 ## Development environment
 
-CPython does not publish a separately branded LTS channel. This project pins CPython 3.13.7 because the 3.13 branch is supported through October 2029 and the pinned parser supports it.
+CPython does not publish a separately branded LTS channel. This project pins CPython 3.13.15, the current 3.13 maintenance release as of 2026-09-05. Python 3.13 is presently in its bugfix phase; it later receives security-only fixes before reaching end of life in October 2029. The pinned parser supports Python 3.13.
 
 `rmscene==0.8.0` is the parser baseline. `rmc==0.3.0` is intentionally excluded from the main environment because it requires `rmscene<0.7`; it remains a renderer reference and can be evaluated in an isolated environment.
 

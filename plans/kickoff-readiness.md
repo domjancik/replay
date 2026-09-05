@@ -22,7 +22,7 @@ Verified 2026-09-05. Ready to start acquisition, parser, and baseline replay wor
 - Six page headers sampled from notebook `1f7a7562-680e-452d-a9f7-da2c23e8717a` were `.rm` version 6. This is not an inventory of every page or pen.
 - Device has `tar`, `sha256sum`, and `dd`. `python3` and `curl` were not found on its PATH. BusyBox `head` does not support `-c`; use `dd` for bounded byte reads.
 - HTTP request to `http://10.11.99.1/documents/` failed; `/proc/net/tcp` and `/proc/net/tcp6` showed no port 80 listener. USB API exports are unverified and currently unavailable.
-- Local Git 2.47.1, Node 26.4.0/npm 11.17.0, Python 3.12.8, FFmpeg 7.1 with libx264, and Poppler pdftoppm 26.07.0 execute. GitHub CLI is authenticated.
+- Local Git 2.47.1, Node 26.4.0/npm 11.17.0, FFmpeg 7.1 with libx264, and Poppler pdftoppm 26.07.0 execute. GitHub CLI is authenticated. The project uses uv-managed CPython 3.13.15, the current 3.13 maintenance release as of 2026-09-05.
 - PIL, numpy, skimage, and pypdf are discoverable in the local Python interpreter. rmscene and rmc are absent there. No project dependency environment exists yet.
 - At initial inspection the workspace contained only the brief and was not a Git repository. This document is the only review artifact added. No applicable ancestor AGENTS.md was found.
 
@@ -68,3 +68,5 @@ Repository documentation was inspected, not installed or executed. Pin exact rev
 Follow brief milestone acceptance order: SSH snapshots -> diagnostics -> replay -> USB pairing -> comparison -> controlled corpus -> simple pens -> pencil -> other tools -> replay texture stability.
 
 Dependency validation found that current `rmc==0.3.0` requires `rmscene>=0.6,<0.7`, which conflicts with current `rmscene==0.8.0`. The main project pins `rmscene==0.8.0` and excludes `rmc`; evaluate `rmc` only in an isolated reference environment unless its dependency range changes.
+
+CPython calls 3.13 a bugfix/maintenance branch at this date, not an LTS channel. Its scheduled end of life is October 2029; security-only support is a later lifecycle phase. The initially installed 3.13.7 came from a stale uv 0.8.12 catalog and was superseded, so uv was updated to 0.12.10 and the exact runtime pin corrected to 3.13.15.
