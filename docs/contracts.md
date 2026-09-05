@@ -68,6 +68,8 @@ Reference rasterization records PDF hash, rasterizer/version, page, DPI or exact
 
 Metrics include global and padded-ink-ROI MAE, RMSE, SSIM, coverage/ink density, and an edge/geometry measurement. Reports retain per-page and, when fixtures isolate tools, per-pen values. No fidelity claim may rely on a mostly white full-page metric alone.
 
+The supported local comparison command consumes an existing candidate PNG plus either a native PNG of identical dimensions or a native PDF page rasterized to the candidate dimensions with Poppler. It never contacts the tablet. Each run writes to a new output directory and records input hashes, Poppler version/settings when used, dimensions, colour/background handling, ROI construction, metric definitions and output hashes. Required outputs are `native.png`, `ours.png`, `absolute-diff.png`, `high-gain-diff.png`, `overlay.png`, and `metrics.json`. Dimension or colour-mode mismatches fail actionably rather than triggering an implicit resize or crop.
+
 ## Corpus layout
 
 Use `raw/`, `native/`, `rendered/`, and `diff/`. `raw/` and private native exports are ignored by default. Selective synthetic fixtures and approved redistributable goldens may be committed with provenance manifests.
