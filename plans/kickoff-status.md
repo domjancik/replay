@@ -16,6 +16,9 @@
 | Parser | GPT-5.6 Sol, high | v6 `rmscene` adapter, lossless normalized metadata exposed by the library, cumulative anchored-group transforms, five-page native-PDF anchor calibration, diagnostics and CLI |
 | Baseline replay | GPT-5.6 Terra, high | Pillow renderer protocol, visible-layer compositing, layer-major schedules, deterministic PNG frames, FFmpeg H.264 |
 | Integration | Coordinator, GPT-5.6 Sol, high | Parser-to-render projection composing group transforms before the explicit page affine transform |
+| Geometry follow-up | GPT-5.6 Sol, high | Evidence-carrying geometry resolver, unknown-transform correction, page-2 outlier diagnosis |
+| Independent acquisition | GPT-5.6 Terra, medium | Three immutable SSH snapshots, 27 v6 pages, validated hashes; no paired native exports |
+| End-to-end replay | GPT-5.6 Terra, high plus coordinator review | Local `.rm`/`.rmdoc` CLI, deterministic frames/static/manifest/H.264, encoded-timeline and equality gates |
 
 Acquisition verification fixture: `fixtures/private/verification/8aba68ff-00e9-400b-9772-b96322e000f0/` (ignored). The USB archive and five-page native PDF pass structural checks. Poppler rasterized five 890×1188 PNGs at 144 DPI. It emitted non-fatal unknown `ExtGState GSa` warnings.
 
@@ -31,13 +34,20 @@ The render projection now retains top-level layer visibility. Static rendering a
 
 Native-exact rendering remains unclaimed. Page geometry and the `+702` horizontal source translation are still supplied explicitly, the native PDF is flattened so individual native layer rasters are unavailable, and the Pillow baseline does not reproduce pressure, textured tools, or eraser semantics.
 
+Shared contract v2 removes the parser's former silent identity transform. `source_to_page_transform` is now `null` when no source evidence exists. `resolve_page_geometry` combines parsed values with explicit caller overrides, validates both values, and records separate evidence for page size and affine transform. The pipeline and replay command fail actionably when geometry remains unresolved. An independent scan of 27 pages found 11 with `SceneInfo.paper_size=(1404,1872)`, 16 without page size, and none with a source affine transform; no page resolves fully without an explicit transform.
+
+The earlier page-2 `1:24` 260-unit result is classified as a flattened-PDF matching ambiguity. Tight objectives select 0–2 units, adjacent anchors `1:23` and `1:25` align at zero, and the broad capped-mean preference for 260 improves the score by only 0.004451 pixels while reducing the fraction within two pixels. Evidence is under the ignored `diagnostics/page-2-anchor-1-24/` directory.
+
+The local replay command is available through `python -m rm_redraw.replay`. It accepts a local `.rm` page or selected `.rmdoc` member, explicit geometry when needed, all three scheduling modes, FPS and viewport controls, and a fresh output directory. It emits hashed PNG frames, `static.png`, H.264 `replay.mp4`, and `manifest.json`; frame timestamps use the encoded FPS, and completion requires final/static byte equality. The ignored inspection sample at `artifacts/sample-replay-546a0d59-progressive/` contains 60 progressive frames at 280×376, a two-second H.264 video, and a byte-identical final/static PNG. Its `+702` transform is caller-supplied from the first paired fixture and is not independently proven for that page.
+
+Follow-up read-only acquisition created three immutable SSH snapshots under `fixtures/private/independent-validation/ssh-v1/`: 27 v6 pages with validated manifest sizes and SHA-256 hashes. The USB API was connection-refused during this follow-up, so these snapshots have no paired native PDF. They contain no anchored groups and only one typed character, so they validate parser/replay breadth and geometry failure semantics but provide no evidence for or against the `+63` anchor origin or 69.5-unit plain-paragraph spacing.
+
 ## Next coordination queue
 
-1. Validate the calibrated anchor origin and style-specific line heights on independent notebooks, especially non-empty text and non-plain paragraph styles; investigate the isolated page-2 transform outlier.
-2. Confirm actual page geometry and the global source-to-page transform instead of promoting the fixture-specific 1404×1872 size and `+702` X translation into core defaults.
-3. Add a small end-to-end command that snapshots/selects a page, parses it, projects it, emits deterministic frames, and encodes a replay.
-4. Run the final-frame equality gate through that real-page command. Treat eraser semantics and textured pens as known baseline limitations.
-5. Promote the existing comparison diagnostics into supported tooling on GPT-5.6 Terra, medium: fixed Poppler settings, global and ink-ROI metrics, diffs and overlays.
-6. Build controlled fixture tooling only after explicit device-write opt-in. Then assign simple-pen work to Sol high and pencil/brush research to Astra high.
+1. Restore USB connectivity and acquire a paired notebook with anchored non-empty text and non-plain paragraph styles; the independent SSH corpus cannot validate the calibrated anchor constants.
+2. Confirm the source coordinate origin/affine transform from independent evidence instead of promoting the fixture-specific `+702` X translation into a default.
+3. Promote the existing comparison diagnostics into supported tooling on GPT-5.6 Terra, medium: fixed Poppler settings, global and ink-ROI metrics, diffs and overlays.
+4. Treat eraser semantics and textured pens as known Pillow-baseline limitations while beginning simple-pen fidelity work.
+5. Build controlled fixture tooling only after explicit device-write opt-in. Then assign simple-pen work to Sol high and pencil/brush research to Astra high.
 
 Official runtime references: [CPython version status](https://devguide.python.org/versions/), [Python 3.13.15](https://www.python.org/downloads/release/python-31315/), and [uv Python version management](https://docs.astral.sh/uv/concepts/python-versions/).

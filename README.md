@@ -17,3 +17,22 @@ uv run ruff check .
 ```
 
 Device-derived files belong under `fixtures/private/` or `fixtures/local/` and are excluded from Git. Existing tablet content is always read-only. Device writes require a separate explicit opt-in and may target only dedicated fixture documents.
+
+## Local replay command
+
+Replay one local `.rm` page or a selected page from a local `.rmdoc` archive:
+
+```powershell
+uv run python -m rm_redraw.replay path/to/page.rm `
+  --output artifacts/replay-example `
+  --paper-size 1404 1872 `
+  --source-affine 1 0 0 1 702 0 `
+  --viewport 280 376 `
+  --mode seconds-per-stroke `
+  --seconds-per-stroke 0.5 `
+  --fps 30
+```
+
+The geometry values above are explicit example inputs, not device defaults. Omit `--paper-size` only when the page contains `SceneInfo.paper_size`; supply a source affine transform unless parsed metadata provides one. Multi-page `.rmdoc` archives also require `--page-id`.
+
+Each successful run creates deterministic numbered PNG frames, `static.png`, H.264 `replay.mp4`, and `manifest.json`. The manifest records input and output hashes, geometry evidence, timing, viewport, backend, and the final-frame equality result. The command fails if its final frame is not byte-identical to the static render.

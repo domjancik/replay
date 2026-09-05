@@ -528,7 +528,7 @@ def _parse_stream(
     return NormalizedPage(
         page_id=page_id,
         paper_size=scene_info.paper_size if scene_info is not None else None,
-        source_to_page_transform=IDENTITY_TRANSFORM,
+        source_to_page_transform=None,
         groups=tuple(groups),
         strokes=tuple(strokes),
         tombstones=tombstones,

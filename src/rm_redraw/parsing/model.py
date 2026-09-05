@@ -157,7 +157,7 @@ class PageDiagnostics:
 class NormalizedPage:
     page_id: str
     paper_size: tuple[int, int] | None
-    source_to_page_transform: tuple[float, float, float, float, float, float]
+    source_to_page_transform: tuple[float, float, float, float, float, float] | None
     groups: tuple[NormalizedGroup, ...]
     strokes: tuple[NormalizedStroke, ...]
     tombstones: tuple[NormalizedTombstone, ...]

@@ -1,5 +1,8 @@
 from dataclasses import replace
 
+import pytest
+
+from rm_redraw.parsing import GeometryResolutionError
 from rm_redraw.parsing.model import (
     CrdtIdentifier,
     EnumValue,
@@ -130,6 +133,21 @@ def test_missing_page_size_requires_explicit_override() -> None:
     page = to_render_page(parsed, paper_size=(1404, 1872))
 
     assert page.paper_size == (1404, 1872)
+
+
+def test_missing_source_transform_requires_explicit_override() -> None:
+    parsed = replace(_parsed_page(), source_to_page_transform=None)
+
+    with pytest.raises(GeometryResolutionError, match="source_to_page_transform"):
+        to_render_page(parsed)
+
+    page = to_render_page(
+        parsed,
+        source_to_page_transform=(1, 0, 0, 1, 100, 200),
+    )
+
+    point = page.strokes[0].points[0]
+    assert (point.x, point.y) == (108, 209)
 
 
 def test_explicit_source_transform_projects_points_into_page_space() -> None:

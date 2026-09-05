@@ -1,4 +1,5 @@
 from .adapter import dump_page_json, parse_page
+from .geometry import GeometryResolutionError, PageGeometry, resolve_page_geometry
 from .model import (
     BlockDiagnostic,
     CrdtIdentifier,
@@ -23,6 +24,7 @@ __all__ = [
     "BlockDiagnostic",
     "CrdtIdentifier",
     "EnumValue",
+    "GeometryResolutionError",
     "MigrationMetadata",
     "NormalizedGroup",
     "NormalizedPage",
@@ -30,6 +32,7 @@ __all__ = [
     "NormalizedStroke",
     "NormalizedTombstone",
     "PageDiagnostics",
+    "PageGeometry",
     "PageInfoMetadata",
     "PageMetadata",
     "ReplayOrder",
@@ -39,4 +42,5 @@ __all__ = [
     "VersionedValue",
     "dump_page_json",
     "parse_page",
+    "resolve_page_geometry",
 ]

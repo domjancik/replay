@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from rm_redraw.parsing.geometry import resolve_page_geometry
 from rm_redraw.parsing.model import NormalizedPage as ParsedPage
 from rm_redraw.parsing.model import NormalizedPoint as ParsedPoint
 from rm_redraw.parsing.model import NormalizedStroke as ParsedStroke
@@ -72,10 +73,13 @@ def to_render_page(
     palette: Mapping[int, Color] = DEFAULT_PALETTE,
 ) -> NormalizedPage:
     """Project lossless parser output into the deliberately smaller render model."""
-    resolved_size = page.paper_size if page.paper_size is not None else paper_size
-    if resolved_size is None:
-        raise ValueError("paper_size is absent from the source and must be supplied explicitly")
-    transform = source_to_page_transform or page.source_to_page_transform
+    geometry = resolve_page_geometry(
+        page,
+        paper_size=paper_size,
+        source_to_page_transform=source_to_page_transform,
+    )
+    resolved_size = geometry.paper_size
+    transform = geometry.source_to_page_transform
 
     layer_ids: list[str] = []
     layer_visibility: dict[str, bool] = {}

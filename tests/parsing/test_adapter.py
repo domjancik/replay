@@ -88,7 +88,7 @@ def test_parse_page_retains_complete_stroke_metadata() -> None:
 
     assert page.page_id == "page-1"
     assert page.paper_size == (1620, 2160)
-    assert page.source_to_page_transform == (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    assert page.source_to_page_transform is None
 
     assert len(page.groups) == 1
     layer = page.groups[0]
