@@ -1,6 +1,6 @@
-# Shared contracts v1
+# Shared contracts v2
 
-This document freezes the first integration boundary. Additive evolution is allowed; renames, type changes, or semantic changes require coordinator review and a version bump.
+This document freezes the integration boundary. Version 2 corrects the parsed page transform from a silently assumed identity to an optional evidence-backed value. Additive evolution is allowed; further renames, type changes, or semantic changes require coordinator review and a version bump.
 
 ## Snapshot manifest
 
@@ -18,7 +18,7 @@ Paths are relative to the snapshot root. Acquisition rejects traversal and absol
 
 A normalized page retains source information rather than flattening it to render-only paths:
 
-- stable page ID, optional `paper_size`, page metadata, and explicit source-to-page transform
+- stable page ID, optional `paper_size`, page metadata, and optional evidence-backed source-to-page transform; absence remains `null` rather than silently meaning identity
 - ordered groups/layers with stable IDs, scene relationships, and visibility
 - strokes with stable/CRDT ID, parent, layer, scene ordering data, move ID, tombstone/deletion relationships, pen/tool, palette colour, explicit RGBA, thickness scale, starting length, and ordered points
 - each point retains `x`, `y`, `pressure`, `speed`, `direction`, `width`, plus unknown channels/fields in `extra`
