@@ -122,6 +122,21 @@ def test_rasterizes_selected_native_pdf_page_to_candidate_dimensions(tmp_path: P
     assert metrics["rasterization"]["settings"]["scale_to_y"] == 36
 
 
+def test_ink_only_rejects_malformed_native_pdf_actionably(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.png"
+    native_pdf = tmp_path / "malformed.pdf"
+    _ink_image(candidate)
+    native_pdf.write_bytes(b"not a PDF")
+
+    with pytest.raises(ComparisonError, match="cannot read PDF page 1"):
+        run_comparison(
+            candidate,
+            native_pdf=native_pdf,
+            ink_only=True,
+            output_directory=tmp_path / "ink-only-report",
+        )
+
+
 def test_native_pdf_ink_only_filters_text_and_records_operator_provenance(tmp_path: Path) -> None:
     candidate = tmp_path / "candidate.png"
     native_pdf = tmp_path / "native.pdf"

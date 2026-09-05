@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
+from pypdf.errors import PdfReadError, PdfStreamError
 from pypdf.generic import ContentStream
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import canny
@@ -185,10 +186,10 @@ def _write_text_filtered_pdf(source: Path, page_number: int, destination: Path) 
     try:
         reader = PdfReader(source)
         page = reader.pages[page_number - 1]
-    except (IndexError, OSError) as error:
+        contents = ContentStream(page.get_contents(), reader)
+    except (IndexError, OSError, PdfReadError, PdfStreamError) as error:
         raise ComparisonError(f"cannot read PDF page {page_number}: {source}") from error
 
-    contents = ContentStream(page.get_contents(), reader)
     filtered_operations: list[tuple[object, object]] = []
     text_depth = 0
     removed = 0
