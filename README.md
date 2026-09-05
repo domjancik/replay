@@ -1,0 +1,19 @@
+# rm-redraw
+
+Local, read-only tooling for acquiring native reMarkable documents, parsing complete stroke metadata, replaying strokes, and developing a renderer against tablet-native PDF exports.
+
+The source brief is [Codex Brief — reMarkable Stroke Replay + High-Fidelity Renderer.md](./Codex%20Brief%20%E2%80%94%20reMarkable%20Stroke%20Replay%20%2B%20High-Fidelity%20Renderer.md). Current kickoff evidence is in [plans/kickoff-readiness.md](plans/kickoff-readiness.md), and shared interfaces are frozen in [docs/contracts.md](docs/contracts.md).
+
+## Development environment
+
+CPython does not publish a separately branded LTS channel. This project pins CPython 3.13.7 because the 3.13 branch is supported through October 2029 and the pinned parser supports it.
+
+`rmscene==0.8.0` is the parser baseline. `rmc==0.3.0` is intentionally excluded from the main environment because it requires `rmscene<0.7`; it remains a renderer reference and can be evaluated in an isolated environment.
+
+```powershell
+uv sync --all-groups
+uv run pytest
+uv run ruff check .
+```
+
+Device-derived files belong under `fixtures/private/` or `fixtures/local/` and are excluded from Git. Existing tablet content is always read-only. Device writes require a separate explicit opt-in and may target only dedicated fixture documents.

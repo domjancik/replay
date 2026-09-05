@@ -1,0 +1,32 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Device-derived content and private exports stay local.
+fixtures/private/
+fixtures/local/
+*.rmdoc
+
+# Generated raster/video outputs are reproducible artifacts.
+artifacts/
+output/
+frames/
+rendered/
+diff/
+*.mp4
+*.webm
+
+# Local configuration and secrets.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
