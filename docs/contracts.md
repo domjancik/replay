@@ -19,13 +19,15 @@ Paths are relative to the snapshot root. Acquisition rejects traversal and absol
 A normalized page retains source information rather than flattening it to render-only paths:
 
 - stable page ID, optional `paper_size`, page metadata, and explicit source-to-page transform
-- ordered groups/layers with stable IDs and scene relationships
+- ordered groups/layers with stable IDs, scene relationships, and visibility
 - strokes with stable/CRDT ID, parent, layer, scene ordering data, move ID, tombstone/deletion relationships, pen/tool, palette colour, explicit RGBA, thickness scale, starting length, and ordered points
 - each point retains `x`, `y`, `pressure`, `speed`, `direction`, `width`, plus unknown channels/fields in `extra`
 - raw point coordinates remain unchanged; groups and strokes expose resolved local/cumulative transforms with evidence and anchor IDs. Rendering composes the page transform after the stroke's cumulative group transform.
 - unreadable or unknown blocks remain represented in diagnostics with their type and raw bytes encoded safely
 
-`compositing_order` and `replay_order` are separate sequences. Replay order includes `strategy` (`verified-chronology`, `crdt-order`, or `scene-order`) and an evidence note. Only controlled device evidence permits `verified-chronology`.
+Parser `compositing_order` and `replay_order` are separate stroke sequences. Replay order includes `strategy` (`verified-chronology`, `crdt-order`, or `scene-order`) and an evidence note. Only controlled device evidence permits `verified-chronology`.
+
+The render projection retains top-level layers in their final bottom-to-top compositing order and carries each layer's visibility. Replay scheduling is layer-major: omit hidden layers, finish every stroke in the lowest visible layer before starting the next visible layer, and preserve the parser replay order relative to other strokes within the same layer. A global chronology must not interleave layers.
 
 ## Replay and rendering
 

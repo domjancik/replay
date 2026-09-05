@@ -309,12 +309,60 @@ def test_anchored_group_translation_is_exposed_without_changing_raw_points() -> 
 
     group = next(group for group in page.groups if group.node_id.as_tuple() == (14, 100))
     stroke = next(stroke for stroke in page.strokes if stroke.stroke_id.as_tuple() == (14, 110))
-    assert group.local_transform.matrix == (1.0, 0.0, 0.0, 1.0, 10.0, 216.0)
+    assert group.local_transform.matrix == (1.0, 0.0, 0.0, 1.0, 10.0, 366.5)
     assert group.effective_transform == group.local_transform
     assert group.effective_transform.resolved is True
     assert "text anchor" in group.effective_transform.evidence
+    assert "paired native PDF fixture" in group.effective_transform.evidence
     assert stroke.effective_transform == group.effective_transform
     assert (stroke.points[0].x, stroke.points[0].y) == (110.0, 1.0)
+
+
+def test_plain_text_anchor_positions_use_native_pdf_calibrated_origin_and_spacing() -> None:
+    first_group_id = CrdtId(17, 100)
+    second_group_id = CrdtId(17, 200)
+
+    def anchored_group(node_id: CrdtId, anchor_id: CrdtId) -> si.Group:
+        return si.Group(
+            node_id,
+            label=LwwValue(CrdtId(node_id.part1, node_id.part2 + 1), "Anchored"),
+            visible=LwwValue(CrdtId(node_id.part1, node_id.part2 + 2), True),
+            anchor_id=LwwValue(CrdtId(node_id.part1, node_id.part2 + 3), anchor_id),
+            anchor_type=LwwValue(CrdtId(node_id.part1, node_id.part2 + 4), 2),
+            anchor_threshold=LwwValue(CrdtId(node_id.part1, node_id.part2 + 5), 35.75),
+            anchor_origin_x=LwwValue(CrdtId(node_id.part1, node_id.part2 + 6), -464.0),
+        )
+
+    blocks = [
+        *simple_text_document("\n\n"),
+        SceneTreeBlock(first_group_id, first_group_id, False, CrdtId(0, 11)),
+        TreeNodeBlock(anchored_group(first_group_id, CrdtId(1, 16))),
+        SceneGroupItemBlock(
+            CrdtId(0, 11),
+            CrdtSequenceItem(CrdtId(17, 110), END, END, 0, first_group_id),
+        ),
+        SceneTreeBlock(second_group_id, second_group_id, False, CrdtId(0, 11)),
+        TreeNodeBlock(anchored_group(second_group_id, CrdtId(1, 17))),
+        SceneGroupItemBlock(
+            CrdtId(0, 11),
+            CrdtSequenceItem(CrdtId(17, 210), END, END, 0, second_group_id),
+        ),
+    ]
+    data = BytesIO()
+    write_blocks(data, blocks, options={"version": "3.27.3"})
+    data.seek(0)
+
+    page = parse_page(data, page_id="native-calibrated-anchors")
+
+    translations = {
+        group.node_id.as_tuple(): group.local_transform.matrix[-2:]
+        for group in page.groups
+        if group.node_id.as_tuple() in {(17, 100), (17, 200)}
+    }
+    assert translations == {
+        (17, 100): (-464.0, 297.0),
+        (17, 200): (-464.0, 366.5),
+    }
 
 
 def test_nested_group_translations_compose_parent_before_child() -> None:
@@ -360,8 +408,8 @@ def test_nested_group_translations_compose_parent_before_child() -> None:
 
     child = next(group for group in page.groups if group.node_id.as_tuple() == (16, 200))
     stroke = next(stroke for stroke in page.strokes if stroke.stroke_id.as_tuple() == (16, 300))
-    assert child.local_transform.matrix[-2:] == (5.0, 216.0)
-    assert child.effective_transform.matrix[-2:] == (15.0, 432.0)
+    assert child.local_transform.matrix[-2:] == (5.0, 366.5)
+    assert child.effective_transform.matrix[-2:] == (15.0, 733.0)
     assert stroke.effective_transform == child.effective_transform
 
 

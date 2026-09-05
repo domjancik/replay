@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 
 from rm_redraw.rendering.pillow import PillowRenderer
 from rm_redraw.rendering.types import (
@@ -54,6 +55,22 @@ def test_revealing_lower_layer_does_not_cover_visible_upper_layer() -> None:
     )
 
     assert image.getpixel((50, 40)) == (0, 0, 255, 255)
+
+
+def test_hidden_layer_is_not_drawn_even_when_its_stroke_is_completed() -> None:
+    page = _page()
+    page = replace(
+        page,
+        groups=(page.groups[0], replace(page.groups[1], visible=False)),
+    )
+
+    image = PillowRenderer().render(
+        page,
+        RenderOptions(),
+        VisibilityState(frozenset({"upper-stroke", "lower-stroke"})),
+    )
+
+    assert image.getpixel((50, 40)) == (255, 127, 127, 255)
 
 
 def test_renderer_uses_a_fixed_explicit_viewport() -> None:

@@ -31,6 +31,7 @@ class NormalizedStroke:
 @dataclass(frozen=True, slots=True)
 class NormalizedGroup:
     group_id: str
+    visible: bool = True
 
 
 @dataclass(frozen=True, slots=True)

@@ -29,6 +29,7 @@ def _parsed_page() -> NormalizedPage:
     lower, upper = _id(10), _id(20)
     first, second = _id(100), _id(200)
     empty_value = VersionedValue(_id(1), "")
+    visible_value = VersionedValue(_id(2), True)
     identity = TransformResolution((1, 0, 0, 1, 0, 0), True, "test identity")
     groups = (
         NormalizedGroup(
@@ -38,7 +39,7 @@ def _parsed_page() -> NormalizedPage:
             lower,
             "layer",
             empty_value,
-            empty_value,
+            visible_value,
             _scene(11, 1),
             identity,
             identity,
@@ -50,7 +51,7 @@ def _parsed_page() -> NormalizedPage:
             upper,
             "layer",
             empty_value,
-            empty_value,
+            visible_value,
             _scene(21, 2),
             identity,
             identity,
@@ -158,3 +159,19 @@ def test_group_transform_is_applied_before_page_transform() -> None:
 
     stroke = next(stroke for stroke in page.strokes if stroke.stroke_id == "1:200")
     assert (stroke.points[0].x, stroke.points[0].y) == (64, 299)
+
+
+def test_layer_visibility_is_preserved_for_render_and_replay() -> None:
+    parsed = _parsed_page()
+    hidden_upper = replace(
+        parsed.groups[1],
+        visible=VersionedValue(_id(3), False),
+    )
+    parsed = replace(parsed, groups=(parsed.groups[0], hidden_upper))
+
+    page = to_render_page(parsed)
+
+    assert [(group.group_id, group.visible) for group in page.groups] == [
+        ("1:10", True),
+        ("1:20", False),
+    ]

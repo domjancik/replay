@@ -16,20 +16,27 @@ def _page() -> NormalizedPage:
     return NormalizedPage(
         page_id="output-page",
         paper_size=(32, 24),
-        groups=(NormalizedGroup("ink"),),
+        groups=(NormalizedGroup("lower"), NormalizedGroup("upper")),
         strokes=(
             NormalizedStroke(
-                stroke_id="line",
-                group_id="ink",
+                stroke_id="lower-line",
+                group_id="lower",
                 rgba=(20, 40, 60, 128),
                 thickness_scale=3,
                 points=(NormalizedPoint(2, 12), NormalizedPoint(30, 12)),
             ),
+            NormalizedStroke(
+                stroke_id="upper-line",
+                group_id="upper",
+                rgba=(90, 30, 10, 180),
+                thickness_scale=2,
+                points=(NormalizedPoint(16, 2), NormalizedPoint(16, 22)),
+            ),
         ),
-        compositing_order=("ink",),
-        replay_order=("line",),
+        compositing_order=("lower", "upper"),
+        replay_order=("upper-line", "lower-line"),
         replay_strategy="scene-order",
-        replay_evidence="synthetic fixture",
+        replay_evidence="synthetic interleaved layer fixture",
     )
 
 

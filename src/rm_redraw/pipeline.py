@@ -78,10 +78,14 @@ def to_render_page(
     transform = source_to_page_transform or page.source_to_page_transform
 
     layer_ids: list[str] = []
+    layer_visibility: dict[str, bool] = {}
     for group in page.groups:
         layer_id = str(group.layer_id)
         if layer_id not in layer_ids:
             layer_ids.append(layer_id)
+            layer_visibility[layer_id] = True
+        if group.kind == "layer" and str(group.node_id) == layer_id:
+            layer_visibility[layer_id] = bool(group.visible.value)
 
     rank = {item_id: index for index, item_id in enumerate(page.compositing_order)}
     ordered_strokes = sorted(
@@ -104,7 +108,9 @@ def to_render_page(
     return NormalizedPage(
         page_id=page.page_id,
         paper_size=(float(resolved_size[0]), float(resolved_size[1])),
-        groups=tuple(NormalizedGroup(layer_id) for layer_id in layer_ids),
+        groups=tuple(
+            NormalizedGroup(layer_id, layer_visibility[layer_id]) for layer_id in layer_ids
+        ),
         strokes=strokes,
         compositing_order=tuple(layer_ids),
         replay_order=tuple(str(item_id) for item_id in page.replay_order.stroke_ids),

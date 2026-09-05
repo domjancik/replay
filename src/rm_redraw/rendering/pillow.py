@@ -30,7 +30,10 @@ class PillowRenderer:
         for stroke in page.strokes:
             strokes_by_group.setdefault(stroke.group_id, []).append(stroke)
 
+        visible_groups = {group.group_id for group in page.groups if group.visible}
         for group_id in page.compositing_order:
+            if group_id not in visible_groups:
+                continue
             layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
             for stroke in strokes_by_group.get(group_id, []):
                 points = _visible_points(stroke, visibility)

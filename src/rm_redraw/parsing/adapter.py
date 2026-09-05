@@ -52,10 +52,13 @@ ROOT_ID = CrdtId(0, 1)
 IDENTITY_TRANSFORM = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 _SPECIAL_TOP_ANCHOR = CrdtId(0, 281474976710654)
 _SPECIAL_BOTTOM_ANCHOR = CrdtId(0, 281474976710655)
-_TEXT_TOP_OFFSET = -88.0
+# Calibrated against all five pages of paired native-PDF fixture
+# 8aba68ff-00e9-400b-9772-b96322e000f0. Unanchored ink remains at Y=0;
+# anchored plain-paragraph groups resolve at pos_y + 63 + index * 69.5.
+_TEXT_TOP_OFFSET = 63.0
 _LINE_HEIGHT_BY_STYLE = {
     0: 70.0,
-    1: 70.0,
+    1: 69.5,
     2: 150.0,
     3: 70.0,
     4: 35.0,
@@ -135,7 +138,10 @@ def _anchor_positions(
         y_position += _LINE_HEIGHT_BY_STYLE.get(style_code, 70.0)
     positions[_SPECIAL_TOP_ANCHOR] = top_of_text
     positions[_SPECIAL_BOTTOM_ANCHOR] = y_position
-    return positions, "root text anchor positions using the rmc line-layout heuristic"
+    return positions, (
+        "root text anchor positions calibrated against the five-page paired native PDF "
+        "fixture 8aba68ff-00e9-400b-9772-b96322e000f0"
+    )
 
 
 def _local_group_transform(
