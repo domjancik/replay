@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from rm_redraw.parsing.model import (
     CrdtIdentifier,
     EnumValue,
@@ -9,6 +11,7 @@ from rm_redraw.parsing.model import (
     PageMetadata,
     ReplayOrder,
     SceneOrder,
+    TransformResolution,
     VersionedValue,
 )
 from rm_redraw.pipeline import to_render_page
@@ -26,12 +29,31 @@ def _parsed_page() -> NormalizedPage:
     lower, upper = _id(10), _id(20)
     first, second = _id(100), _id(200)
     empty_value = VersionedValue(_id(1), "")
+    identity = TransformResolution((1, 0, 0, 1, 0, 0), True, "test identity")
     groups = (
         NormalizedGroup(
-            lower, lower, _id(1), lower, "layer", empty_value, empty_value, _scene(11, 1)
+            lower,
+            lower,
+            _id(1),
+            lower,
+            "layer",
+            empty_value,
+            empty_value,
+            _scene(11, 1),
+            identity,
+            identity,
         ),
         NormalizedGroup(
-            upper, upper, _id(1), upper, "layer", empty_value, empty_value, _scene(21, 2)
+            upper,
+            upper,
+            _id(1),
+            upper,
+            "layer",
+            empty_value,
+            empty_value,
+            _scene(21, 2),
+            identity,
+            identity,
         ),
     )
     strokes = (
@@ -117,3 +139,22 @@ def test_explicit_source_transform_projects_points_into_page_space() -> None:
 
     point = page.strokes[0].points[0]
     assert (point.x, point.y) == (108, 209)
+
+
+def test_group_transform_is_applied_before_page_transform() -> None:
+    parsed = _parsed_page()
+    translated = replace(
+        parsed.strokes[0],
+        effective_transform=TransformResolution(
+            (1, 0, 0, 1, -20, 30), True, "resolved test anchor"
+        ),
+    )
+    parsed = replace(parsed, strokes=(translated, parsed.strokes[1]))
+
+    page = to_render_page(
+        parsed,
+        source_to_page_transform=(2, 0, 0, 3, 100, 200),
+    )
+
+    stroke = next(stroke for stroke in page.strokes if stroke.stroke_id == "1:200")
+    assert (stroke.points[0].x, stroke.points[0].y) == (64, 299)

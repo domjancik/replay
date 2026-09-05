@@ -40,6 +40,14 @@ class EnumValue:
 
 
 @dataclass(frozen=True)
+class TransformResolution:
+    matrix: tuple[float, float, float, float, float, float]
+    resolved: bool
+    evidence: str
+    anchor_ids: tuple[CrdtIdentifier, ...] = ()
+
+
+@dataclass(frozen=True)
 class NormalizedPoint:
     x: float
     y: float
@@ -60,6 +68,8 @@ class NormalizedGroup:
     label: VersionedValue
     visible: VersionedValue
     scene_order: SceneOrder
+    local_transform: TransformResolution
+    effective_transform: TransformResolution
     extra: dict[str, object] = field(default_factory=dict)
 
 
@@ -76,6 +86,11 @@ class NormalizedStroke:
     thickness_scale: float
     starting_length: float
     points: tuple[NormalizedPoint, ...]
+    effective_transform: TransformResolution = TransformResolution(
+        matrix=(1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+        resolved=True,
+        evidence="No containing group transform; identity translation.",
+    )
     extra: dict[str, object] = field(default_factory=dict)
 
 

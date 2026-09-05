@@ -13,6 +13,7 @@ from rmscene import (
     CrdtSequence,
     MigrationInfoBlock,
     PageInfoBlock,
+    RootTextBlock,
     SceneGroupItemBlock,
     SceneInfo,
     SceneItemBlock,
@@ -24,6 +25,7 @@ from rmscene import (
     read_blocks,
 )
 from rmscene.tagged_block_common import CrdtId, LwwValue
+from rmscene.text import TextDocument
 
 from .model import (
     BlockDiagnostic,
@@ -41,12 +43,26 @@ from .model import (
     ReplayOrder,
     ReplayStrategy,
     SceneOrder,
+    TransformResolution,
     VersionedValue,
 )
 
 type Source = str | Path | BinaryIO
 ROOT_ID = CrdtId(0, 1)
 IDENTITY_TRANSFORM = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+_SPECIAL_TOP_ANCHOR = CrdtId(0, 281474976710654)
+_SPECIAL_BOTTOM_ANCHOR = CrdtId(0, 281474976710655)
+_TEXT_TOP_OFFSET = -88.0
+_LINE_HEIGHT_BY_STYLE = {
+    0: 70.0,
+    1: 70.0,
+    2: 150.0,
+    3: 70.0,
+    4: 35.0,
+    5: 35.0,
+    6: 35.0,
+    7: 35.0,
+}
 
 
 def _crdt(value: CrdtId) -> CrdtIdentifier:
@@ -89,6 +105,87 @@ def _base64_or_none(value: bytes) -> str | None:
     if not value:
         return None
     return base64.b64encode(value).decode("ascii")
+
+
+def _identity_resolution(evidence: str) -> TransformResolution:
+    return TransformResolution(IDENTITY_TRANSFORM, True, evidence)
+
+
+def _anchor_positions(
+    root_text_block: RootTextBlock | None,
+    paper_size: tuple[int, int] | None,
+) -> tuple[dict[CrdtId, float], str]:
+    if root_text_block is None:
+        positions = {_SPECIAL_TOP_ANCHOR: 0.0}
+        if paper_size is not None:
+            positions[_SPECIAL_BOTTOM_ANCHOR] = float(paper_size[1])
+        return positions, "special page anchors without root text"
+
+    text = root_text_block.value
+    document = TextDocument.from_scene_item(text)
+    y_position = float(text.pos_y) + _TEXT_TOP_OFFSET
+    top_of_text = y_position
+    positions: dict[CrdtId, float] = {}
+    for paragraph in document.contents:
+        positions[paragraph.start_id] = y_position
+        for span in paragraph.contents:
+            for character_id in span.i:
+                positions[character_id] = y_position
+        style_code = int(paragraph.style.value)
+        y_position += _LINE_HEIGHT_BY_STYLE.get(style_code, 70.0)
+    positions[_SPECIAL_TOP_ANCHOR] = top_of_text
+    positions[_SPECIAL_BOTTOM_ANCHOR] = y_position
+    return positions, "root text anchor positions using the rmc line-layout heuristic"
+
+
+def _local_group_transform(
+    group: object,
+    anchor_positions: dict[CrdtId, float],
+    anchor_evidence: str,
+) -> TransformResolution:
+    anchor = group.anchor_id
+    if anchor is None:
+        return _identity_resolution("Group has no anchor; identity translation.")
+
+    anchor_id = anchor.value
+    origin_x = float(group.anchor_origin_x.value) if group.anchor_origin_x is not None else 0.0
+    anchor_y = anchor_positions.get(anchor_id)
+    if anchor_y is None:
+        return TransformResolution(
+            matrix=(1.0, 0.0, 0.0, 1.0, origin_x, 0.0),
+            resolved=False,
+            evidence=f"Unresolved text anchor {anchor_id}; retained X origin and used zero Y.",
+            anchor_ids=(_crdt(anchor_id),),
+        )
+    return TransformResolution(
+        matrix=(1.0, 0.0, 0.0, 1.0, origin_x, anchor_y),
+        resolved=True,
+        evidence=f"Resolved text anchor {anchor_id} from {anchor_evidence}.",
+        anchor_ids=(_crdt(anchor_id),),
+    )
+
+
+def _compose_transforms(
+    parent: TransformResolution, local: TransformResolution
+) -> TransformResolution:
+    if parent.matrix == IDENTITY_TRANSFORM and parent.resolved:
+        return local
+    pa, pb, pc, pd, pe, pf = parent.matrix
+    la, lb, lc, ld, le, lf = local.matrix
+    matrix = (
+        pa * la + pc * lb,
+        pb * la + pd * lb,
+        pa * lc + pc * ld,
+        pb * lc + pd * ld,
+        pa * le + pc * lf + pe,
+        pb * le + pd * lf + pf,
+    )
+    return TransformResolution(
+        matrix=matrix,
+        resolved=parent.resolved and local.resolved,
+        evidence=f"Cumulative group transform: {parent.evidence} {local.evidence}",
+        anchor_ids=parent.anchor_ids + local.anchor_ids,
+    )
 
 
 def _json_value(value: object) -> object:
@@ -206,12 +303,53 @@ def _parse_stream(
     node_details = {
         block.group.node_id: block.group for block in blocks if isinstance(block, TreeNodeBlock)
     }
+    root_text_block = next(
+        (block for block in reversed(blocks) if isinstance(block, RootTextBlock)), None
+    )
+    anchor_positions, anchor_evidence = _anchor_positions(
+        root_text_block,
+        scene_info.paper_size if scene_info is not None else None,
+    )
     group_items = {
         block.item.value: (index, block)
         for index, block in enumerate(blocks)
         if isinstance(block, SceneGroupItemBlock) and block.item.value is not None
     }
     parents = {node_id: block.parent_id for node_id, block in tree_blocks.items()}
+    local_transforms = {
+        node_id: _local_group_transform(group, anchor_positions, anchor_evidence)
+        for node_id, group in node_details.items()
+    }
+    effective_transforms: dict[CrdtId, TransformResolution] = {
+        ROOT_ID: _identity_resolution("Scene root uses identity translation.")
+    }
+
+    def effective_transform(node_id: CrdtId, active: frozenset[CrdtId] = frozenset()):
+        if node_id in effective_transforms:
+            return effective_transforms[node_id]
+        if node_id in active:
+            result = TransformResolution(
+                IDENTITY_TRANSFORM,
+                False,
+                f"Cycle detected while resolving group {node_id}; used identity translation.",
+            )
+            effective_transforms[node_id] = result
+            return result
+        local = local_transforms.get(node_id)
+        if local is None:
+            result = TransformResolution(
+                IDENTITY_TRANSFORM,
+                False,
+                f"Missing metadata for group {node_id}; used identity translation.",
+            )
+            effective_transforms[node_id] = result
+            return result
+        parent_id = parents.get(node_id, ROOT_ID)
+        parent = effective_transform(parent_id, active | {node_id})
+        result = _compose_transforms(parent, local)
+        effective_transforms[node_id] = result
+        return result
+
     item_blocks_by_parent: dict[CrdtId, list[SceneItemBlock]] = {}
     for block in blocks:
         if isinstance(block, SceneItemBlock):
@@ -225,6 +363,8 @@ def _parse_stream(
             continue
         block_index, item_block = positioned
         layer_id = _layer_for(node_id, parents)
+        local_transform = local_transforms[node_id]
+        resolved_transform = effective_transform(node_id)
         groups.append(
             NormalizedGroup(
                 node_id=_crdt(node_id),
@@ -235,6 +375,8 @@ def _parse_stream(
                 label=_versioned(group.label),
                 visible=_versioned(group.visible),
                 scene_order=_scene_order(item_block, block_index),
+                local_transform=local_transform,
+                effective_transform=resolved_transform,
                 extra={
                     "is_update": tree_block.is_update,
                     "anchor_id": _json_value(group.anchor_id),
@@ -299,6 +441,7 @@ def _parse_stream(
                     )
                     for point in line.points
                 ),
+                effective_transform=effective_transform(block.parent_id),
             )
         )
 
@@ -356,6 +499,26 @@ def _parse_stream(
             ),
         )
 
+    diagnostics = _block_diagnostics(blocks)
+    unresolved_anchor_ids = sorted(
+        {
+            anchor_id
+            for group in groups
+            if not group.effective_transform.resolved
+            for anchor_id in group.effective_transform.anchor_ids
+        },
+        key=lambda anchor_id: anchor_id.as_tuple(),
+    )
+    if unresolved_anchor_ids:
+        diagnostics = PageDiagnostics(
+            blocks=diagnostics.blocks,
+            warnings=diagnostics.warnings
+            + tuple(
+                f"Unresolved group anchor {anchor_id}; retained X origin and used zero Y."
+                for anchor_id in unresolved_anchor_ids
+            ),
+        )
+
     return NormalizedPage(
         page_id=page_id,
         paper_size=scene_info.paper_size if scene_info is not None else None,
@@ -366,7 +529,7 @@ def _parse_stream(
         compositing_order=compositing_order,
         replay_order=replay_order,
         metadata=metadata,
-        diagnostics=_block_diagnostics(blocks),
+        diagnostics=diagnostics,
     )
 
 

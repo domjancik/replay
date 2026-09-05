@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from rm_redraw.parsing.model import NormalizedPage as ParsedPage
+from rm_redraw.parsing.model import NormalizedPoint as ParsedPoint
 from rm_redraw.parsing.model import NormalizedStroke as ParsedStroke
 from rm_redraw.rendering.types import (
     Color,
@@ -36,6 +37,33 @@ def _stroke_id(stroke: ParsedStroke) -> str:
     return str(stroke.stroke_id)
 
 
+def _transform_xy(
+    matrix: tuple[float, float, float, float, float, float],
+    x: float,
+    y: float,
+) -> tuple[float, float]:
+    a, b, c, d, e, f = matrix
+    return a * x + c * y + e, b * x + d * y + f
+
+
+def _project_point(
+    point: ParsedPoint,
+    group_transform: tuple[float, float, float, float, float, float],
+    page_transform: tuple[float, float, float, float, float, float],
+) -> NormalizedPoint:
+    group_x, group_y = _transform_xy(group_transform, point.x, point.y)
+    page_x, page_y = _transform_xy(page_transform, group_x, group_y)
+    return NormalizedPoint(
+        page_x,
+        page_y,
+        float(point.pressure),
+        float(point.speed),
+        float(point.direction),
+        float(point.width),
+        point.extra,
+    )
+
+
 def to_render_page(
     page: ParsedPage,
     *,
@@ -48,7 +76,6 @@ def to_render_page(
     if resolved_size is None:
         raise ValueError("paper_size is absent from the source and must be supplied explicitly")
     transform = source_to_page_transform or page.source_to_page_transform
-    a, b, c, d, e, f = transform
 
     layer_ids: list[str] = []
     for group in page.groups:
@@ -68,15 +95,7 @@ def to_render_page(
             rgba=stroke.color_rgba or palette[stroke.color.code],
             thickness_scale=stroke.thickness_scale,
             points=tuple(
-                NormalizedPoint(
-                    a * point.x + c * point.y + e,
-                    b * point.x + d * point.y + f,
-                    float(point.pressure),
-                    float(point.speed),
-                    float(point.direction),
-                    float(point.width),
-                    point.extra,
-                )
+                _project_point(point, stroke.effective_transform.matrix, transform)
                 for point in stroke.points
             ),
         )
