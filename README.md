@@ -35,6 +35,8 @@ uv run python -m rm_redraw.replay path/to/page.rm `
 
 The geometry values above are explicit example inputs, not device defaults. Omit `--paper-size` only when the page contains `SceneInfo.paper_size`; supply a source affine transform unless parsed metadata provides one. Multi-page `.rmdoc` archives also require `--page-id`.
 
+Root-text anchor matrices derived from the current fixture-calibrated typography heuristic are retained for diagnostics but marked unresolved. Styled, wrapped, or reordered text requires a complete layout/anchor model before those translations can be treated as authoritative.
+
 Each successful run creates deterministic numbered PNG frames, `static.png`, H.264 `replay.mp4`, and `manifest.json`. The manifest records input and output hashes, geometry evidence, timing, viewport, backend, and the final-frame equality result. The command fails if its final frame is not byte-identical to the static render.
 
 ## Local comparison command
