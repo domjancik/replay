@@ -56,6 +56,8 @@ When paired evidence supports a centered source frame, `width / 2` may be suppli
 
 The end-to-end replay command consumes an existing local `.rmdoc` archive or `.rm` page. It never contacts the tablet implicitly. Multi-page archives require an explicit page ID. The command accepts explicit page size and source affine transform overrides, and fails with an actionable message when neither source metadata nor overrides resolve the geometry.
 
+Callers may instead provide a local paired native PDF, one-based PDF page, and a caller-validated export canvas. The command hashes the PDF, validates the page and MediaBox, records that provenance, uses the export canvas only when `SceneInfo.paper_size` is absent, and derives a centered `(1, 0, 0, 1, width / 2, 0)` transform only when no explicit or parsed affine exists. A conflicting `SceneInfo.paper_size` requires an explicit paper-size override. The export canvas remains caller-supplied evidence; PDF points alone do not imply a DPI or source scale.
+
 Each successful run writes into a new output directory:
 
 - deterministic numbered PNG frames under `frames/`
@@ -72,6 +74,8 @@ Reference rasterization records PDF hash, rasterizer/version, page, DPI or exact
 Metrics include global and padded-ink-ROI MAE, RMSE, SSIM, coverage/ink density, and an edge/geometry measurement. Reports retain per-page and, when fixtures isolate tools, per-pen values. No fidelity claim may rely on a mostly white full-page metric alone.
 
 The supported local comparison command consumes an existing candidate PNG plus either a native PNG of identical dimensions or a native PDF page rasterized to the candidate dimensions with Poppler. It never contacts the tablet. Each run writes to a new output directory and records input hashes, Poppler version/settings when used, dimensions, colour/background handling, ROI construction, metric definitions and output hashes. Required outputs are `native.png`, `ours.png`, `absolute-diff.png`, `high-gain-diff.png`, `overlay.png`, and `metrics.json`. Dimension or colour-mode mismatches fail actionably rather than triggering an implicit resize or crop.
+
+For native PDFs, ink-only comparison removes direct page-content text objects before rasterization and records the number of removed text and text-painting operators. The report labels this scope explicitly. Form XObjects, images, annotations, and their clipping or masking interactions remain unfiltered, so this mode supports only PDFs whose relevant typed text is in direct page content.
 
 ## Corpus layout
 

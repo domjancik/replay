@@ -20,7 +20,10 @@
 | Independent acquisition | GPT-5.6 Terra, medium | Three immutable SSH snapshots, 27 v6 pages, validated hashes; no paired native exports |
 | End-to-end replay | GPT-5.6 Terra, high plus coordinator review | Local `.rm`/`.rmdoc` CLI, deterministic frames/static/manifest/H.264, encoded-timeline and equality gates |
 | Native comparison tooling | GPT-5.6 Terra, medium plus coordinator review | Supported PNG/PDF comparison CLI, fixed Poppler rasterization, global/ink-ROI/edge metrics, diffs and overlay |
-| Source-affine evidence audit | GPT-5.6 Sol, high | Same-device `+702` convention strongly supported; evidence remains too narrow for an automatic parser default |
+| Source-affine evidence audit | GPT-5.6 Sol, high | Centered `width / 2` convention supported for validated 1404- and 1872-wide exports; no unconditional default |
+| Paired export canvas | GPT-5.6 Terra, medium plus coordinator review | Local PDF/page/MediaBox validation and hashing, caller-validated export canvas, evidence-backed centered affine |
+| Native ink isolation | GPT-5.6 Terra, medium plus coordinator review | Direct PDF text-object filtering with explicit operator provenance and extraction limits |
+| Styled-anchor semantics | GPT-5.6 Sol, high | Final-layout and CRDT-history hypotheses rejected; exact controlled-fixture blocker isolated without fitting constants |
 
 Acquisition verification fixture: `fixtures/private/verification/8aba68ff-00e9-400b-9772-b96322e000f0/` (ignored). The USB archive and five-page native PDF pass structural checks. Poppler rasterized five 890×1188 PNGs at 144 DPI. It emitted non-fatal unknown `ExtGState GSa` warnings.
 
@@ -54,6 +57,12 @@ The new pair also separates typography measurements from full anchor semantics. 
 
 Supported replays at the PDF-derived even H.264 target 1872×6136 complete 48 frames with final/static byte equality for both tested X hypotheses. Whole-page comparison metrics cannot select the transform or measure pen fidelity because the native PDF contains 4,029 typed glyph operations while Pillow renders only the 48 handwritten strokes. The 1404×1872 replay is retained as a rejected hypothesis: its blank output proves that legacy viewport metadata is not the page canvas. Current supported and diagnostic outputs are ignored under `artifacts/usb-recheck-a709e2d0-*`; isolated PDF-path fitting is under the paired fixture's ignored `diagnostics/affine-anchor-evidence/` directory.
 
+Replay now accepts `--paired-native-pdf`, `--paired-pdf-page` and `--export-canvas` together as locally verifiable canvas evidence. It hashes the PDF, validates the selected page and MediaBox, records the caller-supplied canvas without a DPI claim, and derives `width / 2` only when source and caller affine values are absent. A real `dreams` run under ignored `artifacts/dreams-canvas-smoke-even/` resolved 1872×6136 and `+936`, emitted 48 frames and H.264, and preserved final/static byte equality. The original paired fixture still resolves 1404×1872 and `+702` when supplied its validated canvas.
+
+Comparison now supports `--ink-only` for native PDFs. On `dreams`, it removed 8,378 direct text-object operations including 4,029 text-painting operations before Poppler rasterization; the original handwriting-only verification page removed none. The resulting `dreams` report under ignored `artifacts/ink-only-dreams-limits-final/` exposes a 750.73-pixel symmetric edge distance caused by unresolved anchor placement instead of letting native typed text dominate the metric. This filter is intentionally limited to direct page content; Form XObjects, images and annotations remain unfiltered.
+
+The bounded semantic investigation tested complete wrapped final layout and text reconstructed at every anchor-related CRDT cutoff. Neither explains the native positions: group `1:2437` fits Y `2492.6` while semantic predictions span `3522.3–3591.8`; group `1:2602` fits Y `2229.1` while predictions span `3798.0–4030.7`. Available `rmscene`, `rmc`, Scratchydisk and remarkable-mcp implementations do not define `anchor_type=2` or `anchor_threshold=35.748`. The precise missing evidence is a controlled paired fixture that keeps ink fixed while varying anchor type/threshold and inserting, deleting, wrapping and reordering surrounding text. Current repository rules prohibit that tablet write without a dedicated explicit opt-in, so heuristic anchors remain unresolved rather than encoding per-group fitted constants.
+
 ## Recommended model allocation
 
 | Task | Model and effort | Price/performance reason |
@@ -71,10 +80,10 @@ The allocation uses current API pricing as a relative cost proxy: Luna is $0.20 
 
 ## Next coordination queue
 
-1. Implement complete styled/wrapped text layout and anchor semantics against the independent `dreams` pair; keep heuristic anchors unresolved until that model passes isolated path fitting.
-2. Add an explicit target-width/page-canvas selection path so paired export evidence can supply `width / 2` without trusting stale custom-zoom metadata.
-3. Add typed-text rendering or an ink-only native comparison path before using whole-page metrics for renderer-fidelity claims.
+1. After explicit device-write opt-in, create a dedicated disposable controlled fixture varying `anchor_type`, `anchor_threshold`, and surrounding text edits while holding anchored ink fixed.
+2. Implement styled/wrapped anchor semantics only after those paired native outputs distinguish capped, historical and absolute-page relations.
+3. Extend ink-only extraction to nested Form XObjects only when a paired fixture actually uses them.
 4. Treat eraser semantics and textured pens as known Pillow-baseline limitations while beginning simple-pen fidelity work only on geometry-isolated fixtures.
-5. Build controlled fixture tooling only after explicit device-write opt-in. Then assign simple-pen work to Sol high and pencil/brush research to Astra high.
+5. Assign simple-pen work to Sol high and pencil/brush research to Astra high after anchor geometry is independently resolved.
 
 Official runtime references: [CPython version status](https://devguide.python.org/versions/), [Python 3.13.15](https://www.python.org/downloads/release/python-31315/), and [uv Python version management](https://docs.astral.sh/uv/concepts/python-versions/).
