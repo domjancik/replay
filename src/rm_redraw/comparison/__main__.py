@@ -17,6 +17,11 @@ def _parser() -> argparse.ArgumentParser:
     native.add_argument("--native-png", type=Path)
     native.add_argument("--native-pdf", type=Path)
     parser.add_argument("--page", type=int, default=1, help="one-based native PDF page number")
+    parser.add_argument(
+        "--ink-only",
+        action="store_true",
+        help="remove direct typed-text PDF objects before comparing native ink",
+    )
     parser.add_argument("--output", type=Path, required=True, help="new output directory")
     return parser
 
@@ -29,6 +34,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             native_png=args.native_png,
             native_pdf=args.native_pdf,
             page=args.page,
+            ink_only=args.ink_only,
             output_directory=args.output,
         )
     except ComparisonError as error:

@@ -10,6 +10,8 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import ContentStream
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import canny
 from skimage.metrics import structural_similarity
@@ -35,6 +37,7 @@ def run_comparison(
     native_png: Path | None = None,
     native_pdf: Path | None = None,
     page: int = 1,
+    ink_only: bool = False,
 ) -> ComparisonResult:
     """Compare two same-mode, same-dimension rasters and write a new report directory."""
     if (native_png is None) == (native_pdf is None):
@@ -43,13 +46,22 @@ def run_comparison(
         raise ComparisonError(f"output must be a new output directory: {output_directory}")
     candidate_png = _require_file(candidate_png, "candidate PNG")
     if native_png is not None:
+        if ink_only:
+            raise ComparisonError("ink-only comparison requires a native PDF")
         native_source = _require_file(native_png, "native PNG")
         native, rasterization = _load_png(native_source, "native PNG"), {"source": "native-png"}
+        content_filter = None
     else:
         assert native_pdf is not None
         native_source = _require_file(native_pdf, "native PDF")
         candidate = _load_png(candidate_png, "candidate PNG")
-        native, rasterization = _rasterize_pdf(native_source, page, candidate.size)
+        if ink_only:
+            native, rasterization, content_filter = _rasterize_pdf_ink_only(
+                native_source, page, candidate.size
+            )
+        else:
+            native, rasterization = _rasterize_pdf(native_source, page, candidate.size)
+            content_filter = None
 
     candidate = _load_png(candidate_png, "candidate PNG")
     _validate_images(candidate, native)
@@ -68,7 +80,13 @@ def run_comparison(
     _overlay(native_array, candidate_array).save(output_directory / "overlay.png")
 
     metrics = _report(
-        candidate_png, native_source, candidate, native, rasterization, output_directory
+        candidate_png,
+        native_source,
+        candidate,
+        native,
+        rasterization,
+        content_filter,
+        output_directory,
     )
     (output_directory / "metrics.json").write_text(
         json.dumps(metrics, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
@@ -141,6 +159,62 @@ def _rasterize_pdf(
         },
     }
     return image, settings
+
+
+def _rasterize_pdf_ink_only(
+    pdf: Path, page: int, size: tuple[int, int]
+) -> tuple[Image.Image, dict[str, object], dict[str, object]]:
+    """Remove direct PDF text objects, then rasterize the remaining native vector content."""
+    with tempfile.TemporaryDirectory(prefix="rm-redraw-comparison-") as temporary:
+        filtered_pdf = Path(temporary) / "native-ink-only.pdf"
+        removed, text_painting = _write_text_filtered_pdf(pdf, page, filtered_pdf)
+        image, rasterization = _rasterize_pdf(filtered_pdf, 1, size)
+    rasterization["content_filter"] = "remove-text-objects-before-rasterization"
+    return image, rasterization, {
+        "strategy": "remove-text-objects-from-native-pdf-content-stream",
+        "scope": "direct-page-content-only",
+        "removed_text_operators": removed,
+        "direct_text_painting_operators": text_painting,
+        "unfiltered_content": ["form-xobjects", "images", "annotations"],
+    }
+
+
+def _write_text_filtered_pdf(source: Path, page_number: int, destination: Path) -> tuple[int, int]:
+    if page_number < 1:
+        raise ComparisonError("PDF page must be at least 1")
+    try:
+        reader = PdfReader(source)
+        page = reader.pages[page_number - 1]
+    except (IndexError, OSError) as error:
+        raise ComparisonError(f"cannot read PDF page {page_number}: {source}") from error
+
+    contents = ContentStream(page.get_contents(), reader)
+    filtered_operations: list[tuple[object, object]] = []
+    text_depth = 0
+    removed = 0
+    text_painting = 0
+    for operands, operator in contents.operations:
+        if operator == b"BT":
+            text_depth += 1
+        if text_depth:
+            removed += 1
+            if operator in {b"Tj", b"TJ", b"'", b'"'}:
+                text_painting += 1
+        else:
+            filtered_operations.append((operands, operator))
+        if operator == b"ET" and text_depth:
+            text_depth -= 1
+    if text_depth:
+        raise ComparisonError(f"native PDF page {page_number} has an unterminated text object")
+
+    writer = PdfWriter()
+    filtered_page = writer.add_page(page)
+    filtered_contents = ContentStream(None, writer)
+    filtered_contents.operations = filtered_operations
+    filtered_page.replace_contents(filtered_contents)
+    with destination.open("wb") as output:
+        writer.write(output)
+    return removed, text_painting
 
 
 def _validate_images(candidate: Image.Image, native: Image.Image) -> None:
@@ -257,6 +331,7 @@ def _report(
     candidate: Image.Image,
     native: Image.Image,
     rasterization: dict[str, object],
+    content_filter: dict[str, object] | None,
     output: Path,
 ) -> dict[str, object]:
     candidate_array = np.asarray(candidate)
@@ -281,11 +356,13 @@ def _report(
     }
     return {
         "schema_version": 1,
+        "comparison_scope": "ink-only-native-pdf" if content_filter else "whole-page-raster",
         "inputs": {
             "candidate": {"path": str(candidate_path), "sha256": _sha256(candidate_path)},
             "native": {"path": str(native_path), "sha256": _sha256(native_path)},
         },
         "rasterization": rasterization,
+        **({"native_content_filter": content_filter} if content_filter else {}),
         "images": {
             "dimensions": list(candidate.size),
             "mode": candidate.mode,
