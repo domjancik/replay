@@ -116,6 +116,34 @@ def test_parser_page_adapts_to_render_and_replay_contracts() -> None:
     assert page.strokes[0].points[0].speed == 11
 
 
+@pytest.mark.parametrize(
+    ("code", "name", "expected"),
+    [
+        (1, "GRAY", (144, 144, 144, 255)),
+        (3, "YELLOW", (254, 253, 96, 255)),
+        (6, "BLUE", (48, 74, 224, 255)),
+        (7, "RED", (194, 49, 50, 255)),
+    ],
+)
+def test_palette_projection_matches_native_export_colors(code, name, expected) -> None:
+    # Native 3.28 PDF RGB operators; yellow is measured on the highlighter grid.
+    parsed = _parsed_page()
+    stroke = replace(parsed.strokes[0], color=EnumValue(code, name), color_rgba=None)
+    page = to_render_page(replace(parsed, strokes=(stroke,)))
+    assert page.strokes[0].rgba == expected
+
+
+def test_explicit_and_caller_colors_override_native_palette() -> None:
+    parsed = _parsed_page()
+    stroke = replace(parsed.strokes[0], color=EnumValue(7, "RED"), color_rgba=(9, 8, 7, 0))
+    page = to_render_page(replace(parsed, strokes=(stroke,)), palette={7: (1, 2, 3, 4)})
+    assert page.strokes[0].rgba == (9, 8, 7, 0)
+    page = to_render_page(
+        replace(parsed, strokes=(replace(stroke, color_rgba=None),)), palette={7: (1, 2, 3, 4)}
+    )
+    assert page.strokes[0].rgba == (1, 2, 3, 4)
+
+
 def test_missing_page_size_requires_explicit_override() -> None:
     parsed = _parsed_page()
     parsed = NormalizedPage(

@@ -71,7 +71,11 @@ Each successful run writes into a new output directory:
 - `replay.mp4` encoded as H.264
 - `manifest.json` containing the input hash and page member/ID, resolved geometry and evidence, replay mode/timing inputs, viewport, frame count and hashes, renderer/backend identity, and a boolean final-frame byte-equality result
 
-Backend provenance labels the current textured-tool model `experimental-texture-v1` and records that it is not native-calibrated. Deterministic output does not imply native fidelity. Its fixed source-distance deposition and stroke/position seed are shared by static and progressive rendering.
+Backend provenance labels the current textured-tool model `experimental-texture-v2` and records that it is not fully native-calibrated. Current pencil, mechanical-pencil and brush use capture-informed geometry/density; legacy profiles retain the earlier model. Native grain identity and edge texture remain unmodeled. Deterministic output does not imply native fidelity. Fixed source-distance deposition and stroke/position seeds are shared by static and progressive rendering.
+
+Simple-pen provenance identifies `current-simple-geometry-v1` (current fineliner and highlighter) and `provisional-marker-envelope-v1`. Fineliner holds the first point's quarter-unit width throughout the stroke. Highlighter Darken blending is scoped to the current layer; native equivalence across layers is unverified. Marker contours and variable-width highlighter/marker interpolation remain provisional.
+
+Backend provenance also records the default palette profile and the measured color codes. `native-basic-3.28-v1` uses native export values for black, gray, yellow, blue and red (codes 0, 1, 3, 6, 7); yellow is measured on highlighter exports. Other default colors remain provisional. Explicit source RGBA and caller-supplied palettes override these defaults.
 
 Supported scheduling modes are stroke-step, constant seconds per stroke, and constant drawing distance per second. All use the visible-layer-major ordering defined above. A run is unsuccessful if the final frame differs from `static.png`.
 

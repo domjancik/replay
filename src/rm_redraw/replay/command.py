@@ -29,7 +29,7 @@ from rm_redraw.parsing import (
     resolve_page_geometry,
 )
 from rm_redraw.parsing.geometry import AffineTransform
-from rm_redraw.pipeline import to_render_page
+from rm_redraw.pipeline import PALETTE_CALIBRATED_CODES, PALETTE_PROFILE, to_render_page
 from rm_redraw.rendering import PillowRenderer, RenderOptions, Viewport
 from rm_redraw.rendering.types import VisibilityState
 
@@ -613,7 +613,12 @@ def run_local_replay(
         "backend": {
             "name": "PillowRenderer",
             "pillow_version": pillow_version,
-            "texture_profile": "experimental-texture-v1",
+            "palette_profile": PALETTE_PROFILE,
+            "palette_calibrated_codes": list(PALETTE_CALIBRATED_CODES),
+            "simple_profile": "current-simple-geometry-v1",
+            "marker_profile": "provisional-marker-envelope-v1",
+            "highlighter_blend_scope": "within-layer-darken",
+            "texture_profile": "experimental-texture-v2",
             "texture_native_calibrated": False,
         },
         "frame_count": len(frame_entries),

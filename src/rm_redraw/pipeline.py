@@ -16,15 +16,20 @@ from rm_redraw.rendering.types import (
     NormalizedStroke,
 )
 
+# Black/gray/blue/red agree across native 3.28 exports of six tool families.
+# Yellow is measured on highlighter exports. Other entries remain provisional;
+# explicit source RGBA and caller palettes win.
+PALETTE_PROFILE = "native-basic-3.28-v1"
+PALETTE_CALIBRATED_CODES = (0, 1, 3, 6, 7)
 DEFAULT_PALETTE: Mapping[int, Color] = {
     0: (0, 0, 0, 255),
-    1: (128, 128, 128, 255),
+    1: (144, 144, 144, 255),
     2: (255, 255, 255, 255),
-    3: (253, 227, 0, 255),
+    3: (254, 253, 96, 255),
     4: (0, 128, 0, 255),
     5: (255, 105, 180, 255),
-    6: (0, 82, 204, 255),
-    7: (204, 0, 0, 255),
+    6: (48, 74, 224, 255),
+    7: (194, 49, 50, 255),
     8: (128, 128, 128, 255),
     9: (253, 227, 0, 128),
     10: (0, 170, 80, 255),

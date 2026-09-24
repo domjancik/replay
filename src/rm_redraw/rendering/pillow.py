@@ -7,6 +7,7 @@ from math import ceil, floor, hypot, sqrt
 from PIL import Image, ImageChops, ImageDraw
 
 from .geometry import prefix_points
+from .simple import draw_simple
 from .texture import TEXTURED_CODES, TEXTURED_NAMES, draw_texture
 from .types import (
     NormalizedPage,
@@ -89,6 +90,14 @@ def _draw_stroke(
     scale_y = viewport.height / page.paper_size[1]
     scale = (scale_x + scale_y) / 2
     coordinates = [(point.x * scale_x, point.y * scale_y) for point in points]
+    is_simple = stroke.tool_code in {16, 17, 18} or stroke.tool_name in {
+        "MARKER_2",
+        "FINELINER_2",
+        "HIGHLIGHTER_2",
+    }
+    if is_simple:
+        draw_simple(layer, points, stroke, scale_x, scale_y)
+        return
     if stroke.tool_code in TEXTURED_CODES or stroke.tool_name in TEXTURED_NAMES:
         length = sum(hypot(b.x - a.x, b.y - a.y) for a, b in zip(points, points[1:], strict=False))
         draw_texture(layer, stroke, length, scale_x, scale_y)

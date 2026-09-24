@@ -87,6 +87,14 @@ Add `--ink-only` with `--native-pdf` to remove direct page-content text objects 
 
 ## Ballpoint rendering
 
-The render projection preserves the parsed tool code/name and all point channels. `BALLPOINT_2` uses five-point segments with recorded width, pressure, and speed, rounded caps/joins, pressure-dependent colour, and localized two-times antialiasing. Other tools retain the fixed-width Pillow baseline until they receive isolated validation.
+The render projection preserves the parsed tool code/name and all point channels. `BALLPOINT_2` uses five-point segments with recorded width, pressure, and speed, rounded caps/joins, pressure-dependent colour, and localized two-times antialiasing.
 
 The controlled three-stroke ballpoint page improved from ROI RMSE `29.9361` to `18.3519`, SSIM `0.941389` to `0.973088`, and symmetric edge distance `0.50431` to `0.38154` pixels. Candidate/native ROI coverage is `0.05072`/`0.04622`. This is one geometry-isolated fixture; the `0.75` Pillow width calibration remains provisional until held-out ballpoint pages cover more pressure, speed, and thickness ranges.
+
+## Capture-calibrated tool profiles
+
+Saved native exports establish current fineliner width from the first point's quarter-unit width, with round caps and joins. Current highlighter uses quarter-unit width with butt caps, bevel joins and Darken blending within its layer; cross-layer blending equivalence remains unverified. The current marker has a provisional smooth width envelope; native irregular edges are not reproduced.
+
+Current pencil and mechanical-pencil profiles use stable, high-contrast grain; current brush responds to pressure and speed. Their geometry and ink density are calibrated from controlled captures, but native grain identity and edge texture remain unmodeled. Pencil pixel error can increase even when contrast and ink mass improve; see `plans/milestone-acceptance.md` for the measured tradeoffs. Legacy profiles and calligraphy are unchanged.
+
+The default black, gray, yellow, blue and red palette values now match measured native export values. Explicit source RGBA takes precedence. Replay manifests name the palette, simple-pen, marker and experimental texture profiles so comparisons retain their provenance.

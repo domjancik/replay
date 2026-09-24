@@ -244,6 +244,11 @@ def test_local_archive_replay_writes_hashed_manifest_and_equal_final_frame(tmp_p
     )
     assert manifest["replay"]["mode"] == "seconds-per-stroke"
     assert manifest["viewport"] == {"height": 48, "width": 64}
+    assert manifest["backend"]["palette_profile"] == "native-basic-3.28-v1"
+    assert manifest["backend"]["palette_calibrated_codes"] == [0, 1, 3, 6, 7]
+    assert manifest["backend"]["simple_profile"] == "current-simple-geometry-v1"
+    assert manifest["backend"]["marker_profile"] == "provisional-marker-envelope-v1"
+    assert manifest["backend"]["highlighter_blend_scope"] == "within-layer-darken"
     assert manifest["video"]["path"] == "replay.mp4"
     assert (
         manifest["video"]["sha256"]
