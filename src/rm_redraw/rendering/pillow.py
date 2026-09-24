@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from math import ceil, floor, hypot, sqrt
 
 from PIL import Image, ImageChops, ImageDraw
@@ -24,11 +25,108 @@ from .types import (
 _BALLPOINT_RASTER_WIDTH_SCALE = 0.75
 
 
+@dataclass
+class _PrefixCache:
+    page: NormalizedPage
+    options: RenderOptions
+    viewport: Viewport
+    strokes: tuple[NormalizedStroke, ...]
+    stroke_ids: tuple[str, ...]
+    base: Image.Image
+    layer: Image.Image
+    completed_count: int = 0
+    group_id: str | None = None
+
+
 class PillowRenderer:
-    """Renders every frame from immutable visibility state and layer compositing."""
+    """Render immutable visibility with a bounded, exact append-prefix cache.
+
+    Only two canvases persist: completed lower layers and the current layer's
+    completed strokes. Active ink is drawn on a disposable copy. Nonprefix
+    visibility falls back to a stateless render, never reordered painting.
+    """
+
+    def __init__(self) -> None:
+        self._prefix_cache: _PrefixCache | None = None
 
     def render(
         self,
+        page: NormalizedPage,
+        options: RenderOptions,
+        visibility: VisibilityState,
+    ) -> Image.Image:
+        cache = self._prefix_cache
+        if cache is None or cache.page is not page or cache.options != options:
+            cache = self._new_prefix_cache(page, options)
+        visible_ids = frozenset(cache.stroke_ids)
+        completed = visibility.completed_stroke_ids & visible_ids
+        count = len(completed)
+        active = visibility.active_stroke_id
+        if active in visibility.completed_stroke_ids:
+            active = None
+        valid_prefix = (
+            len(visible_ids) == len(cache.stroke_ids)
+            and completed == frozenset(cache.stroke_ids[:count])
+            and (
+                active is None or (count < len(cache.strokes) and active == cache.stroke_ids[count])
+            )
+        )
+        if not valid_prefix:
+            self._prefix_cache = None
+            return self._render_uncached(page, options, visibility)
+        if count < cache.completed_count:
+            cache = self._new_prefix_cache(page, options)
+        self._prefix_cache = cache
+
+        for stroke in cache.strokes[cache.completed_count : count]:
+            if stroke.group_id != cache.group_id:
+                cache.base.alpha_composite(cache.layer)
+                cache.layer = Image.new("RGBA", cache.base.size, (0, 0, 0, 0))
+                cache.group_id = stroke.group_id
+            if stroke.points:
+                _draw_stroke(cache.layer, stroke.points, stroke, page, cache.viewport)
+        cache.completed_count = count
+
+        result = cache.base.copy()
+        if active is None:
+            result.alpha_composite(cache.layer)
+            return result
+        stroke = cache.strokes[count]
+        if stroke.group_id == cache.group_id:
+            active_layer = cache.layer.copy()
+        else:
+            result.alpha_composite(cache.layer)
+            active_layer = Image.new("RGBA", result.size, (0, 0, 0, 0))
+        points = _visible_points(stroke, visibility)
+        if points:
+            _draw_stroke(active_layer, points, stroke, page, cache.viewport)
+        result.alpha_composite(active_layer)
+        return result
+
+    @staticmethod
+    def _new_prefix_cache(page: NormalizedPage, options: RenderOptions) -> _PrefixCache:
+        viewport = _resolve_viewport(page, options)
+        visible_groups = {group.group_id for group in page.groups if group.visible}
+        ordered = tuple(
+            stroke
+            for group_id in page.compositing_order
+            if group_id in visible_groups
+            for stroke in page.strokes
+            if stroke.group_id == group_id
+        )
+        size = (viewport.width, viewport.height)
+        return _PrefixCache(
+            page,
+            options,
+            viewport,
+            ordered,
+            tuple(stroke.stroke_id for stroke in ordered),
+            Image.new("RGBA", size, options.background),
+            Image.new("RGBA", size, (0, 0, 0, 0)),
+        )
+
+    @staticmethod
+    def _render_uncached(
         page: NormalizedPage,
         options: RenderOptions,
         visibility: VisibilityState,
@@ -52,7 +150,7 @@ class PillowRenderer:
         return image
 
     def render_static(self, page: NormalizedPage, options: RenderOptions) -> Image.Image:
-        return self.render(
+        return self._render_uncached(
             page,
             options,
             VisibilityState(frozenset(stroke.stroke_id for stroke in page.strokes)),
