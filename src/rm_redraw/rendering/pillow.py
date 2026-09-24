@@ -7,6 +7,7 @@ from math import ceil, floor, hypot
 from PIL import Image, ImageChops, ImageDraw
 
 from .geometry import prefix_points
+from .texture import TEXTURED_CODES, TEXTURED_NAMES, draw_texture
 from .types import (
     NormalizedPage,
     NormalizedPoint,
@@ -88,6 +89,10 @@ def _draw_stroke(
     scale_y = viewport.height / page.paper_size[1]
     scale = (scale_x + scale_y) / 2
     coordinates = [(point.x * scale_x, point.y * scale_y) for point in points]
+    if stroke.tool_code in TEXTURED_CODES or stroke.tool_name in TEXTURED_NAMES:
+        length = sum(hypot(b.x-a.x, b.y-a.y) for a, b in zip(points, points[1:], strict=False))
+        draw_texture(layer, stroke, length, scale_x, scale_y)
+        return
     if stroke.tool_code == 6 or stroke.tool_name == "ERASER":
         _erase_stroke(layer, coordinates, stroke.thickness_scale * scale * 2.0)
         return

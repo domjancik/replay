@@ -62,6 +62,11 @@ def _parser() -> argparse.ArgumentParser:
         help="deterministic fallback order; neither choice claims chronology",
     )
     parser.add_argument(
+        "--auto-text-anchors",
+        action="store_true",
+        help="derive unambiguous text anchors from --paired-native-pdf and --export-canvas",
+    )
+    parser.add_argument(
         "--text-anchor-layout",
         type=Path,
         help=(
@@ -94,6 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             viewport=tuple(args.viewport) if args.viewport is not None else None,
             replay_strategy=args.replay_strategy,
             text_anchor_layout=args.text_anchor_layout,
+            auto_text_anchors=args.auto_text_anchors,
         )
     except ReplayCommandError as error:
         print(f"error: {error}", file=sys.stderr)

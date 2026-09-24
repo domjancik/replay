@@ -20,6 +20,10 @@ Device-derived files belong under `fixtures/private/` or `fixtures/local/` and a
 
 ## Local replay command
 
+For smooth directional drawing, select `--mode distance-per-second --distance-per-second 420` or `--mode seconds-per-stroke --seconds-per-stroke 0.5`. The default `stroke-step` mode reveals whole strokes. Use `--initial-pause 0.4 --pause-between-strokes 0.25 --final-hold 0.8` with either progressive mode to control pacing. These durations are synthesized; neither timing nor CRDT order is claimed to reproduce recorded wall-clock chronology. Visible layers finish from lowest to highest.
+
+The renderer includes a provisionally calibrated ballpoint profile and layer-local erasing. Experimental pencil, mechanical-pencil and brush profiles use deterministic source-position grain and fixed deposition samples, so revealing a prefix does not resample its texture. These profiles are not yet native-calibrated, and speed response is not established. See [the milestone acceptance audit](plans/milestone-acceptance.md) for verified behavior and remaining fidelity gaps.
+
 Replay one local `.rm` page or a selected page from a local `.rmdoc` archive:
 
 ```powershell
@@ -50,6 +54,8 @@ Callers that already have evidence-backed offsets can supply them without coupli
 ```
 
 Pass the file as `--text-anchor-layout path/to/anchor-layout.json`. Matching anchors are marked resolved and the file path, evidence, and offsets are recorded in `manifest.json`; missing IDs continue to use the unresolved diagnostic heuristic.
+
+When a matching native PDF is available, add `--auto-text-anchors` alongside `--paired-native-pdf` and `--export-canvas` to derive offsets automatically. The command uses the local native raster, rejects ambiguous or unsupported matches before creating output, and records per-group decisions and source hashes. It cannot be combined with `--text-anchor-layout`. This is native-reference-assisted placement, not a raw-only typography engine; no tablet connection is required after the paired files are saved.
 
 When a paired native export establishes the target canvas, provide the local PDF and caller-validated canvas together. The command hashes and validates the PDF/page, records its MediaBox, and derives the centered X transform from the supplied width without assuming a DPI:
 

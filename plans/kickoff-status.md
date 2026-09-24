@@ -1,5 +1,11 @@
 # Kickoff status — 2026-09-05
 
+## 2026-09-24 correction and active acceptance
+
+See `plans/milestone-acceptance.md` for the current four-milestone acceptance audit. The historical conclusion below that nonmonotonic `dreams` anchor fits prove missing attachment history is superseded: tests found that the experimental native vector extractor ignored nested PDF transforms, clipping, fill rules and white overpaint. Correct Poppler extraction makes both groups pass the unchanged native-assisted matcher thresholds; independent validation and raw-only typography reconstruction continue. Do not treat the old numeric fits as ground truth or require an editing-history capture on that basis.
+
+Smooth replay pacing (`8d2d9ba`) and layer-local eraser compositing (`d5ecbe1`) are committed. Native eraser fidelity remains unverified; texture rendering and anchor matching are active integration work.
+
 ## Environment and repository
 
 - Local Git repository on `main`; scaffold commit `979dcf0`, Python correction commit `469cc59`.

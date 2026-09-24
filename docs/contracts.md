@@ -60,6 +60,8 @@ The end-to-end replay command consumes an existing local `.rmdoc` archive or `.r
 
 The command may also accept a schema-versioned JSON text-anchor layout containing nonblank evidence and finite source-space offsets keyed by `PART1:PART2` CRDT ID. It records the file path, evidence, and normalized offsets in the output manifest. Supplying measured offsets resolves placement for that input; it does not claim or substitute a general text-layout engine.
 
+Explicit `--auto-text-anchors` derives matching offsets from the paired local native PDF and validated export canvas. It conflicts with manual layout input. The comparison module rasterizes the supported ink-only PDF scope through Poppler and rejects ambiguous, weak or unsupported matches. Replay reparses the unchanged raw page using accepted evidence; rejection fails before output creation. A page without applicable anchors is a documented no-op. The manifest records automatic origin, group decisions, PDF/page hashes, canvas and affine provenance. This remains native-reference-assisted placement, not raw-only text layout.
+
 Callers may instead provide a local paired native PDF, one-based PDF page, and a caller-validated export canvas. The command hashes the PDF, validates the page and MediaBox, records that provenance, uses the export canvas only when `SceneInfo.paper_size` is absent, and derives a centered `(1, 0, 0, 1, width / 2, 0)` transform only when no explicit or parsed affine exists. A conflicting `SceneInfo.paper_size` requires an explicit paper-size override. The export canvas remains caller-supplied evidence; PDF points alone do not imply a DPI or source scale.
 
 Each successful run writes into a new output directory:
@@ -68,6 +70,8 @@ Each successful run writes into a new output directory:
 - `static.png` from the same renderer and options
 - `replay.mp4` encoded as H.264
 - `manifest.json` containing the input hash and page member/ID, resolved geometry and evidence, replay mode/timing inputs, viewport, frame count and hashes, renderer/backend identity, and a boolean final-frame byte-equality result
+
+Backend provenance labels the current textured-tool model `experimental-texture-v1` and records that it is not native-calibrated. Deterministic output does not imply native fidelity. Its fixed source-distance deposition and stroke/position seed are shared by static and progressive rendering.
 
 Supported scheduling modes are stroke-step, constant seconds per stroke, and constant drawing distance per second. All use the visible-layer-major ordering defined above. A run is unsuccessful if the final frame differs from `static.png`.
 

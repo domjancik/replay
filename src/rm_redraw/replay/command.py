@@ -10,7 +10,7 @@ import json
 import math
 import subprocess
 import zipfile
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from io import BytesIO
 from numbers import Real
 from pathlib import Path
@@ -20,6 +20,7 @@ from PIL import __version__ as pillow_version
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError, PdfStreamError
 
+from rm_redraw.comparison.anchor_fit import derive_paired_text_anchor_layout
 from rm_redraw.parsing import (
     CrdtIdentifier,
     GeometryResolutionError,
@@ -196,7 +197,7 @@ def _load_input(source_path: Path, page_id: str | None) -> LocalReplayInput:
             resolved_page_id,
             source_path.name,
             _sha256(source_bytes),
-            None,
+            source_bytes,
         )
     if suffix != ".rmdoc":
         raise ReplayCommandError("source must be a local .rm page or .rmdoc archive")
@@ -359,10 +360,7 @@ def _frames_for_mode(
 
 def _encoded_timeline(frames: tuple[ReplayFrame, ...], *, fps: int) -> tuple[ReplayFrame, ...]:
     """Use FFmpeg's constant-rate presentation timestamps in rendered output metadata."""
-    return tuple(
-        ReplayFrame(frame.index, frame.index / fps, frame.visibility)
-        for frame in frames
-    )
+    return tuple(ReplayFrame(frame.index, frame.index / fps, frame.visibility) for frame in frames)
 
 
 def _write_manifest(path: Path, payload: dict[str, object]) -> Path:
@@ -394,8 +392,15 @@ def run_local_replay(
     viewport: tuple[int, int] | None = None,
     replay_strategy: Literal["crdt-order", "scene-order"] = "crdt-order",
     text_anchor_layout: str | Path | TextAnchorLayout | None = None,
+    auto_text_anchors: bool = False,
 ) -> ReplayResult:
     """Parse and replay one local page into a new deterministic output directory."""
+    if auto_text_anchors and text_anchor_layout is not None:
+        raise ReplayCommandError("--auto-text-anchors conflicts with --text-anchor-layout")
+    if auto_text_anchors and (paired_native_pdf is None or export_canvas is None):
+        raise ReplayCommandError(
+            "--auto-text-anchors requires --paired-native-pdf and --export-canvas"
+        )
     source_input = _load_input(Path(source), page_id)
     paired_export = _load_paired_export_evidence(
         paired_native_pdf=paired_native_pdf,
@@ -419,6 +424,66 @@ def run_local_replay(
         source_affine=source_affine,
         paired_export=paired_export,
     )
+    automatic_layout_manifest = None
+    if auto_text_anchors:
+        assert paired_export is not None
+        try:
+            automatic_layout = derive_paired_text_anchor_layout(
+                parsed_page,
+                paired_export.native_pdf_path,
+                pdf_page=paired_export.page,
+                canvas=paired_export.canvas,
+                source_to_page_transform=geometry.source_to_page_transform,
+            )
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            raise ReplayCommandError(f"cannot derive --auto-text-anchors: {error}") from error
+        rejected = [decision for decision in automatic_layout.decisions if not decision.accepted]
+        if rejected:
+            details = "; ".join(
+                f"group {decision.group_id}, anchor {decision.anchor_id}: {decision.reason}"
+                for decision in rejected
+            )
+            raise ReplayCommandError(
+                f"--auto-text-anchors rejected {details}; verify the paired PDF/page or "
+                "supply an evidence-backed --text-anchor-layout instead"
+            )
+        if automatic_layout.layout is not None:
+            anchor_layout_evidence = _TextAnchorLayoutEvidence(automatic_layout.layout, None)
+            parsed_page = parse_page(
+                BytesIO(source_input.page_bytes),
+                page_id=source_input.page_id,
+                replay_strategy=replay_strategy,
+                text_anchor_layout=automatic_layout.layout,
+            )
+        automatic_layout_manifest = {
+            "schema_version": 1,
+            "path": None,
+            "origin": "automatic-paired-native-pdf",
+            "evidence": automatic_layout.layout.evidence if automatic_layout.layout else None,
+            "offsets": {
+                str(anchor_id): offset
+                for anchor_id, offset in sorted(automatic_layout.layout.offsets.items())
+            }
+            if automatic_layout.layout
+            else {},
+            "decisions": [
+                {
+                    **asdict(decision),
+                    "group_id": str(decision.group_id),
+                    "anchor_id": str(decision.anchor_id),
+                }
+                for decision in automatic_layout.decisions
+            ],
+            "provenance": {
+                "algorithm": "paired-native-raster-template-match-v1",
+                "native_pdf_path": str(paired_export.native_pdf_path),
+                "native_pdf_sha256": paired_export.native_pdf_sha256,
+                "pdf_page": paired_export.page,
+                "canvas": list(paired_export.canvas),
+                "source_to_page_transform": list(geometry.source_to_page_transform),
+                "page_sha256": source_input.page_sha256,
+            },
+        }
     render_page = to_render_page(
         parsed_page,
         paper_size=geometry.paper_size,
@@ -509,7 +574,9 @@ def run_local_replay(
             if paired_export is not None
             else None
         ),
-        "text_anchor_layout": (
+        "text_anchor_layout": automatic_layout_manifest
+        if auto_text_anchors
+        else (
             {
                 "schema_version": 1,
                 "path": (
@@ -520,9 +587,7 @@ def run_local_replay(
                 "evidence": anchor_layout_evidence.layout.evidence,
                 "offsets": {
                     str(anchor_id): offset
-                    for anchor_id, offset in sorted(
-                        anchor_layout_evidence.layout.offsets.items()
-                    )
+                    for anchor_id, offset in sorted(anchor_layout_evidence.layout.offsets.items())
                 },
             }
             if anchor_layout_evidence is not None
@@ -545,7 +610,12 @@ def run_local_replay(
             "strategy_evidence": render_page.replay_evidence,
         },
         "viewport": {"width": viewport_size[0], "height": viewport_size[1]},
-        "backend": {"name": "PillowRenderer", "pillow_version": pillow_version},
+        "backend": {
+            "name": "PillowRenderer",
+            "pillow_version": pillow_version,
+            "texture_profile": "experimental-texture-v1",
+            "texture_native_calibrated": False,
+        },
         "frame_count": len(frame_entries),
         "frames": frame_entries,
         "static": {"path": "static.png", "sha256": _sha256(static_path.read_bytes())},
