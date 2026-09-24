@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import ceil, floor, hypot
+from math import ceil, floor, hypot, sqrt
 
 from PIL import Image, ImageChops, ImageDraw
 
@@ -90,11 +90,18 @@ def _draw_stroke(
     scale = (scale_x + scale_y) / 2
     coordinates = [(point.x * scale_x, point.y * scale_y) for point in points]
     if stroke.tool_code in TEXTURED_CODES or stroke.tool_name in TEXTURED_NAMES:
-        length = sum(hypot(b.x-a.x, b.y-a.y) for a, b in zip(points, points[1:], strict=False))
+        length = sum(hypot(b.x - a.x, b.y - a.y) for a, b in zip(points, points[1:], strict=False))
         draw_texture(layer, stroke, length, scale_x, scale_y)
         return
     if stroke.tool_code == 6 or stroke.tool_name == "ERASER":
-        _erase_stroke(layer, coordinates, stroke.thickness_scale * scale * 2.0)
+        _erase_stroke(
+            layer,
+            coordinates,
+            [
+                max(0.0, point.width / 4.0) * scale if point.width is not None else scale
+                for point in points
+            ],
+        )
         return
     if stroke.tool_code in {2, 15} or stroke.tool_name in {"BALLPOINT", "BALLPOINT_2"}:
         _draw_ballpoint(layer, coordinates, points, stroke, scale)
@@ -112,15 +119,23 @@ def _draw_stroke(
 def _erase_stroke(
     layer: Image.Image,
     coordinates: list[tuple[float, float]],
-    width: float,
+    widths: list[float],
 ) -> None:
-    """Apply a deterministic destination-out stroke to one transparent layer."""
-    if not coordinates:
+    """Clear layer-local ink using captured native raw quarter-unit widths.
+
+    Firmware 3.28 fixture evidence: thickness does not affect tool-6 width;
+    fewer than two distinct positions paint nothing. Missing widths use a
+    conservative one-source-unit fallback, not a native-calibrated profile.
+    """
+    if len(set(coordinates)) < 2:
         return
 
     supersample = 4
-    radius = width / 2.0
-    margin = radius + 2.0
+    radius = max(widths, default=0.0) / 2.0
+    if radius <= 0:
+        return
+    # A rotated square cap reaches sqrt(2) times its half-width on either axis.
+    margin = sqrt(2) * radius + 2.0
     left = max(0, floor(min(x for x, _ in coordinates) - margin))
     top = max(0, floor(min(y for _, y in coordinates) - margin))
     right = min(layer.width, ceil(max(x for x, _ in coordinates) + margin) + 1)
@@ -136,12 +151,10 @@ def _erase_stroke(
     local_coordinates = [
         ((x - left) * supersample, (y - top) * supersample) for x, y in coordinates
     ]
-    _draw_square_polyline(
-        mask,
-        local_coordinates,
-        max(1, round(width * supersample)),
-        255,
-    )
+    if len(set(widths)) == 1:
+        _draw_square_polyline(mask, local_coordinates, max(1, round(widths[0] * supersample)), 255)
+    else:
+        _draw_variable_eraser(mask, local_coordinates, [width * supersample for width in widths])
     mask = mask.resize((right - left, bottom - top), Image.Resampling.LANCZOS)
 
     alpha = layer.getchannel("A")
@@ -151,12 +164,53 @@ def _erase_stroke(
     layer.putalpha(alpha)
 
 
+def _draw_variable_eraser(
+    image: Image.Image,
+    coordinates: list[tuple[float, float]],
+    widths: list[float],
+) -> None:
+    """Provisional variable-width envelope; native join/taper parity is unverified."""
+    draw = ImageDraw.Draw(image)
+    segments = [
+        (i, a, b)
+        for i, (a, b) in enumerate(zip(coordinates, coordinates[1:], strict=False))
+        if a != b
+    ]
+    for number, (i, a, b) in enumerate(segments):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = hypot(dx, dy)
+        ux, uy = dx / length, dy / length
+        r0, r1 = widths[i] / 2, widths[i + 1] / 2
+        start, end = a, b
+        draw.polygon(
+            [
+                (start[0] - uy * r0, start[1] + ux * r0),
+                (start[0] + uy * r0, start[1] - ux * r0),
+                (end[0] + uy * r1, end[1] - ux * r1),
+                (end[0] - uy * r1, end[1] + ux * r1),
+            ],
+            fill=255,
+        )
+        if number == 0:
+            _draw_square_cap(draw, a, b, r0, 255)
+        if number == len(segments) - 1:
+            _draw_square_cap(draw, b, a, r1, 255)
+        if number < len(segments) - 1:
+            draw.ellipse((b[0] - r1, b[1] - r1, b[0] + r1, b[1] + r1), fill=255)
+
+
 def _draw_square_polyline(
     image: Image.Image,
     coordinates: list[tuple[float, float]],
     width: int,
     fill: int,
 ) -> None:
+    # Repeated samples carry no new geometry and must not set the cap direction.
+    coordinates = [
+        point
+        for index, point in enumerate(coordinates)
+        if index == 0 or point != coordinates[index - 1]
+    ]
     draw = ImageDraw.Draw(image)
     radius = width / 2.0
     if len(coordinates) == 1:

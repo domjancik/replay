@@ -45,8 +45,9 @@ def _eraser(
     *,
     rgba: tuple[int, int, int, int] = (255, 255, 255, 255),
     thickness: float = 6,
+    raw_width: float = 48,
 ) -> NormalizedStroke:
-    return _stroke(
+    result = _stroke(
         stroke_id,
         group_id,
         rgba,
@@ -55,6 +56,7 @@ def _eraser(
         tool_code=6,
         tool_name="ERASER",
     )
+    return replace(result, points=tuple(replace(p, width=raw_width) for p in result.points))
 
 
 def _page(*strokes: NormalizedStroke) -> NormalizedPage:
@@ -147,9 +149,9 @@ def test_active_eraser_clears_only_its_distance_prefix() -> None:
     assert image.getpixel((70, 50)) == (0, 0, 0, 255)
 
 
-def test_eraser_uses_double_width_and_square_caps() -> None:
+def test_eraser_uses_raw_quarter_width_and_square_caps() -> None:
     ink = _stroke("ink", "layer", (0, 0, 0, 255), ((50, 20), (50, 80)), thickness=30)
-    eraser = _eraser("eraser", "layer", ((50, 40), (50, 60)), thickness=5)
+    eraser = _eraser("eraser", "layer", ((50, 40), (50, 60)), thickness=50, raw_width=40)
 
     image = _render(_page(ink, eraser))
 
@@ -174,3 +176,75 @@ def test_progressive_replay_final_frame_matches_static_with_eraser() -> None:
 
     assert final.getpixel((50, 50)) == BACKGROUND
     assert hashlib.sha256(final.tobytes()).digest() == hashlib.sha256(static.tobytes()).digest()
+
+
+def test_eraser_width_ignores_thickness():
+    ink = _stroke("ink", "layer", (0, 0, 0, 255), ((10, 50), (90, 50)), thickness=30)
+    eraser = _eraser("eraser", "layer", ((50, 25), (50, 75)), raw_width=40, thickness=5)
+    assert (
+        _render(_page(ink, eraser)).tobytes()
+        == _render(_page(ink, replace(eraser, thickness_scale=60))).tobytes()
+    )
+
+
+def test_degenerate_erasers_do_not_clear():
+    ink = _stroke("ink", "layer", (0, 0, 0, 255), ((10, 50), (90, 50)))
+    expected = _render(_page(ink)).tobytes()
+    for coordinates in [((50, 50),), ((50, 50), (50, 50))]:
+        assert _render(_page(ink, _eraser("eraser", "layer", coordinates))).tobytes() == expected
+
+
+def test_variable_width_eraser_uses_local_width_and_progressive_endpoint():
+    ink = _stroke("ink", "layer", (0, 0, 0, 255), ((10, 50), (90, 50)), thickness=60)
+    eraser = _eraser("eraser", "layer", ((20, 50), (80, 50)), raw_width=8)
+    eraser = replace(eraser, points=(eraser.points[0], replace(eraser.points[1], width=80)))
+    image = _render(_page(ink, eraser))
+    assert image.getpixel((25, 43)) == (0, 0, 0, 255)
+    assert image.getpixel((75, 43)) == BACKGROUND
+    partial = _render(_page(ink, eraser), VisibilityState(frozenset({"ink"}), "eraser", 0.5))
+    assert partial.getpixel((45, 49)) == BACKGROUND
+    assert partial.getpixel((75, 47)) == (0, 0, 0, 255)
+
+
+def test_closed_eraser_path_leaves_interior_ink():
+    ink = _stroke("ink", "layer", (0, 0, 0, 255), ((10, 50), (90, 50)), thickness=20)
+    eraser = _eraser(
+        "eraser", "layer", ((30, 30), (70, 30), (70, 70), (30, 70), (30, 30)), raw_width=32
+    )
+    image = _render(_page(ink, eraser))
+    assert image.getpixel((50, 50)) == (0, 0, 0, 255)
+    assert image.getpixel((30, 50)) == BACKGROUND
+
+
+def test_variable_eraser_revealed_prefix_does_not_change_behind_tip():
+    ink = _stroke("ink", "layer", (0, 0, 0, 255), ((0, 50), (100, 50)), thickness=80)
+    eraser = _eraser("eraser", "layer", ((10, 50), (90, 50)), raw_width=8)
+    eraser = replace(eraser, points=(eraser.points[0], replace(eraser.points[1], width=120)))
+    page = _page(ink, eraser)
+    first = _render(page, VisibilityState(frozenset({"ink"}), "eraser", 0.5))
+    last = _render(page)
+    assert first.crop((10, 20, 30, 80)).tobytes() == last.crop((10, 20, 30, 80)).tobytes()
+
+
+def test_diagonal_square_eraser_cap_is_not_clipped_by_region():
+    from PIL import Image
+
+    from rm_redraw.rendering.pillow import _erase_stroke
+
+    for widths in ([40, 40], [40, 48]):
+        image = Image.new("RGBA", (100, 100), (0, 0, 0, 255))
+        _erase_stroke(image, [(40, 40), (60, 60)], widths)
+        assert image.getpixel((15, 40))[3] < 5
+
+
+def test_duplicate_endpoints_do_not_rotate_eraser_caps():
+    from PIL import Image
+
+    from rm_redraw.rendering.pillow import _erase_stroke
+
+    expected = Image.new("RGBA", (100, 100), (0, 0, 0, 255))
+    _erase_stroke(expected, [(40, 40), (60, 60)], [40, 40])
+    for coords in [[(40, 40), (40, 40), (60, 60)], [(40, 40), (60, 60), (60, 60)]]:
+        image = Image.new("RGBA", (100, 100), (0, 0, 0, 255))
+        _erase_stroke(image, coords, [40] * len(coords))
+        assert image.tobytes() == expected.tobytes()
