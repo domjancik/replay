@@ -16,6 +16,7 @@ from .model import (
     ReplayOrder,
     ReplayStrategy,
     SceneOrder,
+    TextAnchorLayout,
     TransformResolution,
     VersionedValue,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "ReplayOrder",
     "ReplayStrategy",
     "SceneOrder",
+    "TextAnchorLayout",
     "TransformResolution",
     "VersionedValue",
     "dump_page_json",

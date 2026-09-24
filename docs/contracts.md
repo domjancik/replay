@@ -24,6 +24,7 @@ A normalized page retains source information rather than flattening it to render
 - each point retains `x`, `y`, `pressure`, `speed`, `direction`, `width`, plus unknown channels/fields in `extra`
 - raw point coordinates remain unchanged; groups and strokes expose resolved local/cumulative transforms with evidence and anchor IDs. Rendering composes the page transform after the stroke's cumulative group transform.
 - A best-effort anchor matrix may be retained for diagnostics while `resolved` remains false. Fixture-calibrated typography constants or paragraph-count heuristics do not establish full text-layout semantics and must not be labeled resolved.
+- For type-2 root-text anchors, controlled native evidence establishes `group_y = RootText.pos_y + final_layout_anchor_offset(anchor_id)`. The parser may accept caller-supplied, evidence-bearing source-space offsets and mark only matching IDs resolved. It does not apply `anchor_threshold` as a static cap, deadband, or excess subtraction. Missing offsets remain heuristic and unresolved.
 - unreadable or unknown blocks remain represented in diagnostics with their type and raw bytes encoded safely
 
 Parser `compositing_order` and `replay_order` are separate stroke sequences. Replay order includes `strategy` (`verified-chronology`, `crdt-order`, or `scene-order`) and an evidence note. Only controlled device evidence permits `verified-chronology`.
@@ -55,6 +56,8 @@ When paired evidence supports a centered source frame, `width / 2` may be suppli
 ## Local replay command
 
 The end-to-end replay command consumes an existing local `.rmdoc` archive or `.rm` page. It never contacts the tablet implicitly. Multi-page archives require an explicit page ID. The command accepts explicit page size and source affine transform overrides, and fails with an actionable message when neither source metadata nor overrides resolve the geometry.
+
+The command may also accept a schema-versioned JSON text-anchor layout containing nonblank evidence and finite source-space offsets keyed by `PART1:PART2` CRDT ID. It records the file path, evidence, and normalized offsets in the output manifest. Supplying measured offsets resolves placement for that input; it does not claim or substitute a general text-layout engine.
 
 Callers may instead provide a local paired native PDF, one-based PDF page, and a caller-validated export canvas. The command hashes the PDF, validates the page and MediaBox, records that provenance, uses the export canvas only when `SceneInfo.paper_size` is absent, and derives a centered `(1, 0, 0, 1, width / 2, 0)` transform only when no explicit or parsed affine exists. A conflicting `SceneInfo.paper_size` requires an explicit paper-size override. The export canvas remains caller-supplied evidence; PDF points alone do not imply a DPI or source scale.
 

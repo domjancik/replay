@@ -43,6 +43,7 @@ from .model import (
     ReplayOrder,
     ReplayStrategy,
     SceneOrder,
+    TextAnchorLayout,
     TransformResolution,
     VersionedValue,
 )
@@ -66,6 +67,13 @@ _LINE_HEIGHT_BY_STYLE = {
     6: 35.0,
     7: 35.0,
 }
+
+
+@dataclasses.dataclass(frozen=True)
+class _AnchorPosition:
+    y: float
+    resolved: bool
+    evidence: str
 
 
 def _crdt(value: CrdtId) -> CrdtIdentifier:
@@ -117,40 +125,47 @@ def _identity_resolution(evidence: str) -> TransformResolution:
 def _anchor_positions(
     root_text_block: RootTextBlock | None,
     paper_size: tuple[int, int] | None,
-) -> tuple[dict[CrdtId, float], str, bool]:
+) -> dict[CrdtId, _AnchorPosition]:
     if root_text_block is None:
-        positions = {_SPECIAL_TOP_ANCHOR: 0.0}
+        evidence = "special page anchors without root text"
+        positions = {_SPECIAL_TOP_ANCHOR: _AnchorPosition(0.0, True, evidence)}
         if paper_size is not None:
-            positions[_SPECIAL_BOTTOM_ANCHOR] = float(paper_size[1])
-        return positions, "special page anchors without root text", True
+            positions[_SPECIAL_BOTTOM_ANCHOR] = _AnchorPosition(
+                float(paper_size[1]), True, evidence
+            )
+        return positions
 
     text = root_text_block.value
     document = TextDocument.from_scene_item(text)
     y_position = float(text.pos_y) + _TEXT_TOP_OFFSET
     top_of_text = y_position
-    positions: dict[CrdtId, float] = {}
+    heuristic_evidence = (
+        "root text anchor positions calibrated against the five-page paired native PDF "
+        "fixture 8aba68ff-00e9-400b-9772-b96322e000f0"
+    )
+    positions: dict[CrdtId, _AnchorPosition] = {}
     for paragraph in document.contents:
-        positions[paragraph.start_id] = y_position
+        position = _AnchorPosition(y_position, False, heuristic_evidence)
+        positions[paragraph.start_id] = position
         for span in paragraph.contents:
             for character_id in span.i:
-                positions[character_id] = y_position
+                positions[character_id] = position
         style_code = int(paragraph.style.value)
         y_position += _LINE_HEIGHT_BY_STYLE.get(style_code, 70.0)
-    positions[_SPECIAL_TOP_ANCHOR] = top_of_text
-    positions[_SPECIAL_BOTTOM_ANCHOR] = y_position
-    return (
-        positions,
-        "root text anchor positions calibrated against the five-page paired native PDF "
-        "fixture 8aba68ff-00e9-400b-9772-b96322e000f0",
-        False,
+    positions[_SPECIAL_TOP_ANCHOR] = _AnchorPosition(
+        top_of_text, False, heuristic_evidence
     )
+    positions[_SPECIAL_BOTTOM_ANCHOR] = _AnchorPosition(
+        y_position, False, heuristic_evidence
+    )
+    return positions
 
 
 def _local_group_transform(
     group: object,
-    anchor_positions: dict[CrdtId, float],
-    anchor_evidence: str,
-    anchor_positions_resolved: bool,
+    anchor_positions: dict[CrdtId, _AnchorPosition],
+    root_text_pos_y: float | None,
+    text_anchor_layout: TextAnchorLayout | None,
 ) -> TransformResolution:
     anchor = group.anchor_id
     if anchor is None:
@@ -158,25 +173,53 @@ def _local_group_transform(
 
     anchor_id = anchor.value
     origin_x = float(group.anchor_origin_x.value) if group.anchor_origin_x is not None else 0.0
-    anchor_y = anchor_positions.get(anchor_id)
-    if anchor_y is None:
+    anchor_type = int(group.anchor_type.value) if group.anchor_type is not None else None
+    supplied_offset = (
+        text_anchor_layout.offsets.get(_crdt(anchor_id))
+        if text_anchor_layout is not None and root_text_pos_y is not None
+        else None
+    )
+    if supplied_offset is not None and anchor_type == 2:
+        return TransformResolution(
+            matrix=(
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                origin_x,
+                root_text_pos_y + supplied_offset,
+            ),
+            resolved=True,
+            evidence=(
+                f"Resolved text anchor {anchor_id} from caller-supplied text anchor layout: "
+                f"{text_anchor_layout.evidence}."
+            ),
+            anchor_ids=(_crdt(anchor_id),),
+        )
+    anchor_position = anchor_positions.get(anchor_id)
+    if anchor_position is None:
         return TransformResolution(
             matrix=(1.0, 0.0, 0.0, 1.0, origin_x, 0.0),
             resolved=False,
             evidence=f"Unresolved text anchor {anchor_id}; retained X origin and used zero Y.",
             anchor_ids=(_crdt(anchor_id),),
         )
-    if anchor_positions_resolved:
-        evidence = f"Resolved text anchor {anchor_id} from {anchor_evidence}."
+    if supplied_offset is not None:
+        evidence = (
+            f"Unverified anchor type {anchor_type} for text anchor {anchor_id}; "
+            "caller-supplied type-2 layout evidence was not applied."
+        )
+    elif anchor_position.resolved:
+        evidence = f"Resolved text anchor {anchor_id} from {anchor_position.evidence}."
     else:
         evidence = (
-            f"Unverified heuristic text anchor {anchor_id} from {anchor_evidence}; "
+            f"Unverified heuristic text anchor {anchor_id} from {anchor_position.evidence}; "
             "retained calibrated matrix for diagnostics, but full text layout semantics "
             "are unresolved."
         )
     return TransformResolution(
-        matrix=(1.0, 0.0, 0.0, 1.0, origin_x, anchor_y),
-        resolved=anchor_positions_resolved,
+        matrix=(1.0, 0.0, 0.0, 1.0, origin_x, anchor_position.y),
+        resolved=anchor_position.resolved,
         evidence=evidence,
         anchor_ids=(_crdt(anchor_id),),
     )
@@ -261,7 +304,10 @@ def _block_diagnostics(blocks: list[object]) -> PageDiagnostics:
 
 
 def _parse_stream(
-    stream: BinaryIO, page_id: str, replay_strategy: ReplayStrategy
+    stream: BinaryIO,
+    page_id: str,
+    replay_strategy: ReplayStrategy,
+    text_anchor_layout: TextAnchorLayout | None,
 ) -> NormalizedPage:
     blocks = list(read_blocks(stream))
     scene_info = next((block for block in blocks if isinstance(block, SceneInfo)), None)
@@ -323,9 +369,12 @@ def _parse_stream(
     root_text_block = next(
         (block for block in reversed(blocks) if isinstance(block, RootTextBlock)), None
     )
-    anchor_positions, anchor_evidence, anchor_positions_resolved = _anchor_positions(
+    anchor_positions = _anchor_positions(
         root_text_block,
         scene_info.paper_size if scene_info is not None else None,
+    )
+    root_text_pos_y = (
+        float(root_text_block.value.pos_y) if root_text_block is not None else None
     )
     group_items = {
         block.item.value: (index, block)
@@ -337,8 +386,8 @@ def _parse_stream(
         node_id: _local_group_transform(
             group,
             anchor_positions,
-            anchor_evidence,
-            anchor_positions_resolved,
+            root_text_pos_y,
+            text_anchor_layout,
         )
         for node_id, group in node_details.items()
     }
@@ -541,11 +590,14 @@ def _parse_stream(
 
         def unresolved_anchor_warning(anchor_id: CrdtIdentifier) -> str:
             resolution = local_resolution_by_anchor.get(anchor_id)
-            if resolution is not None and "heuristic text anchor" in resolution.evidence:
+            if resolution is not None and (
+                "heuristic text anchor" in resolution.evidence
+                or "Unverified anchor type" in resolution.evidence
+            ):
                 tx, ty = resolution.matrix[-2:]
                 return (
                     f"Unverified group anchor {anchor_id}; retained heuristic translation "
-                    f"({tx}, {ty}), but full text layout semantics are unresolved."
+                    f"({tx}, {ty}). {resolution.evidence}"
                 )
             return (
                 f"Unresolved group anchor {anchor_id}; retained X origin and used zero Y."
@@ -576,18 +628,19 @@ def parse_page(
     *,
     page_id: str | None = None,
     replay_strategy: ReplayStrategy = "crdt-order",
+    text_anchor_layout: TextAnchorLayout | None = None,
 ) -> NormalizedPage:
     if replay_strategy not in ("crdt-order", "scene-order"):
         raise ValueError(f"unknown replay strategy: {replay_strategy}")
     if hasattr(source, "read"):
         if page_id is None:
             raise ValueError("page_id is required when parsing a binary stream")
-        return _parse_stream(source, page_id, replay_strategy)
+        return _parse_stream(source, page_id, replay_strategy, text_anchor_layout)
 
     path = Path(source)
     resolved_page_id = page_id if page_id is not None else path.stem
     with path.open("rb") as stream:
-        return _parse_stream(stream, resolved_page_id, replay_strategy)
+        return _parse_stream(stream, resolved_page_id, replay_strategy, text_anchor_layout)
 
 
 def dump_page_json(

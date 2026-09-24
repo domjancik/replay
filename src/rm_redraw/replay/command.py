@@ -20,7 +20,13 @@ from PIL import __version__ as pillow_version
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError, PdfStreamError
 
-from rm_redraw.parsing import GeometryResolutionError, parse_page, resolve_page_geometry
+from rm_redraw.parsing import (
+    CrdtIdentifier,
+    GeometryResolutionError,
+    TextAnchorLayout,
+    parse_page,
+    resolve_page_geometry,
+)
 from rm_redraw.parsing.geometry import AffineTransform
 from rm_redraw.pipeline import to_render_page
 from rm_redraw.rendering import PillowRenderer, RenderOptions, Viewport
@@ -66,6 +72,57 @@ class PairedExportEvidence:
     page: int
     media_box_points: tuple[float, float]
     canvas: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class _TextAnchorLayoutEvidence:
+    layout: TextAnchorLayout
+    source_path: Path | None
+
+
+def _load_text_anchor_layout(
+    source: str | Path | TextAnchorLayout | None,
+) -> _TextAnchorLayoutEvidence | None:
+    if source is None:
+        return None
+    if isinstance(source, TextAnchorLayout):
+        return _TextAnchorLayoutEvidence(source, None)
+
+    path = Path(source)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(payload, dict)
+            or type(payload.get("schema_version")) is not int
+            or payload["schema_version"] != 1
+        ):
+            raise ValueError("schema_version must be 1")
+        raw_offsets = payload.get("offsets")
+        if not isinstance(raw_offsets, dict):
+            raise ValueError("offsets must be an object")
+        offsets: dict[CrdtIdentifier, float] = {}
+        for raw_id, offset in raw_offsets.items():
+            if not isinstance(raw_id, str):
+                raise ValueError("offset keys must use PART1:PART2")
+            parts = raw_id.split(":")
+            if len(parts) != 2:
+                raise ValueError(f"invalid anchor ID {raw_id!r}; expected PART1:PART2")
+            try:
+                part1, part2 = int(parts[0]), int(parts[1])
+            except ValueError as error:
+                raise ValueError(
+                    f"invalid anchor ID {raw_id!r}; expected integer PART1:PART2"
+                ) from error
+            if part1 < 0 or part2 < 0 or raw_id != f"{part1}:{part2}":
+                raise ValueError(
+                    f"invalid anchor ID {raw_id!r}; expected canonical nonnegative PART1:PART2"
+                )
+            anchor_id = CrdtIdentifier(part1, part2)
+            offsets[anchor_id] = offset
+        layout = TextAnchorLayout(offsets, payload.get("evidence"))
+    except (OSError, TypeError, ValueError) as error:
+        raise ReplayCommandError(f"invalid --text-anchor-layout {path}: {error}") from error
+    return _TextAnchorLayoutEvidence(layout, path)
 
 
 def _load_paired_export_evidence(
@@ -318,6 +375,7 @@ def run_local_replay(
     distance_per_second: float | None = None,
     viewport: tuple[int, int] | None = None,
     replay_strategy: Literal["crdt-order", "scene-order"] = "crdt-order",
+    text_anchor_layout: str | Path | TextAnchorLayout | None = None,
 ) -> ReplayResult:
     """Parse and replay one local page into a new deterministic output directory."""
     source_input = _load_input(Path(source), page_id)
@@ -326,12 +384,16 @@ def run_local_replay(
         paired_pdf_page=paired_pdf_page,
         export_canvas=export_canvas,
     )
+    anchor_layout_evidence = _load_text_anchor_layout(text_anchor_layout)
     parsed_page = parse_page(
         BytesIO(source_input.page_bytes)
         if source_input.page_bytes is not None
         else source_input.source_path,
         page_id=source_input.page_id,
         replay_strategy=replay_strategy,
+        text_anchor_layout=(
+            anchor_layout_evidence.layout if anchor_layout_evidence is not None else None
+        ),
     )
     geometry = _resolve_geometry_or_error(
         parsed_page,
@@ -417,6 +479,25 @@ def run_local_replay(
                 ),
             }
             if paired_export is not None
+            else None
+        ),
+        "text_anchor_layout": (
+            {
+                "schema_version": 1,
+                "path": (
+                    str(anchor_layout_evidence.source_path)
+                    if anchor_layout_evidence.source_path is not None
+                    else None
+                ),
+                "evidence": anchor_layout_evidence.layout.evidence,
+                "offsets": {
+                    str(anchor_id): offset
+                    for anchor_id, offset in sorted(
+                        anchor_layout_evidence.layout.offsets.items()
+                    )
+                },
+            }
+            if anchor_layout_evidence is not None
             else None
         ),
         "replay": {

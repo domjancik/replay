@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from numbers import Real
+from types import MappingProxyType
 from typing import Literal
 
 type ReplayStrategy = Literal["crdt-order", "scene-order"]
@@ -16,6 +20,32 @@ class CrdtIdentifier:
 
     def __str__(self) -> str:
         return f"{self.part1}:{self.part2}"
+
+
+@dataclass(frozen=True)
+class TextAnchorLayout:
+    offsets: Mapping[CrdtIdentifier, float]
+    evidence: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.evidence, str) or not self.evidence.strip():
+            raise ValueError("text anchor layout evidence must be nonblank")
+        if not isinstance(self.offsets, Mapping):
+            raise TypeError("text anchor layout offsets must be a mapping")
+        normalized: dict[CrdtIdentifier, float] = {}
+        for anchor_id, offset in self.offsets.items():
+            if not isinstance(anchor_id, CrdtIdentifier):
+                raise TypeError("text anchor layout keys must be CrdtIdentifier values")
+            if isinstance(offset, bool) or not isinstance(offset, Real):
+                raise TypeError("text anchor layout offsets must be real numbers")
+            try:
+                value = float(offset)
+            except OverflowError as error:
+                raise ValueError("text anchor layout offsets must be finite") from error
+            if not math.isfinite(value):
+                raise ValueError("text anchor layout offsets must be finite")
+            normalized[anchor_id] = value
+        object.__setattr__(self, "offsets", MappingProxyType(normalized))
 
 
 @dataclass(frozen=True)

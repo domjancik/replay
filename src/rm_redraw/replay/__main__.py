@@ -58,6 +58,14 @@ def _parser() -> argparse.ArgumentParser:
         default="crdt-order",
         help="deterministic fallback order; neither choice claims chronology",
     )
+    parser.add_argument(
+        "--text-anchor-layout",
+        type=Path,
+        help=(
+            "JSON file with schema_version, evidence, and source-space final-layout "
+            "offsets keyed by CRDT anchor ID"
+        ),
+    )
     return parser
 
 
@@ -79,6 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             distance_per_second=args.distance_per_second,
             viewport=tuple(args.viewport) if args.viewport is not None else None,
             replay_strategy=args.replay_strategy,
+            text_anchor_layout=args.text_anchor_layout,
         )
     except ReplayCommandError as error:
         print(f"error: {error}", file=sys.stderr)

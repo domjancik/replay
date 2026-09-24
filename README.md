@@ -35,7 +35,21 @@ uv run python -m rm_redraw.replay path/to/page.rm `
 
 The geometry values above are explicit example inputs, not device defaults. Omit `--paper-size` only when the page contains `SceneInfo.paper_size`; supply a source affine transform unless parsed metadata provides one. Multi-page `.rmdoc` archives also require `--page-id`.
 
-Root-text anchor matrices derived from the current fixture-calibrated typography heuristic are retained for diagnostics but marked unresolved. Styled, wrapped, or reordered text requires a complete layout/anchor model before those translations can be treated as authoritative.
+Root-text anchor matrices derived from the fixture-calibrated typography heuristic are retained for diagnostics but marked unresolved. Controlled native exports establish that type-2 group Y is `RootText.pos_y + final_layout_anchor_offset`; the stored threshold is not applied as a static cap or deadband. Styled, wrapped, or reordered text still requires a complete text-layout implementation to compute that offset.
+
+Callers that already have evidence-backed offsets can supply them without coupling parsing to a renderer. The values are source-space Y offsets from `RootText.pos_y`, keyed by CRDT anchor ID:
+
+```json
+{
+  "schema_version": 1,
+  "evidence": "native-equivalent final text layout",
+  "offsets": {
+    "1:2206": 2258.6
+  }
+}
+```
+
+Pass the file as `--text-anchor-layout path/to/anchor-layout.json`. Matching anchors are marked resolved and the file path, evidence, and offsets are recorded in `manifest.json`; missing IDs continue to use the unresolved diagnostic heuristic.
 
 When a paired native export establishes the target canvas, provide the local PDF and caller-validated canvas together. The command hashes and validates the PDF/page, records its MediaBox, and derives the centered X transform from the supplied width without assuming a DPI:
 
@@ -48,7 +62,7 @@ uv run python -m rm_redraw.replay path/to/document.rmdoc `
   --output artifacts/replay-paired
 ```
 
-Each successful run creates deterministic numbered PNG frames, `static.png`, H.264 `replay.mp4`, and `manifest.json`. The manifest records input and output hashes, geometry evidence, timing, viewport, backend, and the final-frame equality result. The command fails if its final frame is not byte-identical to the static render.
+Each successful run creates deterministic numbered PNG frames, `static.png`, H.264 `replay.mp4`, and `manifest.json`. The manifest records input and output hashes, geometry and optional text-anchor evidence, timing, viewport, backend, and the final-frame equality result. The command fails if its final frame is not byte-identical to the static render.
 
 ## Local comparison command
 

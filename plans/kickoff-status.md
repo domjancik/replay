@@ -23,7 +23,7 @@
 | Source-affine evidence audit | GPT-5.6 Sol, high | Centered `width / 2` convention supported for validated 1404- and 1872-wide exports; no unconditional default |
 | Paired export canvas | GPT-5.6 Terra, medium plus coordinator review | Local PDF/page/MediaBox validation and hashing, caller-validated export canvas, evidence-backed centered affine |
 | Native ink isolation | GPT-5.6 Terra, medium plus coordinator review | Direct PDF text-object filtering with explicit operator provenance and extraction limits |
-| Styled-anchor semantics | GPT-5.6 Sol, high | Final-layout and CRDT-history hypotheses rejected; exact controlled-fixture blocker isolated without fitting constants |
+| Styled-anchor semantics | GPT-5.6 Sol, high | Dedicated native v2/v3 fixtures establish full additive following for type-2 anchor Y; evidence-bearing layout offsets are injectable without renderer coupling |
 
 Acquisition verification fixture: `fixtures/private/verification/8aba68ff-00e9-400b-9772-b96322e000f0/` (ignored). The USB archive and five-page native PDF pass structural checks. Poppler rasterized five 890×1188 PNGs at 144 DPI. It emitted non-fatal unknown `ExtGState GSa` warnings.
 
@@ -61,7 +61,11 @@ Replay now accepts `--paired-native-pdf`, `--paired-pdf-page` and `--export-canv
 
 Comparison now supports `--ink-only` for native PDFs. On `dreams`, it removed 8,378 direct text-object operations including 4,029 text-painting operations before Poppler rasterization; the original handwriting-only verification page removed none. The resulting `dreams` report under ignored `artifacts/ink-only-dreams-limits-final/` exposes a 750.73-pixel symmetric edge distance caused by unresolved anchor placement instead of letting native typed text dominate the metric. This filter is intentionally limited to direct page content; Form XObjects, images and annotations remain unfiltered.
 
-The bounded semantic investigation tested complete wrapped final layout and text reconstructed at every anchor-related CRDT cutoff. Neither explains the native positions: group `1:2437` fits Y `2492.6` while semantic predictions span `3522.3–3591.8`; group `1:2602` fits Y `2229.1` while predictions span `3798.0–4030.7`. Available `rmscene`, `rmc`, Scratchydisk and remarkable-mcp implementations do not define `anchor_type=2` or `anchor_threshold=35.748`. The precise missing evidence is a controlled paired fixture that keeps ink fixed while varying anchor type/threshold and inserting, deleting, wrapping and reordering surrounding text. Current repository rules prohibit that tablet write without a dedicated explicit opt-in, so heuristic anchors remain unresolved rather than encoding per-group fitted constants.
+The authorized controlled study used isolated, dedicated v2 and v3 notebooks and left existing documents untouched. V2 held the anchored subtree fixed while changing insert/delete/wrap/style/reorder final states. Native sentinel movement matched the final visible text-layout delta with a maximum residual of `0.546867` source unit; fixed-history, absolute, capped and threshold-excess models failed. V3 then changed only `RootText.pos_y` by `+20`, `-20`, and `+40` around a stored threshold of `35.7480316`. Native sentinel movement was `+19.999945`, `-20.000040`, and `+40.000001`, giving a full-follow maximum residual of `0.000055`; static cap and deadband models are rejected. Static exports do not determine whether the threshold affects attachment, selection, another axis, or temporal editing behavior.
+
+The parser now exposes an immutable `TextAnchorLayout` map. A supplied final-layout offset resolves a matching type-2 group at `RootText.pos_y + offset`, preserves `anchor_origin_x` and raw stroke points, and records caller evidence. Missing IDs and unverified anchor types retain an unresolved transform. The local replay command accepts the same data as schema-versioned JSON and records its provenance in the run manifest. Parsing still imports no renderer and does not contain a fitted text-layout engine. A real CLI run under ignored `artifacts/dreams-text-anchor-cli-20260907/` consumed the two-offset JSON, emitted 48 frames and H.264 at 468×1534, and preserved final/static byte equality.
+
+On the real `dreams` page, replaying with the two independently measured native offsets improves both registered groups: capped path distance changes from `15.4077` to `14.1511` pixels for group `1:2437` and from `25.0000` to `4.4862` for `1:2602`. The common direct-text-stripped ink ROI improves from MAE `7.0903`, RMSE `41.2934`, SSIM `0.89625` to `6.2682`, `38.8281`, `0.90849`. The whole flattened-page edge metric worsens because the native PDF does not preserve group ownership, so it cannot associate candidate groups with the independently fitted native paths. This demonstrates the injected placement path on `dreams`; computing those offsets for arbitrary styled/wrapped text remains the open layout task. Inspectable ignored evidence is under `artifacts/dreams-text-anchor-before-after/`.
 
 ## Recommended model allocation
 
@@ -80,10 +84,10 @@ The allocation uses current API pricing as a relative cost proxy: Luna is $0.20 
 
 ## Next coordination queue
 
-1. After explicit device-write opt-in, create a dedicated disposable controlled fixture varying `anchor_type`, `anchor_threshold`, and surrounding text edits while holding anchored ink fixed.
-2. Implement styled/wrapped anchor semantics only after those paired native outputs distinguish capped, historical and absolute-page relations.
+1. Implement a native-equivalent final text-layout resolver for styled, wrapped and reordered text, targeting the controlled v2 offsets and the independent `dreams` positions without fixture-specific constants.
+2. Investigate `anchor_threshold` attachment or temporal behavior only if an editing-history capture becomes necessary; static vertical cap and deadband hypotheses are already rejected.
 3. Extend ink-only extraction to nested Form XObjects only when a paired fixture actually uses them.
 4. Treat eraser semantics and textured pens as known Pillow-baseline limitations while beginning simple-pen fidelity work only on geometry-isolated fixtures.
-5. Assign simple-pen work to Sol high and pencil/brush research to Astra high after anchor geometry is independently resolved.
+5. Assign simple-pen work to Sol high and pencil/brush research to Astra high after automatic text-anchor layout is resolved.
 
 Official runtime references: [CPython version status](https://devguide.python.org/versions/), [Python 3.13.15](https://www.python.org/downloads/release/python-31315/), and [uv Python version management](https://docs.astral.sh/uv/concepts/python-versions/).
