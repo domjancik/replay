@@ -296,6 +296,48 @@ def test_progressive_manifest_times_match_encoded_fps(tmp_path, mode, timing) ->
     ]
 
 
+def test_progressive_manifest_records_inferred_pacing_and_holds(tmp_path) -> None:
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=(64, 48), stroke_count=2))
+
+    result = run_local_replay(
+        source,
+        output_directory=tmp_path / "output",
+        source_affine=(1, 0, 0, 1, 0, 0),
+        mode="seconds-per-stroke",
+        fps=2,
+        seconds_per_stroke=0.5,
+        initial_pause_seconds=1,
+        pause_between_strokes_seconds=0.5,
+        final_hold_seconds=1,
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["replay"]["timing_evidence"] == (
+        "Synthesized timing; source point wall-clock timestamps are unavailable."
+    )
+    assert manifest["replay"]["initial_pause_seconds"] == 1
+    assert manifest["replay"]["pause_between_strokes_seconds"] == 0.5
+    assert manifest["replay"]["final_hold_seconds"] == 1
+    assert manifest["frame_count"] == 7
+    assert manifest["final_frame_matches_static"] is True
+
+
+def test_progressive_hold_timing_must_be_finite_and_nonnegative(tmp_path) -> None:
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=(64, 48)))
+
+    with pytest.raises(ReplayCommandError, match="--initial-pause"):
+        run_local_replay(
+            source,
+            output_directory=tmp_path / "output",
+            source_affine=(1, 0, 0, 1, 0, 0),
+            mode="seconds-per-stroke",
+            seconds_per_stroke=1,
+            initial_pause_seconds=float("nan"),
+        )
+
+
 @pytest.mark.parametrize(
     ("mode", "timing", "option"),
     [

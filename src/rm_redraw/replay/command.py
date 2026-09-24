@@ -310,11 +310,20 @@ def _frames_for_mode(
     fps: int,
     seconds_per_stroke: float | None,
     distance_per_second: float | None,
+    initial_pause_seconds: float,
+    pause_between_strokes_seconds: float,
+    final_hold_seconds: float,
 ) -> tuple[ReplayFrame, ...]:
     if fps <= 0:
         raise ReplayCommandError("--fps must be positive")
     if mode == "stroke-step":
-        frames = stroke_step_schedule(page)  # type: ignore[arg-type]
+        frames = stroke_step_schedule(
+            page,  # type: ignore[arg-type]
+            fps=fps,
+            initial_pause_seconds=initial_pause_seconds,
+            pause_between_strokes_seconds=pause_between_strokes_seconds,
+            final_hold_seconds=final_hold_seconds,
+        )
     elif mode == "seconds-per-stroke":
         if seconds_per_stroke is None:
             raise ReplayCommandError("--seconds-per-stroke is required for seconds-per-stroke mode")
@@ -324,6 +333,9 @@ def _frames_for_mode(
             page,
             fps=fps,
             seconds_per_stroke=seconds_per_stroke,  # type: ignore[arg-type]
+            initial_pause_seconds=initial_pause_seconds,
+            pause_between_strokes_seconds=pause_between_strokes_seconds,
+            final_hold_seconds=final_hold_seconds,
         )
     elif mode == "distance-per-second":
         if distance_per_second is None:
@@ -336,6 +348,9 @@ def _frames_for_mode(
             page,
             fps=fps,
             drawing_speed=distance_per_second,  # type: ignore[arg-type]
+            initial_pause_seconds=initial_pause_seconds,
+            pause_between_strokes_seconds=pause_between_strokes_seconds,
+            final_hold_seconds=final_hold_seconds,
         )
     else:
         raise ReplayCommandError(f"unknown replay mode: {mode}")
@@ -373,6 +388,9 @@ def run_local_replay(
     fps: int = 30,
     seconds_per_stroke: float | None = None,
     distance_per_second: float | None = None,
+    initial_pause_seconds: float = 0.0,
+    pause_between_strokes_seconds: float = 0.0,
+    final_hold_seconds: float = 0.0,
     viewport: tuple[int, int] | None = None,
     replay_strategy: Literal["crdt-order", "scene-order"] = "crdt-order",
     text_anchor_layout: str | Path | TextAnchorLayout | None = None,
@@ -411,12 +429,22 @@ def run_local_replay(
     except (TypeError, ValueError) as error:
         raise ReplayCommandError(f"invalid --viewport: {error}") from error
     options = RenderOptions(viewport=resolved_viewport)
+    for option_name, duration in (
+        ("--initial-pause", initial_pause_seconds),
+        ("--pause-between-strokes", pause_between_strokes_seconds),
+        ("--final-hold", final_hold_seconds),
+    ):
+        if not math.isfinite(duration) or duration < 0:
+            raise ReplayCommandError(f"{option_name} must be finite and nonnegative")
     scheduled_frames = _frames_for_mode(
         render_page,
         mode=mode,
         fps=fps,
         seconds_per_stroke=seconds_per_stroke,
         distance_per_second=distance_per_second,
+        initial_pause_seconds=initial_pause_seconds,
+        pause_between_strokes_seconds=pause_between_strokes_seconds,
+        final_hold_seconds=final_hold_seconds,
     )
     frames = _encoded_timeline(scheduled_frames, fps=fps)
 
@@ -505,6 +533,14 @@ def run_local_replay(
             "fps": fps,
             "seconds_per_stroke": seconds_per_stroke,
             "distance_per_second": distance_per_second,
+            "initial_pause_seconds": initial_pause_seconds,
+            "pause_between_strokes_seconds": pause_between_strokes_seconds,
+            "final_hold_seconds": final_hold_seconds,
+            "timing_evidence": (
+                "Discrete stroke events; no wall-clock timing claimed."
+                if mode == "stroke-step"
+                else "Synthesized timing; source point wall-clock timestamps are unavailable."
+            ),
             "strategy": replay_strategy,
             "strategy_evidence": render_page.replay_evidence,
         },

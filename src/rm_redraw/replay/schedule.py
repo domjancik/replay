@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import ceil
+from math import ceil, isfinite
 
 from rm_redraw.rendering.geometry import stroke_length
 from rm_redraw.rendering.types import NormalizedPage, VisibilityState
@@ -28,26 +28,103 @@ def _layered_replay_order(page: NormalizedPage) -> tuple[str, ...]:
     )
 
 
-def stroke_step_schedule(page: NormalizedPage) -> tuple[ReplayFrame, ...]:
+def _validate_pacing(
+    initial_pause_seconds: float,
+    pause_between_strokes_seconds: float,
+    final_hold_seconds: float,
+) -> None:
+    durations = (
+        initial_pause_seconds,
+        pause_between_strokes_seconds,
+        final_hold_seconds,
+    )
+    if any(not isfinite(duration) or duration < 0 for duration in durations):
+        raise ValueError("pause and hold durations must be finite and nonnegative")
+
+
+def _append_hold(
+    frames: list[ReplayFrame],
+    visibility: VisibilityState,
+    *,
+    fps: int,
+    seconds: float,
+) -> None:
+    for _ in range(ceil(seconds * fps)):
+        frames.append(ReplayFrame(len(frames), len(frames) / fps, visibility))
+
+
+def stroke_step_schedule(
+    page: NormalizedPage,
+    *,
+    fps: int = 1,
+    initial_pause_seconds: float = 0.0,
+    pause_between_strokes_seconds: float = 0.0,
+    final_hold_seconds: float = 0.0,
+) -> tuple[ReplayFrame, ...]:
     """Reveal one stroke in each frame, completing lower layers first."""
+    if fps <= 0:
+        raise ValueError("fps must be positive")
+    _validate_pacing(
+        initial_pause_seconds,
+        pause_between_strokes_seconds,
+        final_hold_seconds,
+    )
     completed: frozenset[str] = frozenset()
     frames: list[ReplayFrame] = []
-    for index, stroke_id in enumerate(_layered_replay_order(page)):
+    replay_order = _layered_replay_order(page)
+    _append_hold(
+        frames,
+        VisibilityState(completed),
+        fps=fps,
+        seconds=initial_pause_seconds,
+    )
+    for stroke_index, stroke_id in enumerate(replay_order):
         completed = completed | {stroke_id}
-        frames.append(ReplayFrame(index, float(index), VisibilityState(completed)))
+        frames.append(ReplayFrame(len(frames), len(frames) / fps, VisibilityState(completed)))
+        if stroke_index < len(replay_order) - 1:
+            _append_hold(
+                frames,
+                VisibilityState(completed),
+                fps=fps,
+                seconds=pause_between_strokes_seconds,
+            )
+    _append_hold(
+        frames,
+        VisibilityState(completed),
+        fps=fps,
+        seconds=final_hold_seconds,
+    )
     return tuple(frames)
 
 
 def progressive_distance_schedule(
-    page: NormalizedPage, *, fps: int, drawing_speed: float
+    page: NormalizedPage,
+    *,
+    fps: int,
+    drawing_speed: float,
+    initial_pause_seconds: float = 0.0,
+    pause_between_strokes_seconds: float = 0.0,
+    final_hold_seconds: float = 0.0,
 ) -> tuple[ReplayFrame, ...]:
     """Reveal strokes by geometric distance at the requested drawing speed."""
     if fps <= 0 or drawing_speed <= 0:
         raise ValueError("fps and drawing_speed must be positive")
+    _validate_pacing(
+        initial_pause_seconds,
+        pause_between_strokes_seconds,
+        final_hold_seconds,
+    )
     strokes = {stroke.stroke_id: stroke for stroke in page.strokes}
     completed: frozenset[str] = frozenset()
     frames: list[ReplayFrame] = []
-    for stroke_id in _layered_replay_order(page):
+    replay_order = _layered_replay_order(page)
+    _append_hold(
+        frames,
+        VisibilityState(completed),
+        fps=fps,
+        seconds=initial_pause_seconds,
+    )
+    for stroke_index, stroke_id in enumerate(replay_order):
         stroke = strokes[stroke_id]
         frame_count = max(1, ceil(stroke_length(stroke) / drawing_speed * fps))
         for frame_number in range(1, frame_count):
@@ -60,19 +137,50 @@ def progressive_distance_schedule(
             )
         completed = completed | {stroke_id}
         frames.append(ReplayFrame(len(frames), len(frames) / fps, VisibilityState(completed)))
+        if stroke_index < len(replay_order) - 1:
+            _append_hold(
+                frames,
+                VisibilityState(completed),
+                fps=fps,
+                seconds=pause_between_strokes_seconds,
+            )
+    _append_hold(
+        frames,
+        VisibilityState(completed),
+        fps=fps,
+        seconds=final_hold_seconds,
+    )
     return tuple(frames)
 
 
 def progressive_stroke_schedule(
-    page: NormalizedPage, *, fps: int, seconds_per_stroke: float
+    page: NormalizedPage,
+    *,
+    fps: int,
+    seconds_per_stroke: float,
+    initial_pause_seconds: float = 0.0,
+    pause_between_strokes_seconds: float = 0.0,
+    final_hold_seconds: float = 0.0,
 ) -> tuple[ReplayFrame, ...]:
     """Reveal each stroke over a fixed duration, regardless of geometry."""
     if fps <= 0 or seconds_per_stroke <= 0:
         raise ValueError("fps and seconds_per_stroke must be positive")
+    _validate_pacing(
+        initial_pause_seconds,
+        pause_between_strokes_seconds,
+        final_hold_seconds,
+    )
     frame_count = max(1, ceil(fps * seconds_per_stroke))
     completed: frozenset[str] = frozenset()
     frames: list[ReplayFrame] = []
-    for stroke_id in _layered_replay_order(page):
+    replay_order = _layered_replay_order(page)
+    _append_hold(
+        frames,
+        VisibilityState(completed),
+        fps=fps,
+        seconds=initial_pause_seconds,
+    )
+    for stroke_index, stroke_id in enumerate(replay_order):
         for frame_number in range(1, frame_count):
             frames.append(
                 ReplayFrame(
@@ -83,4 +191,17 @@ def progressive_stroke_schedule(
             )
         completed = completed | {stroke_id}
         frames.append(ReplayFrame(len(frames), len(frames) / fps, VisibilityState(completed)))
+        if stroke_index < len(replay_order) - 1:
+            _append_hold(
+                frames,
+                VisibilityState(completed),
+                fps=fps,
+                seconds=pause_between_strokes_seconds,
+            )
+    _append_hold(
+        frames,
+        VisibilityState(completed),
+        fps=fps,
+        seconds=final_hold_seconds,
+    )
     return tuple(frames)

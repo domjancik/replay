@@ -72,6 +72,25 @@ def test_stroke_step_schedule_reveals_replay_order() -> None:
     ]
 
 
+def test_stroke_step_schedule_supports_video_holds() -> None:
+    frames = stroke_step_schedule(
+        _page(),
+        fps=2,
+        initial_pause_seconds=0.5,
+        pause_between_strokes_seconds=0.5,
+        final_hold_seconds=0.5,
+    )
+
+    assert [frame.visibility.completed_stroke_ids for frame in frames] == [
+        frozenset(),
+        frozenset({"first"}),
+        frozenset({"first"}),
+        frozenset({"first", "second"}),
+        frozenset({"first", "second"}),
+    ]
+    assert [frame.time_seconds for frame in frames] == [index / 2 for index in range(5)]
+
+
 def test_distance_schedule_uses_distance_for_frame_count_and_progress() -> None:
     frames = progressive_distance_schedule(_page(), fps=2, drawing_speed=10)
 
@@ -82,12 +101,109 @@ def test_distance_schedule_uses_distance_for_frame_count_and_progress() -> None:
     assert frames[-1].visibility.completed_stroke_ids == frozenset({"first", "second"})
 
 
+def test_distance_schedule_reveal_follows_recorded_point_sequence() -> None:
+    page = replace(
+        _page(),
+        strokes=(
+            replace(
+                _page().strokes[0],
+                points=(
+                    NormalizedPoint(0, 0),
+                    NormalizedPoint(10, 0),
+                    NormalizedPoint(10, 30),
+                ),
+            ),
+        ),
+        replay_order=("first",),
+    )
+
+    frames = progressive_distance_schedule(page, fps=4, drawing_speed=20)
+
+    assert [
+        frame.visibility.active_progress
+        for frame in frames
+        if frame.visibility.active_stroke_id == "first"
+    ] == [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
+
+
 def test_constant_duration_schedule_uses_same_duration_for_each_stroke() -> None:
     frames = progressive_stroke_schedule(_page(), fps=4, seconds_per_stroke=0.5)
 
     active = [frame.visibility for frame in frames if frame.visibility.active_stroke_id]
     assert [state.active_progress for state in active] == [0.5, 0.5]
     assert frames[-1].visibility.completed_stroke_ids == frozenset({"first", "second"})
+
+
+def test_progressive_pacing_adds_initial_interstroke_and_final_holds() -> None:
+    frames = progressive_stroke_schedule(
+        _page(),
+        fps=2,
+        seconds_per_stroke=0.5,
+        initial_pause_seconds=1,
+        pause_between_strokes_seconds=0.5,
+        final_hold_seconds=1,
+    )
+
+    assert [frame.visibility for frame in frames] == [
+        frames[0].visibility,
+        frames[0].visibility,
+        replace(frames[0].visibility, completed_stroke_ids=frozenset({"first"})),
+        replace(frames[0].visibility, completed_stroke_ids=frozenset({"first"})),
+        replace(
+            frames[0].visibility,
+            completed_stroke_ids=frozenset({"first", "second"}),
+        ),
+        replace(
+            frames[0].visibility,
+            completed_stroke_ids=frozenset({"first", "second"}),
+        ),
+        replace(
+            frames[0].visibility,
+            completed_stroke_ids=frozenset({"first", "second"}),
+        ),
+    ]
+    assert [frame.index for frame in frames] == list(range(7))
+    assert [frame.time_seconds for frame in frames] == [index / 2 for index in range(7)]
+
+
+def test_distance_pacing_holds_do_not_change_layer_major_order() -> None:
+    frames = progressive_distance_schedule(
+        _interleaved_layers_page(),
+        fps=2,
+        drawing_speed=20,
+        pause_between_strokes_seconds=0.5,
+    )
+
+    transitions = [
+        tuple(sorted(frame.visibility.completed_stroke_ids))
+        for frame in frames
+        if frame.visibility.active_stroke_id is None
+    ]
+    assert transitions == [
+        ("lower-late",),
+        ("lower-late",),
+        ("lower-early", "lower-late"),
+        ("lower-early", "lower-late"),
+        ("lower-early", "lower-late", "upper-early"),
+        ("lower-early", "lower-late", "upper-early"),
+        ("lower-early", "lower-late", "upper-early", "upper-late"),
+    ]
+
+
+def test_progressive_pacing_rejects_negative_holds() -> None:
+    for option in (
+        {"initial_pause_seconds": -0.1},
+        {"pause_between_strokes_seconds": -0.1},
+        {"final_hold_seconds": -0.1},
+    ):
+        try:
+            progressive_stroke_schedule(
+                _page(), fps=2, seconds_per_stroke=1, **option
+            )
+        except ValueError as error:
+            assert "pause and hold durations must be finite and nonnegative" in str(error)
+        else:
+            raise AssertionError("negative pacing duration was accepted")
 
 
 def test_stroke_step_schedule_finishes_lower_layer_before_higher_layer() -> None:

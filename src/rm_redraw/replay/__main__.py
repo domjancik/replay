@@ -51,6 +51,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--seconds-per-stroke", type=float)
     parser.add_argument("--distance-per-second", type=float)
+    parser.add_argument("--initial-pause", type=float, default=0.0)
+    parser.add_argument("--pause-between-strokes", type=float, default=0.0)
+    parser.add_argument("--final-hold", type=float, default=0.0)
     parser.add_argument("--viewport", type=int, nargs=2, metavar=("WIDTH", "HEIGHT"))
     parser.add_argument(
         "--replay-strategy",
@@ -85,6 +88,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             fps=args.fps,
             seconds_per_stroke=args.seconds_per_stroke,
             distance_per_second=args.distance_per_second,
+            initial_pause_seconds=args.initial_pause,
+            pause_between_strokes_seconds=args.pause_between_strokes,
+            final_hold_seconds=args.final_hold,
             viewport=tuple(args.viewport) if args.viewport is not None else None,
             replay_strategy=args.replay_strategy,
             text_anchor_layout=args.text_anchor_layout,
