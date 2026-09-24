@@ -26,6 +26,8 @@ class NormalizedStroke:
     rgba: Color
     thickness_scale: float
     points: tuple[NormalizedPoint, ...]
+    tool_code: int | None = None
+    tool_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

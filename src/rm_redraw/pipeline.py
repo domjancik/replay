@@ -106,6 +106,8 @@ def to_render_page(
                 _project_point(point, stroke.effective_transform.matrix, transform)
                 for point in stroke.points
             ),
+            tool_code=stroke.tool.code,
+            tool_name=stroke.tool.name,
         )
         for stroke in ordered_strokes
     )

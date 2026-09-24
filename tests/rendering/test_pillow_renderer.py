@@ -103,3 +103,29 @@ def test_partial_translucent_stroke_is_rerendered_from_state() -> None:
     second = renderer.render(_page(), RenderOptions(), partial_state)
 
     assert hashlib.sha256(first.tobytes()).digest() == hashlib.sha256(second.tobytes()).digest()
+
+
+def test_ballpoint_uses_recorded_point_width_instead_of_fixed_stroke_thickness() -> None:
+    stroke = NormalizedStroke(
+        stroke_id="ballpoint",
+        group_id="lower",
+        rgba=(0, 0, 0, 255),
+        thickness_scale=2,
+        points=(
+            NormalizedPoint(20, 40, pressure=128, speed=0, width=12),
+            NormalizedPoint(80, 40, pressure=128, speed=0, width=12),
+        ),
+        tool_code=15,
+        tool_name="BALLPOINT_2",
+    )
+    page = replace(
+        _page(),
+        strokes=(stroke,),
+        compositing_order=("lower",),
+        replay_order=("ballpoint",),
+    )
+
+    image = PillowRenderer().render_static(page, RenderOptions())
+    ink_rows = [y for y in range(image.height) if image.getpixel((50, y))[:3] != (255, 255, 255)]
+
+    assert len(ink_rows) >= 4

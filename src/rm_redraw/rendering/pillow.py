@@ -14,6 +14,11 @@ from .types import (
     VisibilityState,
 )
 
+# The five-point width/intensity profile follows the MIT-licensed remarkable-rm
+# reference renderer. This Pillow-specific multiplier is provisionally calibrated
+# against the isolated three-stroke BALLPOINT_2 native export.
+_BALLPOINT_RASTER_WIDTH_SCALE = 0.75
+
 
 class PillowRenderer:
     """Renders every frame from immutable visibility state and layer compositing."""
@@ -81,6 +86,9 @@ def _draw_stroke(
     scale_y = viewport.height / page.paper_size[1]
     scale = (scale_x + scale_y) / 2
     coordinates = [(point.x * scale_x, point.y * scale_y) for point in points]
+    if stroke.tool_code in {2, 15} or stroke.tool_name in {"BALLPOINT", "BALLPOINT_2"}:
+        _draw_ballpoint(layer, coordinates, points, stroke, scale)
+        return
     width = max(1, round(stroke.thickness_scale * scale))
     draw = ImageDraw.Draw(layer)
     if len(coordinates) == 1:
@@ -89,3 +97,110 @@ def _draw_stroke(
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=stroke.rgba)
     else:
         draw.line(coordinates, fill=stroke.rgba, width=width, joint="curve")
+
+
+def _draw_ballpoint(
+    layer: Image.Image,
+    coordinates: list[tuple[float, float]],
+    points: tuple[NormalizedPoint, ...],
+    stroke: NormalizedStroke,
+    scale: float,
+) -> None:
+    """Render v1/v2 ballpoint samples in the native five-point profile."""
+    if any(point.width is None or point.speed is None for point in points):
+        _draw_round_polyline(
+            layer,
+            coordinates,
+            max(1, round(stroke.thickness_scale * scale)),
+            stroke.rgba,
+        )
+        return
+
+    supersample = 2
+    profile_widths = [
+        _ballpoint_width(points[start]) * scale * _BALLPOINT_RASTER_WIDTH_SCALE
+        for start in range(0, len(points), 5)
+    ]
+    margin = max(profile_widths, default=1.0) + 2.0
+    left = max(0, int(min(x for x, _ in coordinates) - margin))
+    top = max(0, int(min(y for _, y in coordinates) - margin))
+    right = min(layer.width, int(max(x for x, _ in coordinates) + margin) + 1)
+    bottom = min(layer.height, int(max(y for _, y in coordinates) + margin) + 1)
+    if right <= left or bottom <= top:
+        return
+    sampled = Image.new(
+        "RGBA",
+        ((right - left) * supersample, (bottom - top) * supersample),
+        (0, 0, 0, 0),
+    )
+    sampled_coordinates = [
+        ((x - left) * supersample, (y - top) * supersample) for x, y in coordinates
+    ]
+    previous: tuple[float, float] | None = None
+    for start in range(0, len(points), 5):
+        segment_points = points[start : start + 5]
+        segment_coordinates = sampled_coordinates[start : start + 5]
+        if previous is not None:
+            segment_coordinates = [previous, *segment_coordinates]
+        profile_point = segment_points[0]
+        width = max(
+            1,
+            round(
+                _ballpoint_width(profile_point)
+                * scale
+                * _BALLPOINT_RASTER_WIDTH_SCALE
+                * supersample
+            ),
+        )
+        color = _ballpoint_color(profile_point, stroke.rgba)
+        _draw_round_polyline(sampled, segment_coordinates, width, color)
+        previous = segment_coordinates[-1]
+    antialiased = sampled.resize(
+        (right - left, bottom - top),
+        resample=Image.Resampling.LANCZOS,
+    )
+    layer.alpha_composite(antialiased, dest=(left, top))
+
+
+def _ballpoint_width(point: NormalizedPoint) -> float:
+    pressure = min(255.0, max(0.0, point.pressure))
+    assert point.width is not None
+    assert point.speed is not None
+    return max(
+        0.25,
+        0.5 + pressure / 255.0 + point.width / 4.0 - 0.5 * (point.speed / 4.0 / 50.0),
+    )
+
+
+def _ballpoint_color(
+    point: NormalizedPoint,
+    rgba: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    assert point.speed is not None
+    pressure = min(255.0, max(0.0, point.pressure))
+    intensity = 0.1 * -(point.speed / 4.0 / 35.0) + 1.2 * (pressure / 255.0) + 0.5
+    intensity = min(1.0, max(0.0, intensity))
+    fade = min(abs(intensity - 1.0), 60.0 / 255.0)
+    red, green, blue, alpha = rgba
+    return (
+        round(red + (255 - red) * fade),
+        round(green + (255 - green) * fade),
+        round(blue + (255 - blue) * fade),
+        alpha,
+    )
+
+
+def _draw_round_polyline(
+    layer: Image.Image,
+    coordinates: list[tuple[float, float]],
+    width: int,
+    color: tuple[int, int, int, int],
+) -> None:
+    if not coordinates:
+        return
+    draw = ImageDraw.Draw(layer)
+    if len(coordinates) > 1:
+        draw.line(coordinates, fill=color, width=width, joint="curve")
+    radius = width / 2.0
+    for x, y in {coordinates[0], coordinates[-1]}:
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)

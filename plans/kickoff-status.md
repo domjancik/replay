@@ -67,6 +67,10 @@ The parser now exposes an immutable `TextAnchorLayout` map. A supplied final-lay
 
 On the real `dreams` page, replaying with the two independently measured native offsets improves both registered groups: capped path distance changes from `15.4077` to `14.1511` pixels for group `1:2437` and from `25.0000` to `4.4862` for `1:2602`. The common direct-text-stripped ink ROI improves from MAE `7.0903`, RMSE `41.2934`, SSIM `0.89625` to `6.2682`, `38.8281`, `0.90849`. The whole flattened-page edge metric worsens because the native PDF does not preserve group ownership, so it cannot associate candidate groups with the independently fitted native paths. This demonstrates the injected placement path on `dreams`; computing those offsets for arbitrary styled/wrapped text remains the open layout task. Inspectable ignored evidence is under `artifacts/dreams-text-anchor-before-after/`.
 
+Automatic native-equivalent placement is now evidence-blocked by missing source state rather than an unimplemented line-breaking routine alone. `rmscene` exposes logical paragraphs, CRDT IDs, paragraph styles, bold/italic spans, `pos_x`, `pos_y`, and width, but no glyph shaping, native line boxes, font metrics, or stored anchor Y. `dreams` has 48 logical lines and 80 native PDF visual baselines. Its anchor `1:2206` is inside logical paragraph 31 and its anchor `1:2435` starts logical paragraph 36, yet the corresponding native group Y values are `2492.6` and `2229.1`: the later final-text anchor is `263.5` units above the earlier one. A monotonic layout of final CRDT text cannot produce both. A Noto Sans reconstruction, even with native-derived line advances, missed the two positions by about `1099.228` and `1801.556` source units; CRDT-ID cutoffs also failed. V2/V3 prove delta response for constructed final states but do not recover the absolute historical attachment state. `TextAnchorLayout` therefore remains the correct resolved boundary until a held-out historical capture exposes the missing state.
+
+Simple-pen work now has a geometry-isolated `BALLPOINT_2` result. The projection retains tool code/name and the renderer applies a five-point width/pressure/speed profile with rounded joins/caps and localized antialiasing. On controlled page `d3fd826a-f90f-43eb-b8c0-c9b6f983d7ea`, ROI RMSE improved from `29.9361` to `18.3519`, SSIM from `0.941389` to `0.973088`, and symmetric edge distance from `0.50431` to `0.38154` pixels. Candidate/native coverage is `0.05072`/`0.04622`. The width/intensity equations follow the MIT-licensed [remarkable-rm](https://github.com/Scratchydisk/remarkable-rm) reference and use a provisional `0.75` Pillow raster-width calibration. Inspectable ignored outputs are under `artifacts/simple-pen-ballpoint-profile-v3/` and `artifacts/simple-pen-ballpoint-profile-v3-comparison/`.
+
 ## Recommended model allocation
 
 | Task | Model and effort | Price/performance reason |
@@ -84,10 +88,10 @@ The allocation uses current API pricing as a relative cost proxy: Luna is $0.20 
 
 ## Next coordination queue
 
-1. Implement a native-equivalent final text-layout resolver for styled, wrapped and reordered text, targeting the controlled v2 offsets and the independent `dreams` positions without fixture-specific constants.
-2. Investigate `anchor_threshold` attachment or temporal behavior only if an editing-history capture becomes necessary; static vertical cap and deadband hypotheses are already rejected.
+1. Capture anchor editing history or another source of native attachment state before attempting an automatic resolved text-layout engine; current final CRDT state is insufficient for the two independent `dreams` positions.
+2. Investigate `anchor_threshold` attachment or temporal behavior only as part of that controlled history capture; static vertical cap and deadband hypotheses are already rejected.
 3. Extend ink-only extraction to nested Form XObjects only when a paired fixture actually uses them.
-4. Treat eraser semantics and textured pens as known Pillow-baseline limitations while beginning simple-pen fidelity work only on geometry-isolated fixtures.
-5. Assign simple-pen work to Sol high and pencil/brush research to Astra high after automatic text-anchor layout is resolved.
+4. Validate the provisional ballpoint profile on held-out geometry-isolated pages spanning pressure, speed, and thickness before freezing its `0.75` Pillow calibration.
+5. Treat eraser semantics and textured pens as known Pillow-baseline limitations; assign held-out simple-pen validation to Sol high and pencil/brush research to Astra high.
 
 Official runtime references: [CPython version status](https://devguide.python.org/versions/), [Python 3.13.15](https://www.python.org/downloads/release/python-31315/), and [uv Python version management](https://docs.astral.sh/uv/concepts/python-versions/).

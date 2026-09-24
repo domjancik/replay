@@ -35,7 +35,7 @@ uv run python -m rm_redraw.replay path/to/page.rm `
 
 The geometry values above are explicit example inputs, not device defaults. Omit `--paper-size` only when the page contains `SceneInfo.paper_size`; supply a source affine transform unless parsed metadata provides one. Multi-page `.rmdoc` archives also require `--page-id`.
 
-Root-text anchor matrices derived from the fixture-calibrated typography heuristic are retained for diagnostics but marked unresolved. Controlled native exports establish that type-2 group Y is `RootText.pos_y + final_layout_anchor_offset`; the stored threshold is not applied as a static cap or deadband. Styled, wrapped, or reordered text still requires a complete text-layout implementation to compute that offset.
+Root-text anchor matrices derived from the fixture-calibrated typography heuristic are retained for diagnostics but marked unresolved. Controlled native exports establish that type-2 group Y is `RootText.pos_y + final_layout_anchor_offset`; the stored threshold is not applied as a static cap or deadband. The raw scene does not contain native shaped line boxes, visual baselines, font metrics, or a stored anchor Y. A real edited document also places a later logical anchor above an earlier one, so a monotonic layout of the final CRDT text cannot reproduce both positions. Native-equivalent offsets therefore require external evidence or additional editing-history data; the parser does not label a current-text estimate as resolved.
 
 Callers that already have evidence-backed offsets can supply them without coupling parsing to a renderer. The values are source-space Y offsets from `RootText.pos_y`, keyed by CRDT anchor ID:
 
@@ -78,3 +78,9 @@ uv run python -m rm_redraw.comparison artifacts/replay-example/static.png `
 Use `--native-png` instead of `--native-pdf` for a pre-rasterized reference. PNG inputs must have identical dimensions and must both use RGB or both use RGBA; convert them explicitly before comparison when their modes differ. Each run requires a new output directory and writes normalized input copies, absolute and high-gain differences, a red/native–blue/candidate overlay, and a provenance-rich `metrics.json` report with global, ink-ROI, and edge-geometry measurements.
 
 Add `--ink-only` with `--native-pdf` to remove direct page-content text objects before rasterization. The report records the filtered operators and explicitly lists unfiltered Form XObjects, images, and annotations.
+
+## Ballpoint rendering
+
+The render projection preserves the parsed tool code/name and all point channels. `BALLPOINT_2` uses five-point segments with recorded width, pressure, and speed, rounded caps/joins, pressure-dependent colour, and localized two-times antialiasing. Other tools retain the fixed-width Pillow baseline until they receive isolated validation.
+
+The controlled three-stroke ballpoint page improved from ROI RMSE `29.9361` to `18.3519`, SSIM `0.941389` to `0.973088`, and symmetric edge distance `0.50431` to `0.38154` pixels. Candidate/native ROI coverage is `0.05072`/`0.04622`. This is one geometry-isolated fixture; the `0.75` Pillow width calibration remains provisional until held-out ballpoint pages cover more pressure, speed, and thickness ranges.

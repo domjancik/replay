@@ -35,6 +35,7 @@ The render projection retains top-level layers in their final bottom-to-top comp
 
 The renderer consumes a normalized page, immutable render options, and a visibility state:
 
+- parsed tool identity and the retained pressure, speed, direction, and width channels for each point
 - completed stroke IDs
 - optional active stroke ID
 - active progress as a normalized point/distance fraction

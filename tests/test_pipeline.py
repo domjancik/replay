@@ -112,6 +112,7 @@ def test_parser_page_adapts_to_render_and_replay_contracts() -> None:
     assert page.replay_strategy == "crdt-order"
     assert page.strokes[0].rgba == (0, 0, 0, 255)
     assert page.strokes[1].rgba == (1, 2, 3, 255)
+    assert (page.strokes[0].tool_code, page.strokes[0].tool_name) == (15, "BALLPOINT_2")
     assert page.strokes[0].points[0].speed == 11
 
 
