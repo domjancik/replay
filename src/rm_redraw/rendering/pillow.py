@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from PIL import Image, ImageDraw
+from math import ceil, floor, hypot
+
+from PIL import Image, ImageChops, ImageDraw
 
 from .geometry import prefix_points
 from .types import (
@@ -86,6 +88,9 @@ def _draw_stroke(
     scale_y = viewport.height / page.paper_size[1]
     scale = (scale_x + scale_y) / 2
     coordinates = [(point.x * scale_x, point.y * scale_y) for point in points]
+    if stroke.tool_code == 6 or stroke.tool_name == "ERASER":
+        _erase_stroke(layer, coordinates, stroke.thickness_scale * scale * 2.0)
+        return
     if stroke.tool_code in {2, 15} or stroke.tool_name in {"BALLPOINT", "BALLPOINT_2"}:
         _draw_ballpoint(layer, coordinates, points, stroke, scale)
         return
@@ -97,6 +102,95 @@ def _draw_stroke(
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=stroke.rgba)
     else:
         draw.line(coordinates, fill=stroke.rgba, width=width, joint="curve")
+
+
+def _erase_stroke(
+    layer: Image.Image,
+    coordinates: list[tuple[float, float]],
+    width: float,
+) -> None:
+    """Apply a deterministic destination-out stroke to one transparent layer."""
+    if not coordinates:
+        return
+
+    supersample = 4
+    radius = width / 2.0
+    margin = radius + 2.0
+    left = max(0, floor(min(x for x, _ in coordinates) - margin))
+    top = max(0, floor(min(y for _, y in coordinates) - margin))
+    right = min(layer.width, ceil(max(x for x, _ in coordinates) + margin) + 1)
+    bottom = min(layer.height, ceil(max(y for _, y in coordinates) + margin) + 1)
+    if right <= left or bottom <= top:
+        return
+
+    mask = Image.new(
+        "L",
+        ((right - left) * supersample, (bottom - top) * supersample),
+        0,
+    )
+    local_coordinates = [
+        ((x - left) * supersample, (y - top) * supersample) for x, y in coordinates
+    ]
+    _draw_square_polyline(
+        mask,
+        local_coordinates,
+        max(1, round(width * supersample)),
+        255,
+    )
+    mask = mask.resize((right - left, bottom - top), Image.Resampling.LANCZOS)
+
+    alpha = layer.getchannel("A")
+    region = alpha.crop((left, top, right, bottom))
+    erased = ImageChops.multiply(region, ImageChops.invert(mask))
+    alpha.paste(erased, (left, top))
+    layer.putalpha(alpha)
+
+
+def _draw_square_polyline(
+    image: Image.Image,
+    coordinates: list[tuple[float, float]],
+    width: int,
+    fill: int,
+) -> None:
+    draw = ImageDraw.Draw(image)
+    radius = width / 2.0
+    if len(coordinates) == 1:
+        x, y = coordinates[0]
+        draw.rectangle((x - radius, y - radius, x + radius, y + radius), fill=fill)
+        return
+
+    draw.line(coordinates, fill=fill, width=width, joint="curve")
+    _draw_square_cap(draw, coordinates[0], coordinates[1], radius, fill)
+    _draw_square_cap(draw, coordinates[-1], coordinates[-2], radius, fill)
+
+
+def _draw_square_cap(
+    draw: ImageDraw.ImageDraw,
+    endpoint: tuple[float, float],
+    neighbour: tuple[float, float],
+    radius: float,
+    fill: int,
+) -> None:
+    dx = endpoint[0] - neighbour[0]
+    dy = endpoint[1] - neighbour[1]
+    length = hypot(dx, dy)
+    if length == 0:
+        x, y = endpoint
+        draw.rectangle((x - radius, y - radius, x + radius, y + radius), fill=fill)
+        return
+    along_x = dx / length * radius
+    along_y = dy / length * radius
+    across_x = -dy / length * radius
+    across_y = dx / length * radius
+    draw.polygon(
+        (
+            (endpoint[0] - across_x, endpoint[1] - across_y),
+            (endpoint[0] + across_x, endpoint[1] + across_y),
+            (endpoint[0] + along_x + across_x, endpoint[1] + along_y + across_y),
+            (endpoint[0] + along_x - across_x, endpoint[1] + along_y - across_y),
+        ),
+        fill=fill,
+    )
 
 
 def _draw_ballpoint(
