@@ -4,7 +4,7 @@
 
 See `plans/milestone-acceptance.md` for the current four-milestone acceptance audit. The historical conclusion below that nonmonotonic `dreams` anchor fits prove missing attachment history is superseded: tests found that the experimental native vector extractor ignored nested PDF transforms, clipping, fill rules and white overpaint. Correct Poppler extraction makes both groups pass the unchanged native-assisted matcher thresholds; independent validation and raw-only typography reconstruction continue. Do not treat the old numeric fits as ground truth or require an editing-history capture on that basis.
 
-Smooth replay pacing (`8d2d9ba`) and layer-local eraser compositing (`d5ecbe1`) are committed. Native eraser fidelity remains unverified; texture rendering and anchor matching are active integration work.
+Smooth replay pacing (`8d2d9ba`), layer-local eraser compositing (`d5ecbe1`), and native-assisted anchors plus experimental deterministic textures (`820b56f`) are committed. Native eraser and texture fidelity remain unverified. A dedicated 19-page calibration notebook has now been imported once and exported twice on firmware 3.28.0.172; raw member contents and native page raster pixels are repeat-stable. Cell coverage and geometry acceptance are tracked separately from acquisition. The earlier connectivity failure was a network-sandbox restriction, not evidence of a disconnected device; see the readiness rules in `AGENTS.md` and current milestone acceptance.
 
 ## Environment and repository
 
