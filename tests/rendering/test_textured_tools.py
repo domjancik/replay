@@ -1,4 +1,5 @@
 from dataclasses import replace
+from math import cos, radians, sin
 
 import numpy as np
 import pytest
@@ -158,3 +159,50 @@ def test_current_pencil_grain_does_not_change_with_stroke_identity(tool):
         renderer.render_static(model, RenderOptions()).tobytes()
         == renderer.render_static(renamed, RenderOptions()).tobytes()
     )
+
+
+def test_current_pencil_pressure_coverage_is_monotone_with_soft_and_hard_regimes():
+    from rm_redraw.rendering.texture import _pencil_coverage
+
+    values = np.array([_pencil_coverage(raw / 255) for raw in range(256)])
+    assert np.all(np.diff(values) >= 0)
+    assert values[0] == 0 and values[-1] == 1
+    # Native fixed-width pressure controls need less soft-pressure deposition
+    # and more hard-pressure deposition than the previous single exponent.
+    assert 0.14 < values[64] < 0.17
+    assert 0.43 < values[128] < 0.47
+    assert 0.78 < values[192] < 0.82
+    assert _pencil_coverage(-1) == 0
+    assert _pencil_coverage(2) == 1
+
+
+@pytest.mark.parametrize("angle", [0, 30, 45, 60, 90, 135])
+def test_pressure_response_remains_monotone_across_actual_path_angles(angle):
+    """Path rotation and stored direction are independent fixture variables."""
+    angle = radians(angle)
+    model = page(14)
+    model = replace(model, paper_size=(220, 220))
+    renderer = PillowRenderer()
+    previous = None
+    masses = []
+    for pressure in (0, 64, 128, 192, 255):
+        points = tuple(
+            NormalizedPoint(
+                110 + distance * cos(angle),
+                110 + distance * sin(angle),
+                pressure=pressure,
+                speed=16,
+                direction=0,
+                width=96,
+            )
+            for distance in range(-70, 71, 5)
+        )
+        fixture = replace(model, strokes=(replace(model.strokes[0], points=points),))
+        pixels = np.asarray(renderer.render_static(fixture, RenderOptions()))[:, :, :3]
+        if previous is not None:
+            assert np.all(pixels <= previous)
+        else:
+            assert np.all(pixels == 255)
+        masses.append(float((255 - pixels).sum()))
+        previous = pixels
+    assert all(a < b for a, b in zip(masses[:-1], masses[1:], strict=True))

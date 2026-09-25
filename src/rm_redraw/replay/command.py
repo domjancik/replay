@@ -618,7 +618,7 @@ def run_local_replay(
             "simple_profile": "current-simple-geometry-v1",
             "marker_profile": "provisional-marker-envelope-v1",
             "highlighter_blend_scope": "within-layer-darken",
-            "texture_profile": "experimental-texture-v3-shared-grain",
+            "texture_profile": "experimental-texture-v4-pressure-curve",
             "texture_native_calibrated": False,
             "calligraphy_profile": "provisional-calligraphy-raw-width-v1",
             "calligraphy_antialiasing": "4x-pixel-center-area-coverage",

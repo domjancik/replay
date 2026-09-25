@@ -28,3 +28,5 @@ Initial exclusive source ownership:
 - Parser/normalization: `src/rm_redraw/parsing/`, `tests/parsing/`
 - Replay/render/video: `src/rm_redraw/replay/`, `src/rm_redraw/rendering/`, `tests/replay/`, `tests/rendering/`
 - Coordinator: shared/root files and cross-module integration
+
+- Additional current-pencil pressure/angle capture acceptance: `fixtures/private/controlled-anchor-analysis/pressure-angle-capture-20260925/READINESS.md`. This supplements the earlier capture scopes; consult both before requesting a device session.

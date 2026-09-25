@@ -118,6 +118,22 @@ def draw_texture(
     layer.alpha_composite(overlay)
 
 
+def _pencil_coverage(pressure: float) -> float:
+    """Monotone occupancy fit to fixed-width native pressure controls.
+
+    Firmware 3.28 current pencil/mechanical: raw width24, speed16, direction0.
+    These occupancy knots fit integrated ink mass, not native grain identity;
+    pressure/width/path-angle interactions require independent validation.
+    """
+    return float(
+        np.interp(
+            pressure,
+            (0.0, 16 / 255, 64 / 255, 128 / 255, 192 / 255, 1.0),
+            (0.0, 0.047, 0.152, 0.450, 0.797, 1.0),
+        )
+    )
+
+
 def _dab(
     alpha: np.ndarray,
     x: float,
@@ -164,7 +180,7 @@ def _dab(
         if brush:
             texture, density = 1.0, 1.0
         else:
-            texture = (grain < pressure**1.1).astype(float)
+            texture = (grain < _pencil_coverage(pressure)).astype(float)
             density = 1.0
     elif brush:
         texture = 0.65 + 0.35 * grain
