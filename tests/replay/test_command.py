@@ -402,3 +402,39 @@ def test_encoder_failure_reports_actionable_replay_error(tmp_path, monkeypatch) 
             output_directory=tmp_path / "output",
             source_affine=(1, 0, 0, 1, 0, 0),
         )
+
+
+def test_duration_cli_limits_frames_even_with_many_strokes(tmp_path):
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=(64, 64), stroke_count=20))
+    output = tmp_path / "duration"
+    assert (
+        main(
+            [
+                str(source),
+                "--output",
+                str(output),
+                "--source-affine",
+                "1",
+                "0",
+                "0",
+                "1",
+                "0",
+                "0",
+                "--mode",
+                "duration",
+                "--duration",
+                "2",
+                "--fps",
+                "4",
+                "--final-hold",
+                "0.5",
+            ]
+        )
+        == 0
+    )
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["frame_count"] == 10
+    assert manifest["replay"]["duration_seconds"] == 2
+    assert manifest["final_frame_matches_static"]
+    assert (output / "frames/frame_000009.png").read_bytes() == (output / "static.png").read_bytes()

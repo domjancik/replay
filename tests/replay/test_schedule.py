@@ -197,9 +197,7 @@ def test_progressive_pacing_rejects_negative_holds() -> None:
         {"final_hold_seconds": -0.1},
     ):
         try:
-            progressive_stroke_schedule(
-                _page(), fps=2, seconds_per_stroke=1, **option
-            )
+            progressive_stroke_schedule(_page(), fps=2, seconds_per_stroke=1, **option)
         except ValueError as error:
             assert "pause and hold durations must be finite and nonnegative" in str(error)
         else:
@@ -260,3 +258,24 @@ def test_schedules_omit_strokes_from_hidden_layers() -> None:
         for frame in distance_frames
         if frame.visibility.active_stroke_id is not None
     ] == ["lower-late", "lower-early"]
+
+
+def test_duration_schedule_can_complete_multiple_strokes_per_frame():
+    from rm_redraw.replay.schedule import duration_schedule
+
+    page = _interleaved_layers_page()
+    frames = duration_schedule(page, fps=2, duration_seconds=1, final_hold_seconds=1)
+    assert len(frames) == 4
+    assert frames[0].visibility.completed_stroke_ids == frozenset({"lower-late", "lower-early"})
+    assert frames[1].visibility.completed_stroke_ids == frozenset(page.replay_order)
+    assert frames[-1].visibility == frames[1].visibility
+
+
+def test_duration_schedule_preserves_partial_directional_reveal():
+    from rm_redraw.replay.schedule import duration_schedule
+
+    frames = duration_schedule(_page(), fps=4, duration_seconds=1)
+    assert frames[0].visibility.active_stroke_id == "first"
+    assert frames[0].visibility.active_progress == 0.5
+    assert frames[2].visibility.active_stroke_id == "second"
+    assert frames[2].visibility.active_progress == 0.5

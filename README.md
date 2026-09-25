@@ -1,5 +1,10 @@
 # rm-redraw
 
+## Try the local replay utility
+
+Run `./scripts/start-replay.ps1`, then open **http://127.0.0.1:8765**. Browse/import notebooks over read-only USB or upload an existing `.rmdoc`, select a page, and generate/play/download a replay. Imported notebooks work offline. [Usage and limitations](docs/local-replay-utility.md).
+
+
 Local, read-only tooling for acquiring native reMarkable documents, parsing complete stroke metadata, replaying strokes, and developing a renderer against tablet-native PDF exports.
 
 The source brief is [Codex Brief — reMarkable Stroke Replay + High-Fidelity Renderer.md](./Codex%20Brief%20%E2%80%94%20reMarkable%20Stroke%20Replay%20%2B%20High-Fidelity%20Renderer.md). Current kickoff evidence is in [plans/kickoff-readiness.md](plans/kickoff-readiness.md), and shared interfaces are frozen in [docs/contracts.md](docs/contracts.md).

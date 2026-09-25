@@ -45,10 +45,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=("stroke-step", "seconds-per-stroke", "distance-per-second"),
+        choices=("stroke-step", "seconds-per-stroke", "distance-per-second", "duration"),
         default="stroke-step",
     )
     parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--duration", type=float, help="drawing seconds for fixed-duration mode")
     parser.add_argument("--seconds-per-stroke", type=float)
     parser.add_argument("--distance-per-second", type=float)
     parser.add_argument("--initial-pause", type=float, default=0.0)
@@ -107,6 +108,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             fps=args.fps,
             seconds_per_stroke=args.seconds_per_stroke,
             distance_per_second=args.distance_per_second,
+            duration_seconds=args.duration,
             initial_pause_seconds=args.initial_pause,
             pause_between_strokes_seconds=args.pause_between_strokes,
             final_hold_seconds=args.final_hold,

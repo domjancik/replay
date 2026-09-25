@@ -16,6 +16,39 @@ class ReplayFrame:
     visibility: VisibilityState
 
 
+def duration_schedule(
+    page: NormalizedPage,
+    *,
+    fps: int,
+    duration_seconds: float,
+    initial_pause_seconds: float = 0.0,
+    final_hold_seconds: float = 0.0,
+) -> tuple[ReplayFrame, ...]:
+    """Sample an equal-time-per-stroke timeline at a fixed video duration.
+
+    Several short strokes may complete between video frames. Their deposition
+    and compositing order remain unchanged in the renderer.
+    """
+    if fps <= 0 or not isfinite(duration_seconds) or duration_seconds <= 0:
+        raise ValueError("fps and duration_seconds must be finite and positive")
+    _validate_pacing(initial_pause_seconds, 0, final_hold_seconds)
+    order = _layered_replay_order(page)
+    frames: list[ReplayFrame] = []
+    _append_hold(frames, VisibilityState(), fps=fps, seconds=initial_pause_seconds)
+    count = max(1, ceil(fps * duration_seconds))
+    for index in range(1, count + 1):
+        # Integer division avoids losing an exact stroke boundary to float error.
+        completed_count, remainder = divmod(index * len(order), count)
+        visibility = VisibilityState(
+            frozenset(order[:completed_count]),
+            order[completed_count] if remainder else None,
+            remainder / count,
+        )
+        frames.append(ReplayFrame(len(frames), len(frames) / fps, visibility))
+    _append_hold(frames, frames[-1].visibility, fps=fps, seconds=final_hold_seconds)
+    return tuple(frames)
+
+
 def _layered_replay_order(page: NormalizedPage) -> tuple[str, ...]:
     """Order visible layers by compositing order, preserving per-layer replay order."""
     group_by_stroke = {stroke.stroke_id: stroke.group_id for stroke in page.strokes}

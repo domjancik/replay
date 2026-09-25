@@ -1,0 +1,275 @@
+"""One-at-a-time local replay jobs, using the existing CLI unchanged."""
+
+import json
+import math
+import os
+import subprocess
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
+from pathlib import Path
+from uuid import uuid4
+from zipfile import ZipFile
+
+from rm_redraw.parsing import parse_page
+from rm_redraw.pipeline import to_render_page
+from rm_redraw.replay.schedule import _layered_replay_order
+
+from .library import Library
+
+
+def validate_settings(data: dict) -> dict:
+    def number(key, low, high, *, integer=False):
+        value = data.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{key} must be a number")
+        if not math.isfinite(value) or not low <= value <= high:
+            raise ValueError(f"{key} must be between {low} and {high}")
+        if integer and int(value) != value:
+            raise ValueError(f"{key} must be an integer")
+        return int(value) if integer else value
+
+    width = number("width", 64, 4096, integer=True)
+    height = number("height", 64, 8192, integer=True)
+    if width * height > 12_000_000:
+        raise ValueError("Canvas exceeds the local utility's 12 megapixel limit")
+    output = number("output_width", 128, 1404, integer=True)
+    output += output % 2
+    out_height = max(2, round(output * height / width / 2) * 2)
+    if out_height > 4096:
+        raise ValueError("Output is too tall; reduce output width")
+    seconds = number("seconds", 2, 60)
+    fps = number("fps", 6, 30, integer=True)
+    backend = data.get("backend")
+    if backend not in ("python", "rust"):
+        raise ValueError("Unknown pencil backend")
+    return {
+        "paper_size": (width, height),
+        "source_affine": (
+            1,
+            0,
+            0,
+            1,
+            number("offset_x", -8192, 8192),
+            number("offset_y", -8192, 8192),
+        ),
+        "viewport": (output, out_height),
+        "seconds": seconds,
+        "fps": fps,
+        "backend": backend,
+    }
+
+
+def page_info(library: Library, document_id: str, page_id: str) -> tuple[dict, object]:
+    document = library.get(document_id)
+    entry = next((p for p in document["pages"] if p["id"] == page_id), None)
+    if entry is None or not entry["available"]:
+        raise ValueError("This page has no saved stroke data")
+    with ZipFile(library.source(document_id)) as archive:
+        parsed = parse_page(BytesIO(archive.read(entry["member"])), page_id=page_id)
+    return {
+        "number": entry["number"],
+        "strokes": len(parsed.strokes),
+        "paper_size": parsed.paper_size,
+        "unresolved_anchors": sum(not s.effective_transform.resolved for s in parsed.strokes),
+        "warnings": list(parsed.diagnostics.warnings),
+    }, parsed
+
+
+class Jobs:
+    def __init__(self, root: Path, library: Library):
+        self.root = root.resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.library = library
+        self.lock = threading.RLock()
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="replay")
+        self.jobs = {}
+        self.processes = {}
+        for path in self.root.glob("*/job.json"):
+            job = json.loads(path.read_text(encoding="utf-8"))
+            if job["state"] in ("queued", "running"):
+                job.update(state="interrupted", error="Server stopped before this job finished")
+            self.jobs[job["id"]] = job
+
+    def _save(self, job):
+        folder = self.root / job["id"]
+        folder.mkdir(exist_ok=True)
+        path = folder / "job.json"
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(job, indent=2), encoding="utf-8")
+        temporary.replace(path)
+
+    def submit(self, document_id: str, page_id: str, settings: dict) -> dict:
+        config = validate_settings(settings)
+        document = self.library.get(document_id)
+        info, parsed = page_info(self.library, document_id, page_id)
+        if info["unresolved_anchors"] and not document["has_pdf"]:
+            raise ValueError(
+                "This page needs text-anchor placement. Import it from USB with "
+                "the matching PDF enabled, then retry."
+            )
+        if config["backend"] == "rust":
+            from rm_redraw.rendering.native_pencil import native_info
+
+            native_info()
+        page = to_render_page(
+            parsed,
+            paper_size=config["paper_size"],
+            source_to_page_transform=config["source_affine"],
+        )
+        count = len(_layered_replay_order(page))
+        if not count:
+            raise ValueError("Page has no visible strokes to replay")
+        with self.lock:
+            if sum(j["state"] in ("queued", "running") for j in self.jobs.values()) >= 8:
+                raise ValueError("Queue is full (8 jobs); wait for a job to finish")
+            job = {
+                "id": uuid4().hex,
+                "name": document["name"],
+                "page": info["number"],
+                "document_id": document_id,
+                "page_id": page_id,
+                "settings": config,
+                "state": "queued",
+                "created": time.time(),
+                "strokes": count,
+                "expected_frames": math.ceil(config["seconds"] * config["fps"]) + config["fps"],
+            }
+            self.jobs[job["id"]] = job
+            self._save(job)
+            self.executor.submit(self._run, job["id"])
+            return dict(job)
+
+    def _run(self, job_id):
+        with self.lock:
+            job = self.jobs[job_id]
+            if job["state"] != "queued":
+                return
+            job.update(state="running", started=time.time())
+            self._save(job)
+        try:
+            document = self.library.get(job["document_id"])
+            config = job["settings"]
+            output = self.root / job_id / "output"
+            args = [
+                sys.executable,
+                "-m",
+                "rm_redraw.replay",
+                str(self.library.source(job["document_id"])),
+                "--output",
+                str(output),
+                "--page-id",
+                job["page_id"],
+                "--paper-size",
+                *map(str, config["paper_size"]),
+                "--source-affine",
+                *map(str, config["source_affine"]),
+                "--viewport",
+                *map(str, config["viewport"]),
+                "--fps",
+                str(config["fps"]),
+                "--mode",
+                "duration",
+                "--duration",
+                str(config["seconds"]),
+                "--final-hold",
+                "1",
+                "--pencil-backend",
+                config["backend"],
+            ]
+            if document["has_pdf"]:
+                args += [
+                    "--auto-text-anchors",
+                    "--paired-native-pdf",
+                    str(self.library.source(job["document_id"]).with_name("native.pdf")),
+                    "--paired-pdf-page",
+                    str(job["page"]),
+                    "--export-canvas",
+                    *map(str, config["paper_size"]),
+                ]
+            with (self.root / job_id / "render.log").open("wb") as log:
+                with self.lock:
+                    if job["state"] == "cancelled":
+                        return
+                    process = subprocess.Popen(
+                        args,
+                        stdout=log,
+                        stderr=log,
+                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                    )
+                    self.processes[job_id] = process
+                code = process.wait()
+            with self.lock:
+                self.processes.pop(job_id, None)
+                if job["state"] == "cancelled":
+                    return
+                if code:
+                    detail = (self.root / job_id / "render.log").read_text(
+                        encoding="utf-8", errors="replace"
+                    )[-2500:]
+                    raise ValueError(detail or f"Renderer exited with status {code}")
+                manifest = json.loads((output / "manifest.json").read_text())
+                if (
+                    not manifest["final_frame_matches_static"]
+                    or not (output / "replay.mp4").exists()
+                ):
+                    raise ValueError("Replay did not pass final-frame verification")
+                job.update(
+                    state="complete", finished=time.time(), expected_frames=manifest["frame_count"]
+                )
+                self._save(job)
+        except Exception as error:
+            with self.lock:
+                if job["state"] != "cancelled":
+                    job.update(state="failed", error=str(error), finished=time.time())
+                    self._save(job)
+
+    def cancel(self, job_id):
+        with self.lock:
+            job = self.jobs[job_id]
+            if job["state"] not in ("queued", "running"):
+                return
+            job.update(state="cancelled", finished=time.time())
+            self._save(job)
+            process = self.processes.get(job_id)
+            if process is not None and process.poll() is None:
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                        capture_output=True,
+                        check=False,
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                    )
+                else:
+                    process.terminate()
+
+    def list(self):
+        with self.lock:
+            result = []
+            for job in sorted(self.jobs.values(), key=lambda j: j["created"], reverse=True):
+                count = len(list((self.root / job["id"] / "output/frames").glob("frame_*.png")))
+                result.append({**job, "frames": count})
+            return result
+
+    def media(self, job_id, filename) -> Path:
+        with self.lock:
+            if job_id not in self.jobs:
+                raise ValueError("Unknown job")
+            folder = self.root / job_id / "output"
+            if filename == "latest.png":
+                frames = sorted((folder / "frames").glob("frame_*.png"))
+                if len(frames) < 2:
+                    raise ValueError("No preview yet")
+                return frames[-2]  # The latest file may still be being written.
+            if filename not in ("static.png", "replay.mp4", "manifest.json"):
+                raise ValueError("Unknown output")
+            if self.jobs[job_id]["state"] != "complete":
+                raise ValueError("Output is not complete")
+            return folder / filename
+
+    def close(self):
+        for job in self.list():
+            self.cancel(job["id"])
+        self.executor.shutdown(wait=True, cancel_futures=True)

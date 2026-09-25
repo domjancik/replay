@@ -36,12 +36,13 @@ from rm_redraw.rendering.types import VisibilityState
 from .output import encode_h264, render_png_sequence, write_png
 from .schedule import (
     ReplayFrame,
+    duration_schedule,
     progressive_distance_schedule,
     progressive_stroke_schedule,
     stroke_step_schedule,
 )
 
-ReplayMode = Literal["stroke-step", "seconds-per-stroke", "distance-per-second"]
+ReplayMode = Literal["stroke-step", "seconds-per-stroke", "distance-per-second", "duration"]
 
 
 class ReplayCommandError(ValueError):
@@ -311,13 +312,26 @@ def _frames_for_mode(
     fps: int,
     seconds_per_stroke: float | None,
     distance_per_second: float | None,
+    duration_seconds: float | None = None,
     initial_pause_seconds: float,
     pause_between_strokes_seconds: float,
     final_hold_seconds: float,
 ) -> tuple[ReplayFrame, ...]:
     if fps <= 0:
         raise ReplayCommandError("--fps must be positive")
-    if mode == "stroke-step":
+    if mode == "duration":
+        if duration_seconds is None or not math.isfinite(duration_seconds) or duration_seconds <= 0:
+            raise ReplayCommandError("--duration must be finite and positive")
+        if pause_between_strokes_seconds:
+            raise ReplayCommandError("--pause-between-strokes is unsupported with duration mode")
+        frames = duration_schedule(
+            page,
+            fps=fps,
+            duration_seconds=duration_seconds,
+            initial_pause_seconds=initial_pause_seconds,
+            final_hold_seconds=final_hold_seconds,
+        )
+    elif mode == "stroke-step":
         frames = stroke_step_schedule(
             page,  # type: ignore[arg-type]
             fps=fps,
@@ -386,6 +400,7 @@ def run_local_replay(
     fps: int = 30,
     seconds_per_stroke: float | None = None,
     distance_per_second: float | None = None,
+    duration_seconds: float | None = None,
     initial_pause_seconds: float = 0.0,
     pause_between_strokes_seconds: float = 0.0,
     final_hold_seconds: float = 0.0,
@@ -520,6 +535,7 @@ def run_local_replay(
         fps=fps,
         seconds_per_stroke=seconds_per_stroke,
         distance_per_second=distance_per_second,
+        duration_seconds=duration_seconds,
         initial_pause_seconds=initial_pause_seconds,
         pause_between_strokes_seconds=pause_between_strokes_seconds,
         final_hold_seconds=final_hold_seconds,
@@ -611,6 +627,7 @@ def run_local_replay(
             "fps": fps,
             "seconds_per_stroke": seconds_per_stroke,
             "distance_per_second": distance_per_second,
+            "duration_seconds": duration_seconds,
             "initial_pause_seconds": initial_pause_seconds,
             "pause_between_strokes_seconds": pause_between_strokes_seconds,
             "final_hold_seconds": final_hold_seconds,
