@@ -30,3 +30,6 @@ diff/
 *.key
 *.pem
 
+
+# User-supplied native app reference rasters.
+fixtures/RM-REDRAW-ALL-REFERENCES-TILT-20260925/
