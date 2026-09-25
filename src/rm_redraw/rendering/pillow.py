@@ -85,7 +85,7 @@ class PillowRenderer:
                 cache.layer = Image.new("RGBA", cache.base.size, (0, 0, 0, 0))
                 cache.group_id = stroke.group_id
             if stroke.points:
-                _draw_stroke(cache.layer, stroke.points, stroke, page, cache.viewport)
+                _draw_stroke(cache.layer, stroke.points, stroke, page, cache.viewport, options)
         cache.completed_count = count
 
         result = cache.base.copy()
@@ -100,7 +100,7 @@ class PillowRenderer:
             active_layer = Image.new("RGBA", result.size, (0, 0, 0, 0))
         points = _visible_points(stroke, visibility)
         if points:
-            _draw_stroke(active_layer, points, stroke, page, cache.viewport)
+            _draw_stroke(active_layer, points, stroke, page, cache.viewport, options)
         result.alpha_composite(active_layer)
         return result
 
@@ -146,7 +146,7 @@ class PillowRenderer:
             for stroke in strokes_by_group.get(group_id, []):
                 points = _visible_points(stroke, visibility)
                 if points:
-                    _draw_stroke(layer, points, stroke, page, viewport)
+                    _draw_stroke(layer, points, stroke, page, viewport, options)
             image.alpha_composite(layer)
         return image
 
@@ -182,6 +182,7 @@ def _draw_stroke(
     stroke: NormalizedStroke,
     page: NormalizedPage,
     viewport: Viewport,
+    options: RenderOptions,
 ) -> None:
     if page.paper_size is None:
         raise ValueError("a page without paper_size requires an explicit transform")
@@ -202,7 +203,9 @@ def _draw_stroke(
         return
     if stroke.tool_code in TEXTURED_CODES or stroke.tool_name in TEXTURED_NAMES:
         length = sum(hypot(b.x - a.x, b.y - a.y) for a, b in zip(points, points[1:], strict=False))
-        draw_texture(layer, stroke, length, scale_x, scale_y)
+        draw_texture(
+            layer, stroke, length, scale_x, scale_y, pencil_boundary=options.pencil_boundary
+        )
         return
     if stroke.tool_code == 6 or stroke.tool_name == "ERASER":
         _erase_stroke(

@@ -50,22 +50,30 @@ def test_texture_has_grain_and_pressure_response(tool):
 
 
 @pytest.mark.parametrize("tool", [12, 13, 14])
-def test_texture_prefix_stays_fixed_and_final_matches(tool):
+@pytest.mark.parametrize("pressure", [128, 255])
+@pytest.mark.parametrize("boundary", [False, True])
+def test_texture_prefix_stays_fixed_and_final_matches(tool, pressure, boundary):
     renderer = PillowRenderer()
-    model = page(tool)
+    model = page(tool, pressure=pressure)
     a = renderer.render(
-        model, RenderOptions(), VisibilityState(active_stroke_id="grain", active_progress=0.4)
+        model,
+        RenderOptions(pencil_boundary=boundary),
+        VisibilityState(active_stroke_id="grain", active_progress=0.4),
     )
     b = renderer.render(
-        model, RenderOptions(), VisibilityState(active_stroke_id="grain", active_progress=0.8)
+        model,
+        RenderOptions(pencil_boundary=boundary),
+        VisibilityState(active_stroke_id="grain", active_progress=0.8),
     )
     assert a.crop((0, 0, 65, 80)).tobytes() == b.crop((0, 0, 65, 80)).tobytes()
     assert a.getpixel((140, 40)) == (255, 255, 255, 255)
     assert (
         renderer.render(
-            model, RenderOptions(), VisibilityState(active_stroke_id="grain", active_progress=1)
+            model,
+            RenderOptions(pencil_boundary=boundary),
+            VisibilityState(active_stroke_id="grain", active_progress=1),
         ).tobytes()
-        == renderer.render_static(model, RenderOptions()).tobytes()
+        == renderer.render_static(model, RenderOptions(pencil_boundary=boundary)).tobytes()
     )
 
 
@@ -140,7 +148,9 @@ def test_current_brush_speed_reduces_ink_and_low_pressure_has_no_ink():
 def test_current_pencil_grain_contains_clear_paper_and_dark_grains(tool):
     model = page(tool, 128)
     model = replace(model, strokes=(replace(model.strokes[0], rgba=(0, 0, 0, 255)),))
-    pixels = np.asarray(PillowRenderer().render_static(model, RenderOptions()))[38:42, 30:160, 0]
+    pixels = np.asarray(PillowRenderer().render_static(model, RenderOptions(pencil_boundary=True)))[
+        38:42, 30:160, 0
+    ]
     assert np.mean(pixels < 30) > 0.1
     assert np.mean(pixels > 245) > 0.1
 
@@ -176,8 +186,24 @@ def test_current_pencil_pressure_coverage_is_monotone_with_soft_and_hard_regimes
     assert _pencil_coverage(2) == 1
 
 
+@pytest.mark.parametrize("tool", [13, 14])
+def test_full_pressure_pencil_retains_irregular_bounded_outline(tool):
+    model = page(tool, pressure=255)
+    stroke = replace(model.strokes[0], rgba=(0, 0, 0, 255))
+    model = replace(model, strokes=(stroke,))
+    pixels = np.asarray(PillowRenderer().render_static(model, RenderOptions(pencil_boundary=True)))
+    darkness = 255 - pixels[:, 30:160, 0].astype(float)
+    # Full pressure fills the interior without turning the footprint into a
+    # perfectly smooth capsule. Variation is local, not uniform widening.
+    assert np.std(darkness.sum(axis=0)) > 10
+    assert np.all(darkness[38:42] == 255)
+    assert np.all(darkness[:34] == 0)
+    assert np.all(darkness[46:] == 0)
+
+
 @pytest.mark.parametrize("angle", [0, 30, 45, 60, 90, 135])
-def test_pressure_response_remains_monotone_across_actual_path_angles(angle):
+@pytest.mark.parametrize("boundary", [False, True])
+def test_pressure_response_remains_monotone_across_actual_path_angles(angle, boundary):
     """Path rotation and stored direction are independent fixture variables."""
     angle = radians(angle)
     model = page(14)
@@ -198,7 +224,9 @@ def test_pressure_response_remains_monotone_across_actual_path_angles(angle):
             for distance in range(-70, 71, 5)
         )
         fixture = replace(model, strokes=(replace(model.strokes[0], points=points),))
-        pixels = np.asarray(renderer.render_static(fixture, RenderOptions()))[:, :, :3]
+        pixels = np.asarray(
+            renderer.render_static(fixture, RenderOptions(pencil_boundary=boundary))
+        )[:, :, :3]
         if previous is not None:
             assert np.all(pixels <= previous)
         else:
@@ -206,3 +234,17 @@ def test_pressure_response_remains_monotone_across_actual_path_angles(angle):
         masses.append(float((255 - pixels).sum()))
         previous = pixels
     assert all(a < b for a, b in zip(masses[:-1], masses[1:], strict=True))
+
+
+def test_pencil_boundary_is_opt_in_and_invalidates_prefix_cache():
+    model = page(14, pressure=255)
+    renderer = PillowRenderer()
+    complete = VisibilityState(frozenset(model.replay_order))
+    plain = renderer.render(model, RenderOptions(), complete)
+    textured = renderer.render(model, RenderOptions(pencil_boundary=True), complete)
+    assert plain.tobytes() != textured.tobytes()
+    assert (
+        textured.tobytes()
+        == renderer.render_static(model, RenderOptions(pencil_boundary=True)).tobytes()
+    )
+    assert plain.tobytes() == renderer.render(model, RenderOptions(), complete).tobytes()

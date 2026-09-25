@@ -393,6 +393,7 @@ def run_local_replay(
     replay_strategy: Literal["crdt-order", "scene-order"] = "crdt-order",
     text_anchor_layout: str | Path | TextAnchorLayout | None = None,
     auto_text_anchors: bool = False,
+    pencil_boundary: bool = False,
 ) -> ReplayResult:
     """Parse and replay one local page into a new deterministic output directory."""
     if auto_text_anchors and text_anchor_layout is not None:
@@ -493,7 +494,7 @@ def run_local_replay(
         resolved_viewport = Viewport(*viewport) if viewport is not None else None
     except (TypeError, ValueError) as error:
         raise ReplayCommandError(f"invalid --viewport: {error}") from error
-    options = RenderOptions(viewport=resolved_viewport)
+    options = RenderOptions(viewport=resolved_viewport, pencil_boundary=pencil_boundary)
     for option_name, duration in (
         ("--initial-pause", initial_pause_seconds),
         ("--pause-between-strokes", pause_between_strokes_seconds),
@@ -618,7 +619,11 @@ def run_local_replay(
             "simple_profile": "current-simple-geometry-v1",
             "marker_profile": "provisional-marker-envelope-v1",
             "highlighter_blend_scope": "within-layer-darken",
-            "texture_profile": "experimental-texture-v4-pressure-curve",
+            "texture_profile": (
+                "experimental-texture-v5-sparse-boundary"
+                if pencil_boundary
+                else "experimental-texture-v4-pressure-curve"
+            ),
             "texture_native_calibrated": False,
             "calligraphy_profile": "provisional-calligraphy-raw-width-v1",
             "calligraphy_antialiasing": "4x-pixel-center-area-coverage",

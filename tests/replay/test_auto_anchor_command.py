@@ -87,7 +87,8 @@ def _native(path, *, ambiguous=False):
     return path
 
 
-def test_auto_anchors_apply_native_match_and_record_provenance(tmp_path):
+@pytest.mark.parametrize("boundary", [False, True])
+def test_auto_anchors_apply_native_match_and_record_provenance(tmp_path, boundary):
     source = _source(tmp_path / "source.rm")
     original = source.read_bytes()
     native = _native(tmp_path / "native.pdf")
@@ -98,6 +99,7 @@ def test_auto_anchors_apply_native_match_and_record_provenance(tmp_path):
                 str(source),
                 "--output",
                 str(output),
+                *(["--pencil-boundary"] if boundary else []),
                 "--auto-text-anchors",
                 "--paired-native-pdf",
                 str(native),
@@ -116,7 +118,11 @@ def test_auto_anchors_apply_native_match_and_record_provenance(tmp_path):
         == 0
     )
     manifest = json.loads((output / "manifest.json").read_text())
-    assert manifest["backend"]["texture_profile"] == "experimental-texture-v4-pressure-curve"
+    assert manifest["backend"]["texture_profile"] == (
+        "experimental-texture-v5-sparse-boundary"
+        if boundary
+        else "experimental-texture-v4-pressure-curve"
+    )
     assert manifest["backend"]["calligraphy_profile"] == "provisional-calligraphy-raw-width-v1"
     assert manifest["backend"]["calligraphy_antialiasing"] == "4x-pixel-center-area-coverage"
     assert manifest["backend"]["texture_native_calibrated"] is False

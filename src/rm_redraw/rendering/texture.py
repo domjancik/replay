@@ -36,6 +36,8 @@ def draw_texture(
     visible_length: float,
     scale_x: float,
     scale_y: float,
+    *,
+    pencil_boundary: bool = False,
 ) -> None:
     """Deposit only reached samples; never mask a pre-rendered future stroke."""
     current = stroke.tool_code in {12, 13, 14} or stroke.tool_name in {
@@ -105,6 +107,7 @@ def draw_texture(
                 scale_y,
                 stroke.rgba[3],
                 current,
+                pencil_boundary,
             )
             next_sample += 0.5
         traversed += length
@@ -148,11 +151,16 @@ def _dab(
     scale_y: float,
     opacity: int,
     current: bool = False,
+    pencil_boundary: bool = False,
 ) -> None:
-    left = max(0, floor((x - radius) * scale_x - 1))
-    right = min(alpha.shape[1], ceil((x + radius) * scale_x + 1))
-    top = max(0, floor((y - radius) * scale_y - 1))
-    bottom = min(alpha.shape[0], ceil((y + radius) * scale_y + 1))
+    boundary_amplitude = (
+        min(0.75, radius * 0.3) if pencil_boundary and current and not brush else 0.0
+    )
+    extent = radius + boundary_amplitude
+    left = max(0, floor((x - extent) * scale_x - 1))
+    right = min(alpha.shape[1], ceil((x + extent) * scale_x + 1))
+    top = max(0, floor((y - extent) * scale_y - 1))
+    bottom = min(alpha.shape[0], ceil((y + extent) * scale_y + 1))
     if right <= left or bottom <= top:
         return
     yy, xx = np.mgrid[top:bottom, left:right]
@@ -162,7 +170,18 @@ def _dab(
     across = -dx * sin(angle) + dy * cos(angle)
     aspect = 0.45 if brush and not current else 1.0
     distance = np.sqrt((along / radius) ** 2 + (across / (radius * aspect)) ** 2)
-    edge = np.clip((1 - distance) * radius * min(scale_x, scale_y) + 0.5, 0, 1)
+    boundary = 0.0
+    if boundary_amplitude:
+        # A separate paper-coordinate field perturbs only the signed boundary.
+        # Keep it pressure-independent so increasing occupancy cannot erase ink.
+        # This is an empirical outline model, not native grain reconstruction.
+        bx = np.floor(sx * 1.25).astype(np.uint64)
+        by = np.floor(sy * 1.25).astype(np.uint64)
+        noise = (bx * 374761393 + by * 668265263 + 193) & 0xFFFFFFFF
+        noise = ((noise ^ (noise >> 13)) * 1274126177) & 0xFFFFFFFF
+        field = (noise & 65535) / 65535.0
+        boundary = boundary_amplitude * ((field > 0.94).astype(float) - (field < 0.06))
+    edge = np.clip(((1 - distance) * radius + boundary) * min(scale_x, scale_y) + 0.5, 0, 1)
     # Integer hash: stable across processes, frames, crops and Python hash seeds.
     frequency = 0.75 if current and not brush else 1.5
     if current and not brush:

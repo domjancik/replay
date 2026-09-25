@@ -62,6 +62,7 @@ class Viewport:
 class RenderOptions:
     viewport: Viewport | None = None
     background: Color = (255, 255, 255, 255)
+    pencil_boundary: bool = False
 
 
 @dataclass(frozen=True, slots=True)

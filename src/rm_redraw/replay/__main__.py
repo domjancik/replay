@@ -74,6 +74,14 @@ def _parser() -> argparse.ArgumentParser:
             "offsets keyed by CRDT anchor ID"
         ),
     )
+    parser.add_argument(
+        "--pencil-boundary",
+        action="store_true",
+        help=(
+            "experimental sparse pencil outline; improves edge variation "
+            "with small pixel-error regressions"
+        ),
+    )
     return parser
 
 
@@ -100,6 +108,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             replay_strategy=args.replay_strategy,
             text_anchor_layout=args.text_anchor_layout,
             auto_text_anchors=args.auto_text_anchors,
+            pencil_boundary=args.pencil_boundary,
         )
     except ReplayCommandError as error:
         print(f"error: {error}", file=sys.stderr)
