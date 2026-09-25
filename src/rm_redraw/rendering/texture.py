@@ -60,6 +60,7 @@ def draw_texture(
     scale_y *= supersample
     alpha = np.zeros((layer.height * supersample, layer.width * supersample), dtype=np.uint8)
     points = stroke.points
+    dirty: tuple[int, int, int, int] | None = None
     traversed = 0.0
     next_sample = 0.0
     # Fixed source-space spacing makes each prefix an identical deposition history.
@@ -96,6 +97,27 @@ def draw_texture(
                 if radius < 0.3:
                     next_sample += 0.5
                     continue
+            # Conservative output-pixel bounds retain the global sampling phase.
+            # Crop before area averaging: processing an untouched full-page mask
+            # for every small stroke is unnecessarily expensive at source scale.
+            extent = radius * 2 + 2 + 1 / min(scale_x, scale_y)
+            bounds = (
+                max(0, floor((x - extent) * scale_x / supersample)),
+                max(0, floor((y - extent) * scale_y / supersample)),
+                min(layer.width, ceil((x + extent) * scale_x / supersample)),
+                min(layer.height, ceil((y + extent) * scale_y / supersample)),
+            )
+            if bounds[2] > bounds[0] and bounds[3] > bounds[1]:
+                dirty = (
+                    bounds
+                    if dirty is None
+                    else (
+                        min(dirty[0], bounds[0]),
+                        min(dirty[1], bounds[1]),
+                        max(dirty[2], bounds[2]),
+                        max(dirty[3], bounds[3]),
+                    )
+                )
             if app_pencil:
                 pencil_dab(alpha, x, y, radius, pressure, scale_x, scale_y, stroke.rgba[3])
             else:
@@ -119,12 +141,16 @@ def draw_texture(
         traversed += length
         if traversed > visible_length:
             break
-    overlay = Image.new("RGBA", layer.size, stroke.rgba[:3] + (0,))
-    mask = Image.fromarray(alpha)
+    if dirty is None:
+        return
+    left, top, right, bottom = dirty
+    size = (right - left, bottom - top)
+    overlay = Image.new("RGBA", size, stroke.rgba[:3] + (0,))
+    mask = Image.fromarray(alpha).crop(tuple(v * supersample for v in dirty))
     if supersample > 1:
-        mask = mask.resize(layer.size, Image.Resampling.BOX)
+        mask = mask.resize(size, Image.Resampling.BOX)
     overlay.putalpha(mask)
-    layer.alpha_composite(overlay)
+    layer.alpha_composite(overlay, dest=(left, top))
 
 
 def _pencil_coverage(pressure: float) -> float:

@@ -1,7 +1,8 @@
 """Experimental current-pencil profile fitted to app-exported PNG controls.
 
-Paper-coordinate grain and a separate rough edge survive full pressure and
-remain fixed during reveal. This is a statistical approximation, not a copy
+Fine paper-coordinate grain, coarse occupancy and a separate rough edge
+remain fixed during reveal. Sparse pinholes survive full pressure. This is a
+statistical approximation, not a copy
 of the proprietary texture. Current pencil and mechanical pencil share it.
 """
 
@@ -11,7 +12,7 @@ import numpy as np
 
 
 def pressure_coverage(pressure: float) -> float:
-    """Binary paper occupancy; high pressure retains sparse white pinholes."""
+    """Base paper occupancy; high pressure retains sparse white pinholes."""
     return float(
         np.interp(
             pressure,
@@ -27,7 +28,7 @@ def pressure_coverage(pressure: float) -> float:
                 224 / 255,
                 1,
             ),
-            (0, 0.018, 0.032, 0.123, 0.250, 0.405, 0.570, 0.755, 0.880, 0.970),
+            (0, 0.0173, 0.0302, 0.1222, 0.2441, 0.4060, 0.5693, 0.7619, 0.8822, 0.970),
         )
     )
 
@@ -38,6 +39,20 @@ def _field(x: np.ndarray, y: np.ndarray, frequency: float, seed: int) -> np.ndar
     noise = (hx * 374761393 + hy * 668265263 + seed) & 0xFFFFFFFF
     noise = ((noise ^ (noise >> 13)) * 1274126177) & 0xFFFFFFFF
     return (noise & 65535) / 65535.0
+
+
+def coverage_threshold(x: np.ndarray, y: np.ndarray, pressure: float) -> np.ndarray:
+    """Monotone four-source-unit occupancy modulation over one-unit grains.
+
+    The weak coarse field groups grains without making whole strokes darker.
+    Pressure knots were refitted on the same 27 horizontal app-PNG controls;
+    two/four/eight-pixel patch statistics constrain the modulation. A fixed
+    paper field changes deposition odds, not ink opacity or recorded width.
+    At maximum pressure the threshold is uniformly .97, preserving pinholes.
+    """
+    occupancy = pressure_coverage(pressure) / 0.97
+    gain = np.exp(0.5 * (2 * _field(x, y, 0.25, 917) - 1))
+    return 0.97 * occupancy * gain / (1 - occupancy + occupancy * gain)
 
 
 def dab(
@@ -71,6 +86,8 @@ def dab(
     boundary = amplitude * (2 * _field(sx, sy, 1.0, 193) - 1)
     edge = np.clip((radius - distance + boundary) * min(scale_x, scale_y) + 0.5, 0, 1)
     grain = _field(sx, sy, 1.0, 0)
-    coverage = np.rint(edge * (grain < pressure_coverage(pressure)) * opacity).astype(np.uint8)
+    coverage = np.rint(edge * (grain < coverage_threshold(sx, sy, pressure)) * opacity).astype(
+        np.uint8
+    )
     region = alpha[top:bottom, left:right]
     np.maximum(region, coverage, out=region)

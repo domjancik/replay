@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import ceil, floor, hypot, sqrt
 
 from PIL import Image, ImageChops, ImageDraw
@@ -56,6 +56,12 @@ class PillowRenderer:
         options: RenderOptions,
         visibility: VisibilityState,
     ) -> Image.Image:
+        composition = _composition_options(page, options)
+        if composition is not None:
+            viewport = _resolve_viewport(page, options)
+            return self.render(page, composition, visibility).resize(
+                (viewport.width, viewport.height), Image.Resampling.BOX
+            )
         cache = self._prefix_cache
         if cache is None or cache.page is not page or cache.options != options:
             cache = self._new_prefix_cache(page, options)
@@ -132,6 +138,12 @@ class PillowRenderer:
         options: RenderOptions,
         visibility: VisibilityState,
     ) -> Image.Image:
+        composition = _composition_options(page, options)
+        if composition is not None:
+            viewport = _resolve_viewport(page, options)
+            return PillowRenderer._render_uncached(page, composition, visibility).resize(
+                (viewport.width, viewport.height), Image.Resampling.BOX
+            )
         viewport = _resolve_viewport(page, options)
         image = Image.new("RGBA", (viewport.width, viewport.height), options.background)
         strokes_by_group = {group.group_id: [] for group in page.groups}
@@ -156,6 +168,40 @@ class PillowRenderer:
             options,
             VisibilityState(frozenset(stroke.stroke_id for stroke in page.strokes)),
         )
+
+
+def _composition_options(page: NormalizedPage, options: RenderOptions) -> RenderOptions | None:
+    """Keep current paper grain at source resolution until all ink is composited.
+
+    Reducing each stroke first creates fractional paper coverage that becomes
+    darker on every repeat. Ordinary ordered source-over is retained at the
+    source raster, then the complete frame is reduced exactly once.
+    """
+    if page.paper_size is None:
+        return None
+    visible_groups = {g.group_id for g in page.groups if g.visible}
+    eligible_groups = visible_groups.intersection(page.compositing_order)
+    textured = any(
+        stroke.tool_code == 12
+        or stroke.tool_name == "PAINTBRUSH_2"
+        or (
+            not options.pencil_boundary
+            and (
+                stroke.tool_code in {13, 14}
+                or stroke.tool_name in {"PENCIL_2", "MECHANICAL_PENCIL_2"}
+            )
+        )
+        for stroke in page.strokes
+        if stroke.group_id in eligible_groups
+    )
+    if not textured:
+        return None
+    viewport = _resolve_viewport(page, options)
+    width = max(viewport.width, round(page.paper_size[0]))
+    height = max(viewport.height, round(page.paper_size[1]))
+    if (width, height) == (viewport.width, viewport.height):
+        return None
+    return replace(options, viewport=Viewport(width, height))
 
 
 def _resolve_viewport(page: NormalizedPage, options: RenderOptions) -> Viewport:

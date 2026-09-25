@@ -33,9 +33,23 @@ def brush_coverage(
     The caller applies explicit stroke alpha once and area-averages samples.
     """
     occupancy = float(
-        np.interp(pressure, (0, 16 / 255, 64 / 255, 128 / 255, 1), (0, 0, 0.24, 1, 1))
+        np.interp(pressure, (0, 16 / 255, 64 / 255, 128 / 255, 1), (0, 0, 0.335, 1, 1))
     )
-    grain = _field(source_x, source_y, 1.5, 0)
+    # Correlated source-space clusters preserve opaque deposits instead of
+    # averaging independent subpixel grains into a continuous gray strip.
+    # One-and-a-half-source-unit cells fit the low-pressure app PNG control; fine
+    # modulation retains irregular cluster contours without frame randomness.
+    gx, gy = source_x / 1.5, source_y / 1.5
+    ix, iy = np.floor(gx), np.floor(gy)
+    fx, fy = gx - ix, gy - iy
+    fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+    coarse = (
+        _field(ix, iy, 1, 0) * (1 - fx) * (1 - fy)
+        + _field(ix + 1, iy, 1, 0) * fx * (1 - fy)
+        + _field(ix, iy + 1, 1, 0) * (1 - fx) * fy
+        + _field(ix + 1, iy + 1, 1, 0) * fx * fy
+    )
+    grain = 0.94 * coarse + 0.06 * _field(source_x, source_y, 1.5, 0)
     edge_extent = float(np.interp(pressure, (0, 128 / 255, 192 / 255, 1), (0.7, 0.7, 0.34, 0.34)))
     boundary = edge_extent * _field(source_x, source_y, 1.25, 193)
     edge = np.clip((signed_distance + boundary) * pixel_scale + 0.5, 0, 1)

@@ -37,3 +37,11 @@ def test_zero_pressure_is_blank_and_output_is_bounded():
     for pressure in np.linspace(0, 1, 17):
         a = brush_coverage(x, y, pressure, distance, 4)
         assert a.min() >= 0 and a.max() <= 1
+
+
+def test_low_pressure_clusters_have_source_scale_correlation():
+    y, x = np.mgrid[0:80:0.25, 0:200:0.25]
+    mask = brush_coverage(x, y, 64 / 255, np.full_like(x, 8), 4) > 0.5
+    adjacent_agreement = np.mean(mask[:, 4:] == mask[:, :-4])
+    distant_agreement = np.mean(mask[:, 40:] == mask[:, :-40])
+    assert adjacent_agreement > distant_agreement + 0.08

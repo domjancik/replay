@@ -57,3 +57,31 @@ def test_revealing_more_path_preserves_reached_prefix():
     for x in np.arange(70, 140, 0.5):
         dab(alpha, x, 25, 8.4, 0.5, 4, 4, 255)
     assert np.array_equal(alpha[:, :200], prefix)
+
+
+def test_cluster_coverage_varies_locally_without_changing_mean_to_solid_gray():
+    from rm_redraw.rendering.pencil import coverage_threshold
+
+    yy, xx = np.mgrid[0:256, 0:256]
+    thresholds = coverage_threshold(xx + 0.5, yy + 0.5, 0.5)
+    # A coarser occupancy field groups individual paper grains into islands.
+    assert thresholds.std() > 0.05
+    assert 0.37 < thresholds.mean() < 0.43
+    assert np.array_equal(thresholds[:4, :4], np.full((4, 4), thresholds[0, 0]))
+    assert np.array_equal(
+        thresholds[41:97, 20:89],
+        coverage_threshold(xx[41:97, 20:89] + 0.5, yy[41:97, 20:89] + 0.5, 0.5),
+    )
+
+
+def test_cluster_threshold_is_pressure_monotone_and_preserves_maximum_holes():
+    from rm_redraw.rendering.pencil import coverage_threshold
+
+    yy, xx = np.mgrid[0:40, 0:40]
+    previous = coverage_threshold(xx + 0.5, yy + 0.5, 0)
+    assert np.all(previous == 0)
+    for pressure in np.linspace(0, 1, 33)[1:]:
+        threshold = coverage_threshold(xx + 0.5, yy + 0.5, pressure)
+        assert np.all(threshold >= previous - 1e-14)
+        previous = threshold
+    assert np.allclose(previous, 0.97)

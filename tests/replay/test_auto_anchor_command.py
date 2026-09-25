@@ -121,11 +121,12 @@ def test_auto_anchors_apply_native_match_and_record_provenance(tmp_path, boundar
     assert manifest["backend"]["texture_profile"] == (
         "experimental-texture-v5-sparse-boundary"
         if boundary
-        else "experimental-texture-v6-app-png"
+        else "experimental-texture-v7-clustered-app-png"
     )
-    assert manifest["backend"]["brush_profile"] == "experimental-brush-app-png-v1"
+    assert manifest["backend"]["brush_profile"] == "experimental-brush-app-png-v2"
     assert manifest["backend"]["calligraphy_profile"] == "provisional-calligraphy-raw-width-v1"
     assert manifest["backend"]["calligraphy_antialiasing"] == "4x-pixel-center-area-coverage"
+    assert manifest["backend"]["current_texture_downsampling"] == "compose-at-source-then-box"
     assert manifest["backend"]["texture_native_calibrated"] is False
     layout = manifest["text_anchor_layout"]
     assert layout["origin"] == "automatic-paired-native-pdf"
