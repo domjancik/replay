@@ -34,7 +34,7 @@
 <div id="empty"><div class="draw-icon">✎</div><p>A little history of every line.</p><span>Generate a replay or open one from your queue.</span></div>
 <video id="video" controls playsinline loop hidden></video><img id="preview" alt="Latest rendered frame" hidden>
 <div id="view-progress" hidden><progress id="progress" max="1" value="0"></progress><p id="progress-text" class="hint"></p></div>
-<div id="downloads" hidden><a id="download-video" download>Download MP4 ↓</a><a id="download-image" download>Final PNG ↓</a><a id="download-manifest" download>Run details ↓</a></div>
+<div id="downloads" hidden><button id="export-open" class="secondary">Crop / loop export</button><a id="download-video" download>Download MP4 ↓</a><a id="download-image" download>Final PNG ↓</a><a id="download-manifest" download>Run details ↓</a></div>
 </section>
 <section><div class="section-heading"><h2>Recent replays</h2><span class="hint">One render at a time</span></div><div id="jobs"><p class="hint">Your render queue is empty.</p></div></section>
 </div></div>
@@ -44,4 +44,14 @@
 <div class="usb-toolbar"><button id="usb-up" class="secondary">↑ Root</button><span id="usb-location">Tablet</span></div>
 <label class="checkbox"><input id="include-pdf" type="checkbox"> Include matching PDF for text-anchor placement (slower)</label>
 <p id="usb-status" role="status"></p><div id="usb-items"></div></dialog>
+<dialog id="export-dialog">
+<div class="section-heading"><h2>Crop &amp; loop</h2><button id="export-close" class="quiet">Close</button></div>
+<p class="hint">Drag a rectangle on the final image, or enter pixel bounds. Full page is selected initially. Crops snap to even pixels for video encoding.</p>
+<canvas id="crop-canvas" aria-label="Drag to select crop rectangle"></canvas>
+<div class="fields"><div><label for="crop-x">Left</label><input id="crop-x" type="number" min="0"></div><div><label for="crop-y">Top</label><input id="crop-y" type="number" min="0"></div><div><label for="crop-w">Width</label><input id="crop-w" type="number" min="2"></div><div><label for="crop-h">Height</label><input id="crop-h" type="number" min="2"></div></div>
+<button id="crop-reset" class="quiet">Reset to full page</button>
+<label for="reverse-speed">Loop playback</label><select id="reverse-speed"><option value="0">Forward only</option><option value="2">Forward + 2x reverse</option><option value="4" selected>Forward + 4x quick reverse</option><option value="8">Forward + 8x quick reverse</option></select>
+<p class="hint">Keeps the forward end hold, then reverses to the first frame. No new ink rendering. Exports use the selected rectangle's pixel resolution.</p>
+<p id="export-status" role="status"></p><button id="export-save" class="primary" disabled>Export video</button>
+</dialog>
 </body></html>

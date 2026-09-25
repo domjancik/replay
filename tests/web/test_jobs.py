@@ -127,6 +127,22 @@ def test_real_job_completion_and_history(tmp_path):
         assert manifest["replay"]["mode"] == "duration"
         assert manifest["replay"]["ordering"] == "entry"
         assert queue.media(job["id"], "replay.mp4").stat().st_size > 0
+        exported = queue.submit_export(job["id"], [10, 12, 80, 90], 4)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            status = queue.list()[0]
+            if status["state"] not in ("queued", "running"):
+                break
+            time.sleep(0.05)
+        assert status["id"] == exported["id"]
+        assert status["state"] == "complete", status
+        manifest = json.loads(queue.media(exported["id"], "manifest.json").read_text())
+        assert manifest["viewport"] == {"width": 80, "height": 90}
+        assert manifest["forward_final_frame_matches_static"]
+        assert manifest["loop_seam_matches"]
+        assert status["frames"] == manifest["frame_count"] > 18
+        with pytest.raises(ValueError, match="original replay"):
+            queue.submit_export(exported["id"], None, 4)
     finally:
         queue.close()
     reopened = Jobs(tmp_path / "jobs", library)

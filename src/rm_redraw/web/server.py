@@ -224,6 +224,10 @@ class Handler(BaseHTTPRequestHandler):
                     result = self.app.library.add(raw, provenance=provenance, pdf=pdf)
                 elif url.path == "/api/jobs":
                     result = self.app.jobs.submit(data["document"], data["page"], data["settings"])
+                elif url.path == "/api/export":
+                    result = self.app.jobs.submit_export(
+                        data["job"], data.get("crop"), data.get("reverse_speed", 0)
+                    )
                 elif url.path == "/api/cancel":
                     self.app.jobs.cancel(data["id"])
                     result = {"cancelled": True}

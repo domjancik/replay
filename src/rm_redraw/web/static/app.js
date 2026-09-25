@@ -74,6 +74,7 @@ function showJob(job) {
   $('empty').hidden=true;
   const complete=job.state==='complete';
   $('video').hidden=!complete;$('downloads').hidden=!complete;
+  $('export-open').disabled=!complete || job.kind==='export';
   $('view-progress').hidden=complete;
   $('progress').value=Math.min(.99,job.frames/Math.max(1,job.expected_frames));
   $('progress-text').textContent=job.error || (job.state==='queued'?'Queued — another replay will finish first.':`${job.frames} / ~${job.expected_frames} frames · ${job.state}${job.state==='running'?' · final verification and video encoding follow':''}`);
@@ -130,7 +131,44 @@ async function browse(folder='', label='Tablet') {
     }
   }catch(error){$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
 }
+let cropImage=null, cropRect=null, cropStart=null, exportSource=null;
+function drawCrop(){
+  if(!cropImage)return;
+  const canvas=$('crop-canvas'), ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(cropImage,0,0);
+  if(cropRect){const [x,y,w,h]=cropRect;ctx.fillStyle='rgba(0,0,0,.35)';
+    ctx.fillRect(0,0,canvas.width,y);ctx.fillRect(0,y+h,canvas.width,canvas.height-y-h);
+    ctx.fillRect(0,y,x,h);ctx.fillRect(x+w,y,canvas.width-x-w,h);
+    ctx.strokeStyle='#e94d37';ctx.lineWidth=Math.max(2,canvas.width/250);ctx.strokeRect(x,y,w,h);}
+}
+function cropFields(){['crop-x','crop-y','crop-w','crop-h'].forEach((id,i)=>$(id).value=cropRect[i]);drawCrop();}
+function resetCrop(){if(!cropImage)return;cropRect=[0,0,cropImage.width,cropImage.height];cropFields();}
+async function openExport(){
+  const job=jobs.find(j=>j.id===selectedJob);if(!job || job.state!=='complete' || job.kind==='export')return;
+  exportSource=job.id;cropImage=null;$('export-save').disabled=true;$('export-status').textContent='Loading final image…';
+  $('export-dialog').showModal();
+  const image=new Image();
+  image.onload=()=>{cropImage=image;const canvas=$('crop-canvas');canvas.width=image.width;canvas.height=image.height;resetCrop();$('export-status').textContent='';$('export-save').disabled=false;};
+  image.onerror=()=>{$('export-status').textContent='Could not load the final image.';};
+  image.src=`/media/${job.id}/static.png`;
+}
+function cropPoint(event){const box=$('crop-canvas').getBoundingClientRect();return [Math.max(0,Math.min(cropImage.width,Math.round((event.clientX-box.left)*cropImage.width/box.width))),Math.max(0,Math.min(cropImage.height,Math.round((event.clientY-box.top)*cropImage.height/box.height)))];}
+function setupExport(){
+  $('export-open').onclick=safely(openExport);$('export-close').onclick=()=>$('export-dialog').close();$('crop-reset').onclick=resetCrop;
+  for(const id of ['crop-x','crop-y','crop-w','crop-h'])$(id).oninput=()=>{cropRect=['crop-x','crop-y','crop-w','crop-h'].map(key=>Number($(key).value));drawCrop();};
+  const canvas=$('crop-canvas');
+  canvas.onpointerdown=event=>{if(!cropImage)return;cropStart=cropPoint(event);canvas.setPointerCapture(event.pointerId);};
+  canvas.onpointermove=event=>{if(!cropStart)return;const point=cropPoint(event);cropRect=[Math.min(cropStart[0],point[0]),Math.min(cropStart[1],point[1]),Math.abs(point[0]-cropStart[0]),Math.abs(point[1]-cropStart[1])];cropFields();};
+  canvas.onpointerup=canvas.onpointercancel=()=>{cropStart=null;};
+  $('export-save').onclick=async()=>{
+    $('export-save').disabled=true;$('export-status').textContent='Queuing export…';
+    try{const job=await api('/api/export',{job:exportSource,crop:cropRect,reverse_speed:Number($('reverse-speed').value)});selectedJob=job.id;previewKey='';$('export-dialog').close();await poll();}
+    catch(error){$('export-status').textContent=error.message;}
+    finally{$('export-save').disabled=false;}
+  };
+}
 async function start(){
+  setupExport();
   capabilities=await api('/api/session');token=capabilities.token;
   $('backend').querySelector('[value=rust]').disabled=!capabilities.rust;
   $('backend').value=capabilities.rust?'rust':'python';

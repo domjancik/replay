@@ -146,6 +146,49 @@ class Jobs:
             self.executor.submit(self._run, job["id"])
             return dict(job)
 
+    def submit_export(self, source_job_id, crop, reverse_speed):
+        from PIL import Image
+
+        from .export import crop_bounds, replay_indices
+
+        with self.lock:
+            source = self.jobs.get(source_job_id)
+            if not source or source["state"] != "complete" or source.get("kind") == "export":
+                raise ValueError("Select a completed original replay")
+            if sum(j["state"] in ("queued", "running") for j in self.jobs.values()) >= 8:
+                raise ValueError("Queue is full (8 jobs)")
+            folder = self.root / source_job_id / "output"
+            manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+            with Image.open(folder / "static.png") as image:
+                bounds = crop_bounds(crop, image.size)
+            fps = manifest["replay"]["fps"]
+            indices = replay_indices(
+                manifest["frame_count"],
+                math.ceil(manifest["replay"]["final_hold_seconds"] * fps),
+                reverse_speed,
+            )
+            config = dict(source["settings"])
+            config["viewport"] = [bounds[2] - bounds[0], bounds[3] - bounds[1]]
+            job = {
+                "id": uuid4().hex,
+                "kind": "export",
+                "source_job": source_job_id,
+                "crop": crop,
+                "reverse_speed": reverse_speed,
+                "name": source["name"] + (" · loop" if reverse_speed else " · crop"),
+                "page": source["page"],
+                "document_id": source["document_id"],
+                "page_id": source["page_id"],
+                "settings": config,
+                "state": "queued",
+                "created": time.time(),
+                "expected_frames": len(indices),
+            }
+            self.jobs[job["id"]] = job
+            self._save(job)
+            self.executor.submit(self._run, job["id"])
+            return dict(job)
+
     def _run(self, job_id):
         with self.lock:
             job = self.jobs[job_id]
@@ -154,47 +197,61 @@ class Jobs:
             job.update(state="running", started=time.time())
             self._save(job)
         try:
-            document = self.library.get(job["document_id"])
-            config = job["settings"]
-            output = self.root / job_id / "output"
-            args = [
-                sys.executable,
-                "-m",
-                "rm_redraw.replay",
-                str(self.library.source(job["document_id"])),
-                "--output",
-                str(output),
-                "--page-id",
-                job["page_id"],
-                "--paper-size",
-                *map(str, config["paper_size"]),
-                "--source-affine",
-                *map(str, config["source_affine"]),
-                "--viewport",
-                *map(str, config["viewport"]),
-                "--fps",
-                str(config["fps"]),
-                "--ordering",
-                config.get("ordering", "layer"),
-                "--mode",
-                "duration",
-                "--duration",
-                str(config["seconds"]),
-                "--final-hold",
-                "1",
-                "--pencil-backend",
-                config["backend"],
-            ]
-            if document["has_pdf"]:
-                args += [
-                    "--auto-text-anchors",
-                    "--paired-native-pdf",
-                    str(self.library.source(job["document_id"]).with_name("native.pdf")),
-                    "--paired-pdf-page",
-                    str(job["page"]),
-                    "--export-canvas",
-                    *map(str, config["paper_size"]),
+            if job.get("kind") == "export":
+                output = self.root / job_id / "output"
+                args = [
+                    sys.executable,
+                    "-m",
+                    "rm_redraw.web.export",
+                    str(self.root / job["source_job"] / "output"),
+                    str(output),
+                    "--reverse-speed",
+                    str(job["reverse_speed"]),
                 ]
+                if job["crop"] is not None:
+                    args += ["--crop", *map(str, job["crop"])]
+            else:
+                document = self.library.get(job["document_id"])
+                config = job["settings"]
+                output = self.root / job_id / "output"
+                args = [
+                    sys.executable,
+                    "-m",
+                    "rm_redraw.replay",
+                    str(self.library.source(job["document_id"])),
+                    "--output",
+                    str(output),
+                    "--page-id",
+                    job["page_id"],
+                    "--paper-size",
+                    *map(str, config["paper_size"]),
+                    "--source-affine",
+                    *map(str, config["source_affine"]),
+                    "--viewport",
+                    *map(str, config["viewport"]),
+                    "--fps",
+                    str(config["fps"]),
+                    "--ordering",
+                    config.get("ordering", "layer"),
+                    "--mode",
+                    "duration",
+                    "--duration",
+                    str(config["seconds"]),
+                    "--final-hold",
+                    "1",
+                    "--pencil-backend",
+                    config["backend"],
+                ]
+                if document["has_pdf"]:
+                    args += [
+                        "--auto-text-anchors",
+                        "--paired-native-pdf",
+                        str(self.library.source(job["document_id"]).with_name("native.pdf")),
+                        "--paired-pdf-page",
+                        str(job["page"]),
+                        "--export-canvas",
+                        *map(str, config["paper_size"]),
+                    ]
             with (self.root / job_id / "render.log").open("wb") as log:
                 with self.lock:
                     if job["state"] == "cancelled":
@@ -218,7 +275,9 @@ class Jobs:
                     raise ValueError(detail or f"Renderer exited with status {code}")
                 manifest = json.loads((output / "manifest.json").read_text())
                 if (
-                    not manifest["final_frame_matches_static"]
+                    not manifest.get(
+                        "forward_final_frame_matches_static", manifest["final_frame_matches_static"]
+                    )
                     or not (output / "replay.mp4").exists()
                 ):
                     raise ValueError("Replay did not pass final-frame verification")
@@ -256,7 +315,14 @@ class Jobs:
             result = []
             for job in sorted(self.jobs.values(), key=lambda j: j["created"], reverse=True):
                 count = len(list((self.root / job["id"] / "output/frames").glob("frame_*.png")))
-                result.append({**job, "frames": count})
+                result.append(
+                    {
+                        **job,
+                        "frames": job.get("expected_frames", count)
+                        if job["state"] == "complete"
+                        else count,
+                    }
+                )
             return result
 
     def media(self, job_id, filename) -> Path:
