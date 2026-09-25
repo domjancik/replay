@@ -63,6 +63,13 @@ class RenderOptions:
     viewport: Viewport | None = None
     background: Color = (255, 255, 255, 255)
     pencil_boundary: bool = False
+    pencil_backend: str = "python"
+
+    def __post_init__(self) -> None:
+        if self.pencil_backend not in ("python", "rust"):
+            raise ValueError("pencil backend must be python or rust")
+        if self.pencil_backend == "rust" and self.pencil_boundary:
+            raise ValueError("Rust pencil backend requires the current app-PNG profile")
 
 
 @dataclass(frozen=True, slots=True)

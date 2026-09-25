@@ -82,6 +82,12 @@ def _parser() -> argparse.ArgumentParser:
             "instead of the default app-PNG profile"
         ),
     )
+    parser.add_argument(
+        "--pencil-backend",
+        choices=("python", "rust"),
+        default="python",
+        help="pencil implementation; rust requires the optional compiled kernel",
+    )
     return parser
 
 
@@ -109,6 +115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             text_anchor_layout=args.text_anchor_layout,
             auto_text_anchors=args.auto_text_anchors,
             pencil_boundary=args.pencil_boundary,
+            pencil_backend=args.pencil_backend,
         )
     except ReplayCommandError as error:
         print(f"error: {error}", file=sys.stderr)

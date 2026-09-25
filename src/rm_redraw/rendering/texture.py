@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image
 
 from .brush import brush_coverage
+from .native_pencil import draw_batch as native_pencil_batch
 from .pencil import dab as pencil_dab
 from .types import NormalizedStroke
 
@@ -40,8 +41,11 @@ def draw_texture(
     scale_y: float,
     *,
     pencil_boundary: bool = False,
+    pencil_backend: str = "python",
 ) -> None:
     """Deposit only reached samples; never mask a pre-rendered future stroke."""
+    if pencil_backend not in {"python", "rust"}:
+        raise ValueError("pencil_backend must be python or rust")
     current = stroke.tool_code in {12, 13, 14} or stroke.tool_name in {
         "PAINTBRUSH_2",
         "MECHANICAL_PENCIL_2",
@@ -82,6 +86,7 @@ def draw_texture(
         dtype=np.uint8,
     )
     dirty: tuple[int, int, int, int] | None = None
+    native_samples: list[tuple[float, float, float, float]] = []
     traversed = 0.0
     next_sample = 0.0
     # Fixed source-space spacing makes each prefix an identical deposition history.
@@ -139,7 +144,9 @@ def draw_texture(
                         max(dirty[3], bounds[3]),
                     )
                 )
-            if app_pencil:
+            if app_pencil and pencil_backend == "rust":
+                native_samples.append((x, y, radius, pressure))
+            elif app_pencil:
                 pencil_dab(
                     alpha,
                     x,
@@ -175,6 +182,16 @@ def draw_texture(
         traversed += length
         if traversed > visible_length:
             break
+    if app_pencil and pencil_backend == "rust":
+        native_pencil_batch(
+            alpha,
+            native_samples,
+            scale_x,
+            scale_y,
+            stroke.rgba[3],
+            origin_x=origin_x,
+            origin_y=origin_y,
+        )
     if dirty is None:
         return
     left, top, right, bottom = dirty

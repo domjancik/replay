@@ -33,3 +33,5 @@ diff/
 
 # User-supplied native app reference rasters.
 fixtures/RM-REDRAW-ALL-REFERENCES-TILT-20260925/
+
+/native/pencil-kernel/target/

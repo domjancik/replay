@@ -59,3 +59,26 @@ Start with an exact-output native kernel and measure unprofiled wall time, retai
 ## Evidence
 
 Private/generated evidence is ignored under `artifacts/profile-current-20260925/`: `birthday-profile.json`, `birthday.prof`, sorted text profiles, `stages.json`, and reproducible profiling scripts. The complete profiled PNG matches the accepted golden; production source hashes were unchanged throughout profiling. Earlier paired timings and golden replay frames remain under `artifacts/performance-20260925/`. These are one-machine observations, not universal throughput guarantees.
+
+
+## Fused Rust prototype — 2026-09-25
+
+The optional std-only Rust kernel now batches all reached dabs of a current-pencil stroke in one C ABI call. It fuses distance, boundary, threshold, rounding and max-union operations into a pixel loop. The host supplies NumPy-interpolated pressure occupancy and a NumPy-generated gain lookup table to preserve existing calibrated values. Python still owns sampling, stroke/layer composition, brush/calligraphy rendering and export. No profile was refitted.
+
+Measured on this Windows x86-64 machine with Rust 1.88 release/LTO:
+
+| Unprofiled workload | Python | Rust | Observed ratio |
+|---|---:|---:|---:|
+| Natural 24 strokes, cold |2.286s|0.688s|3.32×|
+| Natural 24 strokes, warm |2.369s|0.672s|3.52×|
+| Broad 4 strokes, cold |4.391s|2.415s|1.82×|
+| Broad 4 strokes, warm |4.024s|2.426s|1.66×|
+| Full birthday page 12, 702×936 output |261.531s|103.707s|2.52×|
+
+The small samples were measured during this pass. The full Python timing is the earlier unprofiled optimized run, not a simultaneous paired rerun. These are individual machine observations, not statistical confidence intervals. “Warm” repeats the page in-process; Rust's bounded paper cache is recreated per stroke, unlike Python's shared tile cache. Full render time falls from about 4m22s to 1m44s; this is not real-time rendering.
+
+Exact validation passed with no pixel tolerance: 600 dab-mask cases, 240 varied synthetic RGBA/PNG frames, all 14 control pages/585 cells, all 111 progressive golden frames, and the complete birthday drawing. Final replay frame equals static output. Birthday PNG SHA256 remains `c92bd8525f3496b638958b9051db9d558ae56a18e5a251eb67d5b5421f2be692`. The eight Rust tests, seven native-adapter tests and full 264-test Python suite pass. The short 111-frame public replay command took about 9.4s including encoding; it establishes integration/parity, not a demonstrated end-to-end replay speedup.
+
+Python remains the default. Enable the prototype through `--pencil-backend rust` or `RenderOptions(pencil_backend="rust")`. See `native/pencil-kernel/README.md` for the offline build and explicit library override. Replay manifests record ABI1 and binary SHA256; validated DLL hash is `6288d1037359df8e3bada002ef8eb7ce6c645b051e0539df6dc4a2cd3582aead`. Private output and reproducible validation scripts are under ignored `artifacts/rust-prototype-20260925/`.
+
+This confirms that batching/fusing the deposition boundary helps without a full application rewrite. Removed Python dispatch and NumPy temporary arrays are implementation-specific savings; avoiding redundant pixel work, preserving cache locality and batching are language-independent. Broad strokes improve less than narrow ones, so native arithmetic and repeated pixel visits still matter. The next investigations are profiling this native loop (including `hypot`, repeated threshold work and cache reuse), then compiling the same core for WASM with a browser harness. WASM was not built or benchmarked in this pass. Its host must reproduce the lookup/calibration inputs and independently prove numeric and output equivalence; native speedups cannot be assumed to transfer unchanged.

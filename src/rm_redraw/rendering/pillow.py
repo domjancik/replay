@@ -250,7 +250,13 @@ def _draw_stroke(
     if stroke.tool_code in TEXTURED_CODES or stroke.tool_name in TEXTURED_NAMES:
         length = sum(hypot(b.x - a.x, b.y - a.y) for a, b in zip(points, points[1:], strict=False))
         draw_texture(
-            layer, stroke, length, scale_x, scale_y, pencil_boundary=options.pencil_boundary
+            layer,
+            stroke,
+            length,
+            scale_x,
+            scale_y,
+            pencil_boundary=options.pencil_boundary,
+            pencil_backend=options.pencil_backend,
         )
         return
     if stroke.tool_code == 6 or stroke.tool_name == "ERASER":

@@ -394,6 +394,7 @@ def run_local_replay(
     text_anchor_layout: str | Path | TextAnchorLayout | None = None,
     auto_text_anchors: bool = False,
     pencil_boundary: bool = False,
+    pencil_backend: str = "python",
 ) -> ReplayResult:
     """Parse and replay one local page into a new deterministic output directory."""
     if auto_text_anchors and text_anchor_layout is not None:
@@ -402,6 +403,15 @@ def run_local_replay(
         raise ReplayCommandError(
             "--auto-text-anchors requires --paired-native-pdf and --export-canvas"
         )
+    native_pencil_info = None
+    try:
+        RenderOptions(pencil_boundary=pencil_boundary, pencil_backend=pencil_backend)
+        if pencil_backend == "rust":
+            from rm_redraw.rendering.native_pencil import native_info
+
+            native_pencil_info = native_info()
+    except (ValueError, RuntimeError) as error:
+        raise ReplayCommandError(str(error)) from error
     source_input = _load_input(Path(source), page_id)
     paired_export = _load_paired_export_evidence(
         paired_native_pdf=paired_native_pdf,
@@ -494,7 +504,9 @@ def run_local_replay(
         resolved_viewport = Viewport(*viewport) if viewport is not None else None
     except (TypeError, ValueError) as error:
         raise ReplayCommandError(f"invalid --viewport: {error}") from error
-    options = RenderOptions(viewport=resolved_viewport, pencil_boundary=pencil_boundary)
+    options = RenderOptions(
+        viewport=resolved_viewport, pencil_boundary=pencil_boundary, pencil_backend=pencil_backend
+    )
     for option_name, duration in (
         ("--initial-pause", initial_pause_seconds),
         ("--pause-between-strokes", pause_between_strokes_seconds),
@@ -624,6 +636,8 @@ def run_local_replay(
                 if pencil_boundary
                 else "experimental-texture-v7-clustered-app-png"
             ),
+            "pencil_backend": pencil_backend,
+            "pencil_kernel": native_pencil_info,
             "texture_native_calibrated": False,
             "current_texture_downsampling": "compose-at-source-then-box",
             "brush_profile": "experimental-brush-app-png-v2",

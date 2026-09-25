@@ -128,6 +128,8 @@ def test_auto_anchors_apply_native_match_and_record_provenance(tmp_path, boundar
     assert manifest["backend"]["calligraphy_antialiasing"] == "4x-pixel-center-area-coverage"
     assert manifest["backend"]["current_texture_downsampling"] == "compose-at-source-then-box"
     assert manifest["backend"]["texture_native_calibrated"] is False
+    assert manifest["backend"]["pencil_backend"] == "python"
+    assert manifest["backend"]["pencil_kernel"] is None
     layout = manifest["text_anchor_layout"]
     assert layout["origin"] == "automatic-paired-native-pdf"
     assert layout["offsets"]["1:17"] == pytest.approx(-144.0, abs=2)
@@ -220,4 +222,15 @@ def test_auto_anchors_reports_unsupported_transform_without_output(tmp_path, cap
         == 2
     )
     assert "translation-only" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_missing_rust_kernel_fails_before_reading_input(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("RM_REDRAW_PENCIL_LIBRARY", str(tmp_path / "missing.dll"))
+    output = tmp_path / "output"
+    assert (
+        main([str(tmp_path / "missing.rm"), "--output", str(output), "--pencil-backend", "rust"])
+        == 2
+    )
+    assert "Rust pencil library" in capsys.readouterr().err
     assert not output.exists()
