@@ -78,8 +78,8 @@ def _parser() -> argparse.ArgumentParser:
         "--pencil-boundary",
         action="store_true",
         help=(
-            "experimental sparse pencil outline; improves edge variation "
-            "with small pixel-error regressions"
+            "use the older PDF-fitted sparse-boundary pencil profile "
+            "instead of the default app-PNG profile"
         ),
     )
     return parser

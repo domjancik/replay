@@ -622,9 +622,10 @@ def run_local_replay(
             "texture_profile": (
                 "experimental-texture-v5-sparse-boundary"
                 if pencil_boundary
-                else "experimental-texture-v4-pressure-curve"
+                else "experimental-texture-v6-app-png"
             ),
             "texture_native_calibrated": False,
+            "brush_profile": "experimental-brush-app-png-v1",
             "calligraphy_profile": "provisional-calligraphy-raw-width-v1",
             "calligraphy_antialiasing": "4x-pixel-center-area-coverage",
         },

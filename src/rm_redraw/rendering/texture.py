@@ -17,6 +17,8 @@ from math import ceil, cos, floor, hypot, pi, sin
 import numpy as np
 from PIL import Image
 
+from .brush import brush_coverage
+from .pencil import dab as pencil_dab
 from .types import NormalizedStroke
 
 TEXTURED_CODES = {0, 1, 7, 12, 13, 14}
@@ -52,7 +54,8 @@ def draw_texture(
     seed = int.from_bytes(sha256(stroke.stroke_id.encode()).digest()[:4], "little")
     # Integrate binary source-space grains over pixels instead of replacing
     # grain contrast with a smooth gray fill. Full-canvas phase is frame-stable.
-    supersample = 2 if current and not brush else 1
+    app_pencil = current and not brush and not pencil_boundary
+    supersample = 4 if app_pencil else (2 if current else 1)
     scale_x *= supersample
     scale_y *= supersample
     alpha = np.zeros((layer.height * supersample, layer.width * supersample), dtype=np.uint8)
@@ -93,22 +96,25 @@ def draw_texture(
                 if radius < 0.3:
                     next_sample += 0.5
                     continue
-            _dab(
-                alpha,
-                x,
-                y,
-                radius,
-                pressure,
-                angle,
-                brush,
-                mechanical,
-                seed,
-                scale_x,
-                scale_y,
-                stroke.rgba[3],
-                current,
-                pencil_boundary,
-            )
+            if app_pencil:
+                pencil_dab(alpha, x, y, radius, pressure, scale_x, scale_y, stroke.rgba[3])
+            else:
+                _dab(
+                    alpha,
+                    x,
+                    y,
+                    radius,
+                    pressure,
+                    angle,
+                    brush,
+                    mechanical,
+                    seed,
+                    scale_x,
+                    scale_y,
+                    stroke.rgba[3],
+                    current,
+                    pencil_boundary,
+                )
             next_sample += 0.5
         traversed += length
         if traversed > visible_length:
@@ -156,7 +162,7 @@ def _dab(
     boundary_amplitude = (
         min(0.75, radius * 0.3) if pencil_boundary and current and not brush else 0.0
     )
-    extent = radius + boundary_amplitude
+    extent = radius + (0.7 if current and brush else boundary_amplitude)
     left = max(0, floor((x - extent) * scale_x - 1))
     right = min(alpha.shape[1], ceil((x + extent) * scale_x + 1))
     top = max(0, floor((y - extent) * scale_y - 1))
@@ -197,6 +203,7 @@ def _dab(
     grain = (noise & 65535) / 65535.0
     if current:
         if brush:
+            edge = brush_coverage(sx, sy, pressure, (1 - distance) * radius, min(scale_x, scale_y))
             texture, density = 1.0, 1.0
         else:
             texture = (grain < _pencil_coverage(pressure)).astype(float)

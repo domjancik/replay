@@ -44,7 +44,7 @@ def test_texture_has_grain_and_pressure_response(tool):
     renderer = PillowRenderer()
     low = np.asarray(renderer.render_static(page(tool, 32), RenderOptions()))
     high = np.asarray(renderer.render_static(page(tool, 224), RenderOptions()))
-    if tool != 12:  # Native current brush has solid interiors, unlike pencil grain.
+    if tool != 12:  # High-pressure current brush has filled interiors.
         assert np.unique(high[38:42, 30:160, 0]).size > (1 if tool in {13, 14} else 8)
     assert high[:, :, :3].mean() < low[:, :, :3].mean()
 
@@ -85,6 +85,21 @@ def test_brush_direction_wraps_and_changes_nib():
 
     assert render(0) == render(255)
     assert render(0) != render(64)
+
+
+def test_current_brush_low_pressure_retains_paper_gaps():
+    model = page(12, pressure=64)
+    stroke = replace(
+        model.strokes[0],
+        rgba=(0, 0, 0, 255),
+        points=tuple(replace(p, width=96) for p in model.strokes[0].points),
+    )
+    pixels = np.asarray(
+        PillowRenderer().render_static(replace(model, strokes=(stroke,)), RenderOptions())
+    )
+    center = pixels[40, 30:160, 0]
+    assert np.count_nonzero(center == 255) > 10
+    assert np.count_nonzero(center < 128) > 10
 
 
 def test_texture_self_crossing_does_not_reveal_future_arm():
@@ -248,3 +263,16 @@ def test_pencil_boundary_is_opt_in_and_invalidates_prefix_cache():
         == renderer.render_static(model, RenderOptions(pencil_boundary=True)).tobytes()
     )
     assert plain.tobytes() == renderer.render(model, RenderOptions(), complete).tobytes()
+
+
+@pytest.mark.parametrize("tool", [13, 14])
+def test_opaque_pencil_repeats_preserve_full_resolution_paper_holes(tool):
+    model = page(tool)
+    stroke = replace(model.strokes[0], rgba=(0, 0, 0, 255))
+    renderer = PillowRenderer()
+    single = np.asarray(renderer.render_static(replace(model, strokes=(stroke,)), RenderOptions()))
+    repeats = tuple(replace(stroke, stroke_id=f"repeat-{i}") for i in range(9))
+    repeated = np.asarray(renderer.render_static(replace(model, strokes=repeats), RenderOptions()))
+    single_mass = (255 - single[:, :, 0]).sum()
+    repeated_mass = (255 - repeated[:, :, 0]).sum()
+    assert 1 <= repeated_mass / single_mass < 1.15
