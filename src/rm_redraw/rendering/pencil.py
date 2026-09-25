@@ -10,6 +10,8 @@ from math import ceil, floor
 
 import numpy as np
 
+from .paper_cache import PaperFieldCache
+
 
 def pressure_coverage(pressure: float) -> float:
     """Base paper occupancy; high pressure retains sparse white pinholes."""
@@ -55,6 +57,17 @@ def coverage_threshold(x: np.ndarray, y: np.ndarray, pressure: float) -> np.ndar
     return 0.97 * occupancy * gain / (1 - occupancy + occupancy * gain)
 
 
+def _paper_fields(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    return (
+        _field(x, y, 1.0, 0),
+        2 * _field(x, y, 1.0, 193) - 1,
+        np.exp(0.5 * (2 * _field(x, y, 0.25, 917) - 1)),
+    )
+
+
+_paper_cache = PaperFieldCache(_paper_fields, tile_size=256, max_tiles=16)
+
+
 def dab(
     alpha: np.ndarray,
     x: float,
@@ -64,6 +77,9 @@ def dab(
     scale_x: float,
     scale_y: float,
     opacity: int,
+    *,
+    origin_x: int = 0,
+    origin_y: int = 0,
 ) -> None:
     """Max-union a reached dab into a supersampled alpha plane.
 
@@ -74,20 +90,22 @@ def dab(
     radius *= 0.77 / 0.70
     amplitude = min(0.9, radius * 0.35)
     extent = radius + amplitude
-    left = max(0, floor((x - extent) * scale_x - 1))
-    right = min(alpha.shape[1], ceil((x + extent) * scale_x + 1))
-    top = max(0, floor((y - extent) * scale_y - 1))
-    bottom = min(alpha.shape[0], ceil((y + extent) * scale_y + 1))
+    left = max(origin_x, floor((x - extent) * scale_x - 1))
+    right = min(origin_x + alpha.shape[1], ceil((x + extent) * scale_x + 1))
+    top = max(origin_y, floor((y - extent) * scale_y - 1))
+    bottom = min(origin_y + alpha.shape[0], ceil((y + extent) * scale_y + 1))
     if right <= left or bottom <= top:
         return
-    yy, xx = np.mgrid[top:bottom, left:right]
-    sx, sy = (xx + 0.5) / scale_x, (yy + 0.5) / scale_y
-    distance = np.hypot(sx - x, sy - y)
-    boundary = amplitude * (2 * _field(sx, sy, 1.0, 193) - 1)
-    edge = np.clip((radius - distance + boundary) * min(scale_x, scale_y) + 0.5, 0, 1)
-    grain = _field(sx, sy, 1.0, 0)
-    coverage = np.rint(edge * (grain < coverage_threshold(sx, sy, pressure)) * opacity).astype(
-        np.uint8
-    )
-    region = alpha[top:bottom, left:right]
-    np.maximum(region, coverage, out=region)
+    occupancy = pressure_coverage(pressure) / 0.97
+    regions = _paper_cache.regions(left, top, right, bottom, scale_x, scale_y)
+    for left, top, right, bottom, fields in regions:
+        grain, boundary_unit, gain = fields
+        sx = (np.arange(left, right)[None, :] + 0.5) / scale_x
+        sy = (np.arange(top, bottom)[:, None] + 0.5) / scale_y
+        distance = np.hypot(sx - x, sy - y)
+        boundary = amplitude * boundary_unit
+        edge = np.clip((radius - distance + boundary) * min(scale_x, scale_y) + 0.5, 0, 1)
+        threshold = 0.97 * occupancy * gain / (1 - occupancy + occupancy * gain)
+        coverage = np.rint(edge * (grain < threshold) * opacity).astype(np.uint8)
+        region = alpha[top - origin_y : bottom - origin_y, left - origin_x : right - origin_x]
+        np.maximum(region, coverage, out=region)

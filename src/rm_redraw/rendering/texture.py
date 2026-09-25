@@ -58,8 +58,29 @@ def draw_texture(
     supersample = 4 if app_pencil else (2 if current else 1)
     scale_x *= supersample
     scale_y *= supersample
-    alpha = np.zeros((layer.height * supersample, layer.width * supersample), dtype=np.uint8)
     points = stroke.points
+    # Full-stroke bounds may include unrevealed points, but only reached dabs
+    # deposit ink. Integer output-pixel alignment preserves BOX sampling phase.
+    max_radius = max(
+        max(0.25, (p.width / 4 if p.width is not None else stroke.thickness_scale) / 2)
+        for p in points
+    )
+    extent = max_radius * 2 + 2 + 1 / min(scale_x, scale_y)
+    buffer_left = max(0, floor((min(p.x for p in points) - extent) * scale_x / supersample))
+    buffer_top = max(0, floor((min(p.y for p in points) - extent) * scale_y / supersample))
+    buffer_right = min(
+        layer.width, ceil((max(p.x for p in points) + extent) * scale_x / supersample)
+    )
+    buffer_bottom = min(
+        layer.height, ceil((max(p.y for p in points) + extent) * scale_y / supersample)
+    )
+    if buffer_right <= buffer_left or buffer_bottom <= buffer_top:
+        return
+    origin_x, origin_y = buffer_left * supersample, buffer_top * supersample
+    alpha = np.zeros(
+        ((buffer_bottom - buffer_top) * supersample, (buffer_right - buffer_left) * supersample),
+        dtype=np.uint8,
+    )
     dirty: tuple[int, int, int, int] | None = None
     traversed = 0.0
     next_sample = 0.0
@@ -119,7 +140,18 @@ def draw_texture(
                     )
                 )
             if app_pencil:
-                pencil_dab(alpha, x, y, radius, pressure, scale_x, scale_y, stroke.rgba[3])
+                pencil_dab(
+                    alpha,
+                    x,
+                    y,
+                    radius,
+                    pressure,
+                    scale_x,
+                    scale_y,
+                    stroke.rgba[3],
+                    origin_x=origin_x,
+                    origin_y=origin_y,
+                )
             else:
                 _dab(
                     alpha,
@@ -136,6 +168,8 @@ def draw_texture(
                     stroke.rgba[3],
                     current,
                     pencil_boundary,
+                    origin_x=origin_x,
+                    origin_y=origin_y,
                 )
             next_sample += 0.5
         traversed += length
@@ -146,7 +180,14 @@ def draw_texture(
     left, top, right, bottom = dirty
     size = (right - left, bottom - top)
     overlay = Image.new("RGBA", size, stroke.rgba[:3] + (0,))
-    mask = Image.fromarray(alpha).crop(tuple(v * supersample for v in dirty))
+    mask = Image.fromarray(alpha).crop(
+        (
+            left * supersample - origin_x,
+            top * supersample - origin_y,
+            right * supersample - origin_x,
+            bottom * supersample - origin_y,
+        )
+    )
     if supersample > 1:
         mask = mask.resize(size, Image.Resampling.BOX)
     overlay.putalpha(mask)
@@ -184,15 +225,18 @@ def _dab(
     opacity: int,
     current: bool = False,
     pencil_boundary: bool = False,
+    *,
+    origin_x: int = 0,
+    origin_y: int = 0,
 ) -> None:
     boundary_amplitude = (
         min(0.75, radius * 0.3) if pencil_boundary and current and not brush else 0.0
     )
     extent = radius + (0.7 if current and brush else boundary_amplitude)
-    left = max(0, floor((x - extent) * scale_x - 1))
-    right = min(alpha.shape[1], ceil((x + extent) * scale_x + 1))
-    top = max(0, floor((y - extent) * scale_y - 1))
-    bottom = min(alpha.shape[0], ceil((y + extent) * scale_y + 1))
+    left = max(origin_x, floor((x - extent) * scale_x - 1))
+    right = min(origin_x + alpha.shape[1], ceil((x + extent) * scale_x + 1))
+    top = max(origin_y, floor((y - extent) * scale_y - 1))
+    bottom = min(origin_y + alpha.shape[0], ceil((y + extent) * scale_y + 1))
     if right <= left or bottom <= top:
         return
     yy, xx = np.mgrid[top:bottom, left:right]
@@ -241,5 +285,5 @@ def _dab(
         texture = np.clip((grain - (0.55 - 0.45 * pressure)) * 2, 0, 1)
         density = (0.3 + 0.7 * pressure) if mechanical else (0.15 + 0.85 * pressure)
     coverage = np.rint(edge * texture * density * opacity).astype(np.uint8)
-    region = alpha[top:bottom, left:right]
+    region = alpha[top - origin_y : bottom - origin_y, left - origin_x : right - origin_x]
     np.maximum(region, coverage, out=region)
