@@ -111,6 +111,7 @@ def test_real_job_completion_and_history(tmp_path):
                 "fps": 6,
                 "output_width": 128,
                 "backend": "python",
+                "ordering": "entry",
             },
         )
         deadline = time.monotonic() + 20
@@ -124,6 +125,7 @@ def test_real_job_completion_and_history(tmp_path):
         manifest = json.loads(queue.media(job["id"], "manifest.json").read_text())
         assert manifest["final_frame_matches_static"]
         assert manifest["replay"]["mode"] == "duration"
+        assert manifest["replay"]["ordering"] == "entry"
         assert queue.media(job["id"], "replay.mp4").stat().st_size > 0
     finally:
         queue.close()

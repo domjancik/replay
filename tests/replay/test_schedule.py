@@ -279,3 +279,47 @@ def test_duration_schedule_preserves_partial_directional_reveal():
     assert frames[0].visibility.active_progress == 0.5
     assert frames[2].visibility.active_stroke_id == "second"
     assert frames[2].visibility.active_progress == 0.5
+
+
+def test_entry_order_crosses_layers_and_filters_hidden_layers():
+    from rm_redraw.replay.schedule import duration_schedule
+
+    page = _interleaved_layers_page()
+    schedules = [
+        stroke_step_schedule(page, ordering="entry"),
+        progressive_stroke_schedule(page, fps=1, seconds_per_stroke=1, ordering="entry"),
+        progressive_distance_schedule(page, fps=1, drawing_speed=100, ordering="entry"),
+        duration_schedule(page, fps=4, duration_seconds=1, ordering="entry"),
+    ]
+    for frames in schedules:
+        assert frames[0].visibility.completed_stroke_ids == frozenset({"upper-early"})
+        assert frames[1].visibility.completed_stroke_ids == frozenset({"upper-early", "lower-late"})
+        assert frames[-1].visibility.completed_stroke_ids == frozenset(page.replay_order)
+    hidden = replace(page, groups=(NormalizedGroup("lower"), NormalizedGroup("upper", False)))
+    frames = stroke_step_schedule(hidden, ordering="entry")
+    assert len(frames) == 2
+    assert frames[0].visibility.completed_stroke_ids == frozenset({"lower-late"})
+
+
+def test_entry_order_keeps_upper_ink_above_later_lower_strokes():
+    from rm_redraw.rendering import PillowRenderer, RenderOptions
+    from rm_redraw.replay.schedule import duration_schedule
+
+    page = _interleaved_layers_page()
+    page = replace(
+        page,
+        strokes=tuple(
+            replace(
+                s,
+                rgba=(240, 20, 20, 255) if s.group_id == "upper" else (20, 20, 240, 255),
+                points=(NormalizedPoint(0, 20), NormalizedPoint(30, 20)),
+            )
+            for s in page.strokes
+        ),
+    )
+    renderer = PillowRenderer()
+    frames = duration_schedule(page, fps=4, duration_seconds=1, ordering="entry")
+    images = [renderer.render(page, RenderOptions(), f.visibility) for f in frames]
+    assert images[0].getpixel((5, 20)) == (240, 20, 20, 255)
+    assert images[1].getpixel((5, 20)) == (240, 20, 20, 255)
+    assert images[-1].tobytes() == renderer.render_static(page, RenderOptions()).tobytes()

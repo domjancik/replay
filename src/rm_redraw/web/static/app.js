@@ -62,6 +62,7 @@ async function generate() {
     const settings={};
     for(const key of ['width','height','offset-x','offset-y','seconds','fps','output-width'])settings[key.replaceAll('-','_')]=Number($(key).value);
     settings.backend=$('backend').value;
+    settings.ordering=$('ordering').value;
     const job=await api('/api/jobs',{document:$('notebook').value,page:$('page').value,settings});
     selectedJob=job.id;previewKey='';await poll();
   } finally {$('generate').disabled=!pageReady;}
@@ -96,7 +97,7 @@ async function poll() {
     const row=document.createElement('div');row.className='job';
     const open=document.createElement('button');open.className='open';open.textContent=`${job.name} · page ${job.page}`;
     const totalSeconds=(job.state==='complete'?job.frames:job.expected_frames)/job.settings.fps;
-    const detail=document.createElement('small');detail.textContent=`${totalSeconds.toFixed(1)}s total · ${job.settings.fps} fps · ${job.settings.viewport.join(' × ')}${job.finished&&job.started?' · rendered in '+Math.round(job.finished-job.started)+'s':''}`;open.append(detail);
+    const detail=document.createElement('small');detail.textContent=`${totalSeconds.toFixed(1)}s total · ${job.settings.fps} fps · ${job.settings.ordering==='entry'?'entry order':'by layer'} · ${job.settings.viewport.join(' × ')}${job.finished&&job.started?' · rendered in '+Math.round(job.finished-job.started)+'s':''}`;open.append(detail);
     open.onclick=()=>{selectedJob=job.id;previewKey='';showJob(job);};
     const state=document.createElement('span');state.className='state';state.textContent=job.state;row.append(open,state);
     if(['queued','running'].includes(job.state)){const cancel=document.createElement('button');cancel.className='quiet';cancel.textContent='Cancel';cancel.onclick=safely(async()=>{await api('/api/cancel',{id:job.id});await poll();});row.append(cancel);}

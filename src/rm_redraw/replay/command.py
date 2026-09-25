@@ -313,10 +313,13 @@ def _frames_for_mode(
     seconds_per_stroke: float | None,
     distance_per_second: float | None,
     duration_seconds: float | None = None,
+    ordering: str = "layer",
     initial_pause_seconds: float,
     pause_between_strokes_seconds: float,
     final_hold_seconds: float,
 ) -> tuple[ReplayFrame, ...]:
+    if ordering not in ("layer", "entry"):
+        raise ReplayCommandError("ordering must be layer or entry")
     if fps <= 0:
         raise ReplayCommandError("--fps must be positive")
     if mode == "duration":
@@ -328,6 +331,7 @@ def _frames_for_mode(
             page,
             fps=fps,
             duration_seconds=duration_seconds,
+            ordering=ordering,
             initial_pause_seconds=initial_pause_seconds,
             final_hold_seconds=final_hold_seconds,
         )
@@ -335,6 +339,7 @@ def _frames_for_mode(
         frames = stroke_step_schedule(
             page,  # type: ignore[arg-type]
             fps=fps,
+            ordering=ordering,
             initial_pause_seconds=initial_pause_seconds,
             pause_between_strokes_seconds=pause_between_strokes_seconds,
             final_hold_seconds=final_hold_seconds,
@@ -348,6 +353,7 @@ def _frames_for_mode(
             page,
             fps=fps,
             seconds_per_stroke=seconds_per_stroke,  # type: ignore[arg-type]
+            ordering=ordering,
             initial_pause_seconds=initial_pause_seconds,
             pause_between_strokes_seconds=pause_between_strokes_seconds,
             final_hold_seconds=final_hold_seconds,
@@ -363,6 +369,7 @@ def _frames_for_mode(
             page,
             fps=fps,
             drawing_speed=distance_per_second,  # type: ignore[arg-type]
+            ordering=ordering,
             initial_pause_seconds=initial_pause_seconds,
             pause_between_strokes_seconds=pause_between_strokes_seconds,
             final_hold_seconds=final_hold_seconds,
@@ -401,6 +408,7 @@ def run_local_replay(
     seconds_per_stroke: float | None = None,
     distance_per_second: float | None = None,
     duration_seconds: float | None = None,
+    ordering: str = "layer",
     initial_pause_seconds: float = 0.0,
     pause_between_strokes_seconds: float = 0.0,
     final_hold_seconds: float = 0.0,
@@ -536,6 +544,7 @@ def run_local_replay(
         seconds_per_stroke=seconds_per_stroke,
         distance_per_second=distance_per_second,
         duration_seconds=duration_seconds,
+        ordering=ordering,
         initial_pause_seconds=initial_pause_seconds,
         pause_between_strokes_seconds=pause_between_strokes_seconds,
         final_hold_seconds=final_hold_seconds,
@@ -624,6 +633,7 @@ def run_local_replay(
         ),
         "replay": {
             "mode": mode,
+            "ordering": ordering,
             "fps": fps,
             "seconds_per_stroke": seconds_per_stroke,
             "distance_per_second": distance_per_second,

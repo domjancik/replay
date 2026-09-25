@@ -49,6 +49,12 @@ def _parser() -> argparse.ArgumentParser:
         default="stroke-step",
     )
     parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument(
+        "--ordering",
+        choices=("layer", "entry"),
+        default="layer",
+        help="group reveal by layer or retain global entry sequence",
+    )
     parser.add_argument("--duration", type=float, help="drawing seconds for fixed-duration mode")
     parser.add_argument("--seconds-per-stroke", type=float)
     parser.add_argument("--distance-per-second", type=float)
@@ -109,6 +115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             seconds_per_stroke=args.seconds_per_stroke,
             distance_per_second=args.distance_per_second,
             duration_seconds=args.duration,
+            ordering=args.ordering,
             initial_pause_seconds=args.initial_pause,
             pause_between_strokes_seconds=args.pause_between_strokes,
             final_hold_seconds=args.final_hold,

@@ -15,7 +15,7 @@ from zipfile import ZipFile
 
 from rm_redraw.parsing import parse_page
 from rm_redraw.pipeline import to_render_page
-from rm_redraw.replay.schedule import _layered_replay_order
+from rm_redraw.replay.schedule import ordered_stroke_ids
 
 from .library import Library
 
@@ -42,6 +42,9 @@ def validate_settings(data: dict) -> dict:
         raise ValueError("Output is too tall; reduce output width")
     seconds = number("seconds", 2, 60)
     fps = number("fps", 6, 30, integer=True)
+    ordering = data.get("ordering", "layer")
+    if ordering not in ("layer", "entry"):
+        raise ValueError("Unknown replay ordering")
     backend = data.get("backend")
     if backend not in ("python", "rust"):
         raise ValueError("Unknown pencil backend")
@@ -59,6 +62,7 @@ def validate_settings(data: dict) -> dict:
         "seconds": seconds,
         "fps": fps,
         "backend": backend,
+        "ordering": ordering,
     }
 
 
@@ -119,7 +123,7 @@ class Jobs:
             paper_size=config["paper_size"],
             source_to_page_transform=config["source_affine"],
         )
-        count = len(_layered_replay_order(page))
+        count = len(ordered_stroke_ids(page, config["ordering"]))
         if not count:
             raise ValueError("Page has no visible strokes to replay")
         with self.lock:
@@ -170,6 +174,8 @@ class Jobs:
                 *map(str, config["viewport"]),
                 "--fps",
                 str(config["fps"]),
+                "--ordering",
+                config.get("ordering", "layer"),
                 "--mode",
                 "duration",
                 "--duration",

@@ -29,7 +29,7 @@ A normalized page retains source information rather than flattening it to render
 
 Parser `compositing_order` and `replay_order` are separate stroke sequences. Replay order includes `strategy` (`verified-chronology`, `crdt-order`, or `scene-order`) and an evidence note. Only controlled device evidence permits `verified-chronology`.
 
-The render projection retains top-level layers in their final bottom-to-top compositing order and carries each layer's visibility. Replay scheduling is layer-major: omit hidden layers, finish every stroke in the lowest visible layer before starting the next visible layer, and preserve the parser replay order relative to other strokes within the same layer. A global chronology must not interleave layers.
+The render projection retains top-level layers in their final bottom-to-top compositing order and carries each layer's visibility. Replay scheduling defaults to layer-major: omit hidden layers, finish every stroke in the lowest visible layer before starting the next visible layer, and preserve the parser replay order relative to other strokes within the same layer. The optional entry ordering instead retains the global parser replay sequence across visible layers; it does not assert verified chronology. Visual compositing always follows the layer stack.
 
 ## Replay and rendering
 
@@ -112,3 +112,5 @@ The optional `RenderOptions.pencil_backend="rust"` / replay `--pencil-backend ru
 The local loopback UI is an orchestration layer above acquisition and the existing replay CLI. Raw imports are immutable and rendering never requires live device access after import. USB capture serializes bounded GETs to the fixed tablet host, compares two raw member-hash maps and retains failed attempts. Optional paired PDF sits between those reads; manually attached PDFs carry caller-supplied pairing evidence. Browser requests select opaque local notebook/job IDs, never arbitrary filesystem paths or remote URLs.
 
 The additive replay mode `duration` / `--duration SECONDS` samples an equal-time-per-visible-stroke timeline at a fixed total drawing duration. Multiple strokes may complete per output frame; partial strokes retain directional progress. Integer quotient/remainder selection preserves exact stroke boundaries, layer-major order and a fully completed final frame. Initial and final holds are additive; per-stroke pauses are rejected for this mode. Other modes keep their existing semantics. The manifest records `duration_seconds`.
+
+Replay scheduling accepts `ordering="layer"` (default) or `ordering="entry"` in every timing mode. CLI `--ordering` and the local UI carry the choice into the replay manifest as `replay.ordering`. Entry ordering filters hidden layers without regrouping the remaining parser replay entries. Parser `replay_strategy` still determines the underlying inferred sequence; the default remains CRDT order. Rendering/compositing and final/static equality are independent of this choice.

@@ -23,6 +23,7 @@ def duration_schedule(
     duration_seconds: float,
     initial_pause_seconds: float = 0.0,
     final_hold_seconds: float = 0.0,
+    ordering: str = "layer",
 ) -> tuple[ReplayFrame, ...]:
     """Sample an equal-time-per-stroke timeline at a fixed video duration.
 
@@ -32,7 +33,7 @@ def duration_schedule(
     if fps <= 0 or not isfinite(duration_seconds) or duration_seconds <= 0:
         raise ValueError("fps and duration_seconds must be finite and positive")
     _validate_pacing(initial_pause_seconds, 0, final_hold_seconds)
-    order = _layered_replay_order(page)
+    order = ordered_stroke_ids(page, ordering)
     frames: list[ReplayFrame] = []
     _append_hold(frames, VisibilityState(), fps=fps, seconds=initial_pause_seconds)
     count = max(1, ceil(fps * duration_seconds))
@@ -59,6 +60,18 @@ def _layered_replay_order(page: NormalizedPage) -> tuple[str, ...]:
         for stroke_id in page.replay_order
         if group_id in visible_group_ids and group_by_stroke[stroke_id] == group_id
     )
+
+
+def ordered_stroke_ids(page: NormalizedPage, ordering: str = "layer") -> tuple[str, ...]:
+    """Choose reveal sequence without changing visual layer compositing."""
+    if ordering == "layer":
+        return _layered_replay_order(page)
+    if ordering != "entry":
+        raise ValueError("ordering must be layer or entry")
+    visible = {group.group_id for group in page.groups if group.visible}
+    visible.intersection_update(page.compositing_order)
+    eligible = {stroke.stroke_id for stroke in page.strokes if stroke.group_id in visible}
+    return tuple(stroke_id for stroke_id in page.replay_order if stroke_id in eligible)
 
 
 def _validate_pacing(
@@ -93,6 +106,7 @@ def stroke_step_schedule(
     initial_pause_seconds: float = 0.0,
     pause_between_strokes_seconds: float = 0.0,
     final_hold_seconds: float = 0.0,
+    ordering: str = "layer",
 ) -> tuple[ReplayFrame, ...]:
     """Reveal one stroke in each frame, completing lower layers first."""
     if fps <= 0:
@@ -104,7 +118,7 @@ def stroke_step_schedule(
     )
     completed: frozenset[str] = frozenset()
     frames: list[ReplayFrame] = []
-    replay_order = _layered_replay_order(page)
+    replay_order = ordered_stroke_ids(page, ordering)
     _append_hold(
         frames,
         VisibilityState(completed),
@@ -138,6 +152,7 @@ def progressive_distance_schedule(
     initial_pause_seconds: float = 0.0,
     pause_between_strokes_seconds: float = 0.0,
     final_hold_seconds: float = 0.0,
+    ordering: str = "layer",
 ) -> tuple[ReplayFrame, ...]:
     """Reveal strokes by geometric distance at the requested drawing speed."""
     if fps <= 0 or drawing_speed <= 0:
@@ -150,7 +165,7 @@ def progressive_distance_schedule(
     strokes = {stroke.stroke_id: stroke for stroke in page.strokes}
     completed: frozenset[str] = frozenset()
     frames: list[ReplayFrame] = []
-    replay_order = _layered_replay_order(page)
+    replay_order = ordered_stroke_ids(page, ordering)
     _append_hold(
         frames,
         VisibilityState(completed),
@@ -194,6 +209,7 @@ def progressive_stroke_schedule(
     initial_pause_seconds: float = 0.0,
     pause_between_strokes_seconds: float = 0.0,
     final_hold_seconds: float = 0.0,
+    ordering: str = "layer",
 ) -> tuple[ReplayFrame, ...]:
     """Reveal each stroke over a fixed duration, regardless of geometry."""
     if fps <= 0 or seconds_per_stroke <= 0:
@@ -206,7 +222,7 @@ def progressive_stroke_schedule(
     frame_count = max(1, ceil(fps * seconds_per_stroke))
     completed: frozenset[str] = frozenset()
     frames: list[ReplayFrame] = []
-    replay_order = _layered_replay_order(page)
+    replay_order = ordered_stroke_ids(page, ordering)
     _append_hold(
         frames,
         VisibilityState(completed),
