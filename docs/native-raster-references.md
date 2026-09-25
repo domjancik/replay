@@ -36,3 +36,18 @@ Private evidence: `fixtures/private/masha-native-raster-cache-20260925/manifest.
 Prepared `fixtures/private/reference-export-book-20260925/reference-book.rmdoc`, named `RM-REDRAW-ALL-REFERENCES-20260925`. It contains31pages: renderer controls1–19, tap/eraser supplement20–22, pressure/angle controls23–30, and birthday originalpage12 as exportpage31. `PAGE-INDEX.md` and `manifest.json` alongside map every export page to its source archive/page UUID/hash.
 
 All31 raw .rm payloads are byte-identical to the saved sources, parse successfully, and retain per-page metadata/templates. The archive has33members, passes ZIP CRC and ordering checks, and rebuilds deterministically. No cover page or labels were inserted into the stroke data. The ignored `build.py` and `test_bundle.py` reproduce and verify the package. Import/raw-readback and app PNG export validation remain pending: SSH responded, but two permitted USB folder-list requests timed out before any upload was issued. No existing document was changed and no service was restarted. After importing this new notebook, export the whole notebook as PNG to one folder; expect31images and retain their original sizes, including extended eraser pages. This prepared package does not yet establish app-export fidelity or on-device readiness.
+
+## Physical stylus tilt worksheets
+
+The expanded package `fixtures/private/reference-export-with-tilt-20260925/reference-book-with-tilt.rmdoc` is named `RM-REDRAW-ALL-REFERENCES-TILT-20260925`. It supersedes the31page preparation for the next export while preserving every original .rm payload. It has39pages; physical tilt sheets occupy32–39:
+
+| Pages | Tool | Tasks |
+| --- | --- | --- |
+|32–33|Pencil|Tilt/pressure; barrel direction/movement|
+|34–35|Mechanical pencil|Tilt/pressure; barrel direction/movement|
+|36–37|Calligraphy|Tilt/pressure; barrel direction/movement|
+|38–39|Paintbrush|Tilt/pressure; barrel direction/movement|
+
+Each first sheet crosses90/60/30degrees from the screen surface with light/medium/firm pressure. Draw three separate left-to-right strokes per box, barrel leaning right when tilted. Each second sheet holds approximately45degrees and medium pressure, crosses barrel lean right/left/top/bottom with horizontal/vertical movement, and asks for two separate strokes per box. Keep tablet orientation fixed, black ink, medium tool size and comparable speed. Never retrace samples. Angles and pressure levels are human targets, not instrument measurements; pressure/speed/width/direction must be examined afterward to identify confounds. Stored direction is not assumed to encode physical tilt.
+
+Guides and Samples are separate layers. Select Samples before drawing and preserve Guides. Empty sample areas deliberately contain no fabricated tilt strokes. If time is limited, prioritize pencil32–33 and calligraphy36–37, retaining other sheets as unfilled controls. After drawing, export all39pages as app PNGs and save a matching updated raw .rmdoc. Original31page preservation, blank sample layers, bounds, ZIP integrity, deterministic rebuild and actual parsing/nonblank guide rendering passed. These are locally prepared sheets, not acquired tilt evidence or a verified device import. The package remains local pending import; do not export it blank and count that as tilt coverage. A numbered index, cell ROIs, human targets and previews are alongside the archive in the ignored directory.
