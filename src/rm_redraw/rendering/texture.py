@@ -7,7 +7,8 @@ Legacy tool profiles remain experimental and unchanged.
 
 Raw rmscene channels: width is quarter units, pressure 0..255 and direction
 is one turn per 255 units. Stable stroke/source-position seeds and fixed
-source-distance samples prevent progressive grain resampling.
+source-distance samples prevent progressive grain resampling. Current pencil
+grain is shared across strokes: captured coincident overdraw preserves holes.
 """
 
 from hashlib import sha256
@@ -148,6 +149,12 @@ def _dab(
     edge = np.clip((1 - distance) * radius * min(scale_x, scale_y) + 0.5, 0, 1)
     # Integer hash: stable across processes, frames, crops and Python hash seeds.
     frequency = 0.75 if current and not brush else 1.5
+    if current and not brush:
+        # Native 1/3/9 coincident-pencil controls retain almost constant ink mass.
+        # A shared paper field prevents new stroke IDs filling existing holes.
+        # Source-over antialias coverage still accumulates; native union before
+        # rasterization is not modeled, and this does not establish grain parity.
+        seed = 0
     hx = np.floor(sx * frequency).astype(np.uint64)
     hy = np.floor(sy * frequency).astype(np.uint64)
     noise = (hx * 374761393 + hy * 668265263 + seed) & 0xFFFFFFFF

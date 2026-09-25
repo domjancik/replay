@@ -116,7 +116,9 @@ def test_auto_anchors_apply_native_match_and_record_provenance(tmp_path):
         == 0
     )
     manifest = json.loads((output / "manifest.json").read_text())
-    assert manifest["backend"]["texture_profile"] == "experimental-texture-v2"
+    assert manifest["backend"]["texture_profile"] == "experimental-texture-v3-shared-grain"
+    assert manifest["backend"]["calligraphy_profile"] == "provisional-calligraphy-raw-width-v1"
+    assert manifest["backend"]["calligraphy_antialiasing"] == "4x-pixel-center-area-coverage"
     assert manifest["backend"]["texture_native_calibrated"] is False
     layout = manifest["text_anchor_layout"]
     assert layout["origin"] == "automatic-paired-native-pdf"

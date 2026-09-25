@@ -7,6 +7,7 @@ from math import ceil, floor, hypot, sqrt
 
 from PIL import Image, ImageChops, ImageDraw
 
+from .calligraphy import draw_calligraphy
 from .geometry import prefix_points
 from .simple import draw_simple
 from .texture import TEXTURED_CODES, TEXTURED_NAMES, draw_texture
@@ -188,6 +189,9 @@ def _draw_stroke(
     scale_y = viewport.height / page.paper_size[1]
     scale = (scale_x + scale_y) / 2
     coordinates = [(point.x * scale_x, point.y * scale_y) for point in points]
+    if stroke.tool_code == 21 or stroke.tool_name == "CALIGRAPHY":
+        draw_calligraphy(layer, points, stroke, scale_x, scale_y)
+        return
     is_simple = stroke.tool_code in {16, 17, 18} or stroke.tool_name in {
         "MARKER_2",
         "FINELINER_2",

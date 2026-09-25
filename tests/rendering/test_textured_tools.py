@@ -142,3 +142,19 @@ def test_current_pencil_grain_contains_clear_paper_and_dark_grains(tool):
     pixels = np.asarray(PillowRenderer().render_static(model, RenderOptions()))[38:42, 30:160, 0]
     assert np.mean(pixels < 30) > 0.1
     assert np.mean(pixels > 245) > 0.1
+
+
+@pytest.mark.parametrize("tool", [13, 14])
+def test_current_pencil_grain_does_not_change_with_stroke_identity(tool):
+    """Captured coincident overdraw retains grain holes across distinct strokes."""
+    model = page(tool)
+    renamed = replace(
+        model,
+        strokes=(replace(model.strokes[0], stroke_id="another-stroke"),),
+        replay_order=("another-stroke",),
+    )
+    renderer = PillowRenderer()
+    assert (
+        renderer.render_static(model, RenderOptions()).tobytes()
+        == renderer.render_static(renamed, RenderOptions()).tobytes()
+    )
