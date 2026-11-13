@@ -1,0 +1,38 @@
+# Publication readiness
+
+## Release scope
+
+Distribute the source and Python package for a single-user utility that runs on the user's computer. The browser UI accepts only the loopback address and uses a per-process session cookie and mutation token. Import existing `.rmdoc` files or use the tablet's local read-only USB interface. The replay worker consumes the local library. There is no hosted service or account integration.
+
+Describe the result as an ink replay with synthesized timing, inferred order and experimental rendering profiles. Page templates, PDF and EPUB backgrounds, and typed text are outside the replay output. A matching native PDF and Poppler are required for automatic placement of unresolved text anchors. A manually attached PDF is checked for readability and matching page count. The user still needs to choose the correct corresponding export.
+
+The geometry controls accept an explicit canvas and offsets. If visible, resolved stroke points fall outside the selected canvas, job submission prompts the user to adjust the geometry or allow clipping. The check cannot determine native export dimensions, detect stroke edges that extend beyond the canvas, or validate the eventual position of unresolved anchors. Review wide or scrolling pages before sharing a rendered result.
+
+## Local data and failure behavior
+
+- The service checks Host and Origin, uses a strict same-site cookie and requires the session token on POST. Generated media uses an allowlist and no-store responses. USB access is restricted to the tablet's fixed address with redirects and HTTP proxies disabled.
+- Uploads have a 128 MiB request limit. Archive inspection rejects unsafe or duplicate paths and caps expanded size at 512 MiB and the member count at 20,000. One browser import can be active at a time. Treat input files as trusted local documents. These checks do not isolate the Python parser, Poppler, or FFmpeg from untrusted inputs.
+- Replay uses a single worker with up to eight running or queued jobs. The UI bounds output dimensions, duration, frame rate and source canvas. Frame sequences, video, logs and imported notebook copies can still consume substantial disk space. Files remain under the selected data directory after restart, including partial outputs and USB import attempts. Stop the service before moving or deleting that directory, and keep it outside publicly shared folders.
+- Job and catalog records publish via atomic replacement. Startup marks active job records interrupted, and unreadable records are skipped without removing their source directories. Valid saved history remains available. After a forced kill, verify that any renderer or encoder processes have exited before retrying. Graceful process-tree cancellation has Windows-specific handling. POSIX child-process cleanup has not been independently validated.
+- Generated manifests may contain local paths and document or page identifiers. Share the video or final PNG when the recipient only needs the visual output. Review manifests and logs separately before sharing.
+
+## Distribution checks
+
+- Build the wheel and source distribution from the release allowlist. Inspect both member lists and install the wheel outside the source checkout. Confirm the installed launcher serves its HTML, JavaScript and CSS, renders a generated sample with FFmpeg, serves video byte ranges and completes a crop/loop export. Use the locked Python environment for the source workflow. FFmpeg, Poppler and the optional Rust shared library are provided separately by the user.
+- Review distribution terms for the project source, documentation and any release visuals. A public source snapshot can exclude the private development history and research notes. The tracked development prose includes device-derived identifiers, local paths and notebook labels, so a raw checkout or public mirror of that history requires a separate privacy review.
+- Keep external dependency and executable notices aligned with the actual bundle. A source or Python-only wheel declares dependencies without vendoring their binaries. Bundling a Rust shared library, FFmpeg, Poppler, third-party fonts or other material would require a review of that separate bundle.
+- Include only cleared sample material. Device-derived raw archives, native PDFs, private notebooks and generated artifacts stay outside the software distributions. Passing software tests does not establish replay coverage across all firmware or hardware, or native appearance for all tools.
+
+## Web verification
+
+On Windows with the locked interpreter, FFmpeg and loopback access, `python -m pytest tests/web -q` passed 39 tests. Coverage includes origin/session checks, upload limits and concurrent import rejection, archive/metadata validation, range requests, clipping acknowledgement, actual synthetic replay and crop/loop export, and interrupted or damaged job history. `ruff check src/rm_redraw/web tests/web`, `node --check src/rm_redraw/web/static/app.js` and `git diff --check` also passed for the audited web changes.
+
+## Integrated preview checkpoint — 2026-11-13
+
+The owner selected MIT for code and documentation. Selected drawing figures may become public only after owner review; the visual review gallery and all captured drawings remain excluded from distributions. No public upload, repository mirror or package publication has occurred.
+
+The full source suite passes 321 tests on Windows with permitted loopback networking, including nine release checks/smoke tests; Ruff and JavaScript syntax checks pass. Three fresh natural-page captures exercised two scrolling fineliner pages and one mixed calligraphy/pencil/eraser page on firmware 3.29.1.0. All three 84-frame entry-order replays have final/static PNG byte equality. Native-PDF overlays show aligned drawing structure, with remaining texture differences and template contamination explicitly recorded. This is limited validation, not universal tool or firmware coverage.
+
+A wheel was installed with dependencies into an isolated environment and exercised from outside the checkout. The console entrypoint, HTML/JS/CSS, local session, synthetic replay, crop/reverse export and MP4 byte-range response passed. The install uses dependency ranges; the separately tested source environment uses the lockfile. Source and wheel member audits reject private paths, caches, history and unexpected archive-root files. The package includes the MIT license and external-component notices. Exact final artifact hashes and install evidence accompany the locally prepared release rather than being asserted from an uninspected build.
+
+Remaining publication steps: review the selected visual figures/captions, choose the public destination and upload the inspected source/wheel. This is a Windows-tested local preview, not a signed desktop installer, hosted multi-user service or browser-WASM release. Cloud pairing and a browser renderer are a separate follow-up investigation.

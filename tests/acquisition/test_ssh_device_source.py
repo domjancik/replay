@@ -7,9 +7,9 @@ import pytest
 
 from rm_redraw.acquisition import Document, SshDeviceSource
 
-ROOT_DRAWINGS_ID = "6694e399-2a32-4b35-abef-e036cb77d069"
-NOTE_ID = "8aba68ff-00e9-400b-9772-b96322e000f0"
-PAGE_ID = "e8451b5f-6edc-450b-abb0-0977f9647b63"
+ROOT_DRAWINGS_ID = "11111111-1111-4111-8111-111111111111"
+NOTE_ID = "22222222-2222-4222-8222-222222222222"
+PAGE_ID = "33333333-3333-4333-8333-333333333333"
 DUPLICATE_FOLDER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 DUPLICATE_NOTE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 

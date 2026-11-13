@@ -527,6 +527,15 @@ def run_local_replay(
         resolved_viewport = Viewport(*viewport) if viewport is not None else None
     except (TypeError, ValueError) as error:
         raise ReplayCommandError(f"invalid --viewport: {error}") from error
+    video_dimensions = (
+        (resolved_viewport.width, resolved_viewport.height)
+        if resolved_viewport is not None
+        else tuple(round(value) for value in geometry.paper_size)
+    )
+    if any(value % 2 for value in video_dimensions):
+        raise ReplayCommandError(
+            "H.264 requires even output dimensions; supply --viewport WIDTH HEIGHT with even values"
+        )
     options = RenderOptions(
         viewport=resolved_viewport, pencil_boundary=pencil_boundary, pencil_backend=pencil_backend
     )

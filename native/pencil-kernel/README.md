@@ -18,4 +18,4 @@ Add `--pencil-backend rust` to the existing replay command, or construct `Render
 
 The core uses no Python APIs or OS services. WASM compilation, its host bindings, numeric equivalence and browser performance have not yet been validated. In particular, the browser must reproduce pressure interpolation and gain values, and test its math/rounding against the reference before promotion.
 
-See `docs/rendering-performance.md` in the repository for measured performance and validation scope. Build output and private reference artifacts must remain ignored.
+See `docs/calibration-journey.md` in the repository for measured performance and validation scope. Build output and private reference artifacts must remain ignored.

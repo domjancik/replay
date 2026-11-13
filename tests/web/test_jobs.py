@@ -98,22 +98,25 @@ def test_real_job_completion_and_history(tmp_path):
     library = Library(tmp_path / "library")
     document = library.add(archive.getvalue(), provenance={"provider": "test"})
     queue = Jobs(tmp_path / "jobs", library)
+    settings = {
+        "width": 64,
+        "height": 64,
+        "offset_x": 0,
+        "offset_y": 0,
+        "seconds": 2,
+        "fps": 6,
+        "output_width": 128,
+        "backend": "python",
+        "ordering": "entry",
+    }
     try:
-        job = queue.submit(
-            document["id"],
-            "page",
-            {
-                "width": 64,
-                "height": 64,
-                "offset_x": 0,
-                "offset_y": 0,
-                "seconds": 2,
-                "fps": 6,
-                "output_width": 128,
-                "backend": "python",
-                "ordering": "entry",
-            },
-        )
+        settings["offset_y"] = 32
+        with pytest.raises(ValueError, match="outside the selected canvas"):
+            queue.submit(document["id"], "page", settings)
+        assert queue.list() == []
+        settings["allow_clipping"] = True
+        job = queue.submit(document["id"], "page", settings)
+        assert job["settings"]["allow_clipping"] is True
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             status = queue.list()[0]
@@ -181,5 +184,51 @@ def test_cancelled_queue_entry_never_starts_and_interrupted_jobs_stay_stopped(
     reopened = Jobs(tmp_path / "jobs", Library(tmp_path / "library"))
     try:
         assert reopened.list()[0]["state"] == "interrupted"
+        assert json.loads((path / "job.json").read_text())["state"] == "interrupted"
     finally:
         reopened.close()
+
+
+def test_bad_history_does_not_prevent_startup(tmp_path):
+    import json
+
+    from rm_redraw.web.jobs import Jobs
+    from rm_redraw.web.library import Library
+
+    root = tmp_path / "jobs"
+    bad = root / ("a" * 32)
+    bad.mkdir(parents=True)
+    record = bad / "job.json"
+    record.write_text("{", encoding="utf-8")
+    good = root / ("b" * 32)
+    good.mkdir()
+    good_record = {"id": good.name, "state": "cancelled", "created": 1}
+    (good / "job.json").write_text(json.dumps(good_record), encoding="utf-8")
+    queue = Jobs(root, Library(tmp_path / "library"))
+    try:
+        assert [job["id"] for job in queue.list()] == [good.name]
+        assert record.read_text(encoding="utf-8") == "{"
+    finally:
+        queue.close()
+
+
+def test_failed_running_status_write_releases_queue_slot(tmp_path, monkeypatch):
+    from rm_redraw.web.jobs import Jobs
+    from rm_redraw.web.library import Library
+
+    queue = Jobs(tmp_path / "jobs", Library(tmp_path / "library"))
+    job = {"id": "a" * 32, "state": "queued", "created": 1}
+    queue.jobs[job["id"]] = job
+    queue._save(job)
+
+    def storage_unavailable(job):
+        raise OSError("Test storage unavailable")
+
+    monkeypatch.setattr(queue, "_save", storage_unavailable)
+    try:
+        queue._run(job["id"])
+        result = queue.list()[0]
+        assert result["state"] == "failed"
+        assert "Test storage unavailable" in result["error"]
+    finally:
+        queue.close()

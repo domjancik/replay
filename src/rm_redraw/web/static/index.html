@@ -21,11 +21,15 @@
 <label for="ordering">Replay ordering</label><select id="ordering"><option value="layer">Layer by layer</option><option value="entry">Entry order · across layers</option></select>
 <label for="output-width">Output width</label><select id="output-width"><option value="468">468 px · small</option><option value="702" selected>702 px</option><option value="1404">1404 px · full size</option></select>
 <p id="canvas-summary" class="hint">Manual canvas: 1404 × 1872 · X +702, Y 0</p>
-<details><summary>Canvas &amp; renderer</summary>
+<details id="canvas-settings"><summary>Canvas &amp; renderer</summary>
 <p class="hint">Manual canvas preset: 1404 × 1872, centered X coordinates. Adjust for other sizes or scrolling pages. This is not automatic device detection.</p>
 <div class="fields"><div><label for="width">Canvas width</label><input id="width" type="number" value="1404" min="64" max="4096"></div><div><label for="height">Canvas height</label><input id="height" type="number" value="1872" min="64" max="8192"></div><div><label for="offset-x">X offset</label><input id="offset-x" type="number" value="702"></div><div><label for="offset-y">Y offset</label><input id="offset-y" type="number" value="0"></div></div>
 <label for="backend">Pencil renderer</label><select id="backend"><option value="python">Python</option><option value="rust">Rust · faster, validated prototype</option></select>
 </details>
+<div id="canvas-clipping" hidden>
+<p id="canvas-warning" class="hint" role="status"></p>
+<label class="checkbox"><input id="allow-clipping" type="checkbox"> Allow clipping outside the selected canvas</label>
+</div>
 <p class="hint">Layer mode finishes each layer bottom to top. Entry mode follows the inferred entry sequence across layers. Timing is synthesized. One-second final hold. Dense pencil pages can take several minutes.</p>
 <button id="generate" class="primary" disabled>Generate replay <span>↗</span></button>
 </section>

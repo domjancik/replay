@@ -178,3 +178,22 @@ def test_tiny_images_emit_standard_json_with_unavailable_ssim_as_null(tmp_path: 
     assert "NaN" not in report
     assert metrics["metrics"]["global"]["ssim"] is None
     assert metrics["metrics"]["ink_roi"]["ssim"] is None
+
+
+def test_ink_only_provenance_preserves_original_page_number(tmp_path):
+    from pypdf import PdfReader, PdfWriter
+
+    source = tmp_path / "one.pdf"
+    _text_and_ink_pdf(source)
+    writer = PdfWriter()
+    writer.add_blank_page(width=48, height=36)
+    writer.add_page(PdfReader(source).pages[0])
+    native = tmp_path / "two.pdf"
+    writer.write(native)
+    candidate = tmp_path / "candidate.png"
+    Image.new("RGB", (48, 36), "white").save(candidate)
+    output = tmp_path / "comparison"
+    run_comparison(candidate, native_pdf=native, page=2, ink_only=True, output_directory=output)
+    report = json.loads((output / "metrics.json").read_text(encoding="utf-8"))
+    assert report["rasterization"]["pdf_page"] == 2
+    assert report["rasterization"]["filtered_pdf_page"] == 1

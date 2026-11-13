@@ -1,6 +1,7 @@
 """One-at-a-time local replay jobs, using the existing CLI unchanged."""
 
 import json
+import logging
 import math
 import os
 import subprocess
@@ -17,15 +18,24 @@ from rm_redraw.parsing import parse_page
 from rm_redraw.pipeline import to_render_page
 from rm_redraw.replay.schedule import ordered_stroke_ids
 
-from .library import Library
+from .library import Library, _local_id
+
+LOGGER = logging.getLogger(__name__)
+
+
+class CanvasClippingError(ValueError):
+    """A visible stroke center falls outside the selected replay canvas."""
 
 
 def validate_settings(data: dict) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("Settings must be a JSON object")
+
     def number(key, low, high, *, integer=False):
         value = data.get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{key} must be a number")
-        if not math.isfinite(value) or not low <= value <= high:
+        if not low <= value <= high:
             raise ValueError(f"{key} must be between {low} and {high}")
         if integer and int(value) != value:
             raise ValueError(f"{key} must be an integer")
@@ -48,6 +58,9 @@ def validate_settings(data: dict) -> dict:
     backend = data.get("backend")
     if backend not in ("python", "rust"):
         raise ValueError("Unknown pencil backend")
+    allow_clipping = data.get("allow_clipping", False)
+    if type(allow_clipping) is not bool:
+        raise ValueError("allow_clipping must be true or false")
     return {
         "paper_size": (width, height),
         "source_affine": (
@@ -63,6 +76,7 @@ def validate_settings(data: dict) -> dict:
         "fps": fps,
         "backend": backend,
         "ordering": ordering,
+        "allow_clipping": allow_clipping,
     }
 
 
@@ -92,9 +106,27 @@ class Jobs:
         self.jobs = {}
         self.processes = {}
         for path in self.root.glob("*/job.json"):
-            job = json.loads(path.read_text(encoding="utf-8"))
+            try:
+                job = json.loads(path.read_text(encoding="utf-8"))
+                if (
+                    not isinstance(job, dict)
+                    or not _local_id(path.parent.name)
+                    or job.get("id") != path.parent.name
+                    or type(job.get("created")) not in (int, float)
+                    or job.get("state")
+                    not in ("queued", "running", "complete", "failed", "cancelled", "interrupted")
+                ):
+                    raise ValueError("Malformed job record")
+            except (OSError, ValueError, RecursionError):
+                LOGGER.warning("Ignoring unreadable replay job record %s", path.parent.name)
+                continue
             if job["state"] in ("queued", "running"):
-                job.update(state="interrupted", error="Server stopped before this job finished")
+                job.update(
+                    state="interrupted",
+                    error="Server stopped before this job finished",
+                    finished=time.time(),
+                )
+                self._save_status(job)
             self.jobs[job["id"]] = job
 
     def _save(self, job):
@@ -104,6 +136,12 @@ class Jobs:
         temporary = path.with_suffix(".tmp")
         temporary.write_text(json.dumps(job, indent=2), encoding="utf-8")
         temporary.replace(path)
+
+    def _save_status(self, job):
+        try:
+            self._save(job)
+        except OSError:
+            LOGGER.warning("Could not persist replay status for job %s", job["id"])
 
     def submit(self, document_id: str, page_id: str, settings: dict) -> dict:
         config = validate_settings(settings)
@@ -123,9 +161,26 @@ class Jobs:
             paper_size=config["paper_size"],
             source_to_page_transform=config["source_affine"],
         )
-        count = len(ordered_stroke_ids(page, config["ordering"]))
-        if not count:
+        visible = set(ordered_stroke_ids(page, config["ordering"]))
+        if not visible:
             raise ValueError("Page has no visible strokes to replay")
+        if not config["allow_clipping"]:
+            unresolved = {
+                str(stroke.stroke_id)
+                for stroke in parsed.strokes
+                if not stroke.effective_transform.resolved
+            }
+            width, height = config["paper_size"]
+            if any(
+                not (0 <= point.x <= width and 0 <= point.y <= height)
+                for stroke in page.strokes
+                if stroke.stroke_id in visible and stroke.stroke_id not in unresolved
+                for point in stroke.points
+            ):
+                raise CanvasClippingError(
+                    "Visible stroke points fall outside the selected canvas. "
+                    "Adjust the canvas dimensions or offsets, or allow clipping."
+                )
         with self.lock:
             if sum(j["state"] in ("queued", "running") for j in self.jobs.values()) >= 8:
                 raise ValueError("Queue is full (8 jobs); wait for a job to finish")
@@ -138,11 +193,11 @@ class Jobs:
                 "settings": config,
                 "state": "queued",
                 "created": time.time(),
-                "strokes": count,
+                "strokes": len(visible),
                 "expected_frames": math.ceil(config["seconds"] * config["fps"]) + config["fps"],
             }
-            self.jobs[job["id"]] = job
             self._save(job)
+            self.jobs[job["id"]] = job
             self.executor.submit(self._run, job["id"])
             return dict(job)
 
@@ -184,19 +239,19 @@ class Jobs:
                 "created": time.time(),
                 "expected_frames": len(indices),
             }
-            self.jobs[job["id"]] = job
             self._save(job)
+            self.jobs[job["id"]] = job
             self.executor.submit(self._run, job["id"])
             return dict(job)
 
     def _run(self, job_id):
-        with self.lock:
-            job = self.jobs[job_id]
-            if job["state"] != "queued":
-                return
-            job.update(state="running", started=time.time())
-            self._save(job)
+        job = self.jobs[job_id]
         try:
+            with self.lock:
+                if job["state"] != "queued":
+                    return
+                job.update(state="running", started=time.time())
+                self._save(job)
             if job.get("kind") == "export":
                 output = self.root / job_id / "output"
                 args = [
@@ -289,7 +344,7 @@ class Jobs:
             with self.lock:
                 if job["state"] != "cancelled":
                     job.update(state="failed", error=str(error), finished=time.time())
-                    self._save(job)
+                    self._save_status(job)
 
     def cancel(self, job_id):
         with self.lock:
@@ -297,7 +352,7 @@ class Jobs:
             if job["state"] not in ("queued", "running"):
                 return
             job.update(state="cancelled", finished=time.time())
-            self._save(job)
+            self._save_status(job)
             process = self.processes.get(job_id)
             if process is not None and process.poll() is None:
                 if os.name == "nt":

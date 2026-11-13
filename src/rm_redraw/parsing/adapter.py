@@ -54,7 +54,7 @@ IDENTITY_TRANSFORM = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 _SPECIAL_TOP_ANCHOR = CrdtId(0, 281474976710654)
 _SPECIAL_BOTTOM_ANCHOR = CrdtId(0, 281474976710655)
 # Calibrated against all five pages of paired native-PDF fixture
-# 8aba68ff-00e9-400b-9772-b96322e000f0. Unanchored ink remains at Y=0;
+# (initial five-page natural anchor study). Unanchored ink remains at Y=0;
 # anchored plain-paragraph groups resolve at pos_y + 63 + index * 69.5.
 _TEXT_TOP_OFFSET = 63.0
 _LINE_HEIGHT_BY_STYLE = {
@@ -141,7 +141,7 @@ def _anchor_positions(
     top_of_text = y_position
     heuristic_evidence = (
         "root text anchor positions calibrated against the five-page paired native PDF "
-        "fixture 8aba68ff-00e9-400b-9772-b96322e000f0"
+        "fixture (initial natural anchor study; heuristic, not a general text layout)"
     )
     positions: dict[CrdtId, _AnchorPosition] = {}
     for paragraph in document.contents:

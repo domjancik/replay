@@ -7,7 +7,11 @@ async function api(path, body, raw = false) {
     headers:{'Content-Type':raw?'application/octet-stream':'application/json','X-Replay-Token':token},
     body:raw?body:JSON.stringify(body)});
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Request failed');
+  if (!response.ok) {
+    const error = new Error(data.error || 'Request failed');
+    error.code = data.code;
+    throw error;
+  }
   return data;
 }
 const safely = fn => async (...args) => { try { await fn(...args); } catch(error) { notice(error.message); } };
@@ -22,50 +26,86 @@ async function loadLibrary(selected) {
 }
 async function selectNotebook() {
   const notebook=library.find(n=>n.id===$('notebook').value);
-  $('page').replaceChildren();$('page').disabled=!notebook;$('pair-open').disabled=!notebook;
-  if (!notebook) {pageReady=false;$('generate').disabled=true;return;}
+  const previousPage = $('page').value;
+  $('page').replaceChildren();$('pair-open').disabled=!notebook;
+  const initial = notebook?.pages.find(p=>p.available && p.id===previousPage)
+    || notebook?.pages.find(p=>p.available);
+  $('page').disabled=!initial;
+  if (!notebook) {
+    pageRequest++;pageReady=false;resetClipping();updateGenerateButton();
+    $('page-info').textContent='Import a notebook to see its pages.';
+    return;
+  }
   for (const page of notebook.pages) {
     const item=option(page.id,`Page ${page.number}${page.available?'':' · no stroke data'}`);
     item.disabled=!page.available;$('page').append(item);
   }
-  const initial=notebook.pages.find(p=>p.available && p.number===12 && /birthday/i.test(notebook.name)) || notebook.pages.find(p=>p.available);
-  if (initial) $('page').value=initial.id;
+  if (!initial) {
+    pageRequest++;pageReady=false;resetClipping();updateGenerateButton();
+    $('page-info').textContent='This notebook has no pages with saved stroke data.';
+    return;
+  }
+  $('page').value=initial.id;
   await selectPage();
+}
+function resetClipping() {
+  $('canvas-clipping').hidden=true;
+  $('allow-clipping').checked=false;
+}
+function updateGenerateButton() {
+  $('generate').disabled=!pageReady || !capabilities.ffmpeg
+    || (!$('canvas-clipping').hidden && !$('allow-clipping').checked);
 }
 function canvasSummary(){$('canvas-summary').textContent=`Canvas: ${$('width').value} × ${$('height').value} · manual offset (${$('offset-x').value}, ${$('offset-y').value})`;}
 async function selectPage() {
-  const version=++pageRequest;pageReady=false;$('generate').disabled=true;
+  const version=++pageRequest;pageReady=false;resetClipping();updateGenerateButton();
   $('page-info').textContent='Reading page…';
   try {
     const info=await api(`/api/page?document=${encodeURIComponent($('notebook').value)}&page=${encodeURIComponent($('page').value)}`);
     if (version!==pageRequest) return;
     const notebook=library.find(n=>n.id===$('notebook').value);
     const needsPdf=info.unresolved_anchors && !notebook.has_pdf;
+    const needsPoppler=info.unresolved_anchors && notebook.has_pdf && !capabilities.poppler;
     $('page-info').textContent=`${info.strokes.toLocaleString()} strokes${info.paper_size?' · Source canvas '+info.paper_size.join(' × '):''}. `+
-      (needsPdf?'Attach a matching notebook PDF to resolve text anchors.':notebook.has_pdf?'Matching PDF available for text anchors.':'Saved locally. Ready offline.');
+      (needsPdf?'Attach a matching notebook PDF to resolve text anchors.':needsPoppler?'Install Poppler and restart the utility to resolve text anchors.':notebook.has_pdf?'Paired PDF saved locally.':'Saved locally.');
     if(info.paper_size){$('width').value=info.paper_size[0];$('height').value=info.paper_size[1];$('offset-x').value=info.paper_size[0]/2;}
     canvasSummary();
-    pageReady=!!info.strokes && !needsPdf;
-    $('generate').disabled=!pageReady || !capabilities.ffmpeg;
+    pageReady=!!info.strokes && !needsPdf && !needsPoppler;
+    updateGenerateButton();
   } catch(error) {if(version===pageRequest){$('page-info').textContent=error.message;throw error;}}
 }
 async function upload(input, path) {
   const file=input.files[0];if(!file)return;
-  if(file.size>128*1024*1024)throw new Error('File exceeds 128 MiB.');
-  notice('Importing into your local library…');
-  const result=await api(path,file,true);input.value='';await loadLibrary(result.id);notice('Saved locally. The tablet is not needed to render this notebook.');
+  try {
+    if(file.size>128*1024*1024)throw new Error('File exceeds 128 MiB.');
+    notice('Importing into your local library…');
+    const result=await api(path,file,true);
+    await loadLibrary(result.id);
+    notice('Notebook saved locally.');
+  } finally {
+    input.value='';
+  }
 }
 async function generate() {
   if(!pageReady)return;
+  const version = pageRequest;
   $('generate').disabled=true;notice('');
   try {
     const settings={};
     for(const key of ['width','height','offset-x','offset-y','seconds','fps','output-width'])settings[key.replaceAll('-','_')]=Number($(key).value);
     settings.backend=$('backend').value;
     settings.ordering=$('ordering').value;
+    settings.allow_clipping=$('allow-clipping').checked;
     const job=await api('/api/jobs',{document:$('notebook').value,page:$('page').value,settings});
     selectedJob=job.id;previewKey='';await poll();
-  } finally {$('generate').disabled=!pageReady;}
+  } catch (error) {
+    if (error.code!=='canvas_clipping') throw error;
+    if (version===pageRequest) {
+      $('canvas-settings').open=true;
+      $('canvas-warning').textContent=error.message;
+      $('canvas-clipping').hidden=false;
+    }
+  } finally {updateGenerateButton();}
 }
 function showJob(job) {
   if(!job)return;
@@ -124,7 +164,7 @@ async function browse(folder='', label='Tablet') {
         if(entry.folder){await browse(entry.id,entry.name);return;}
         usbBusy=true;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=true);
         $('usb-status').textContent='Saving notebook and verifying two raw reads… This can take a minute.';
-        try{const result=await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);$('usb-dialog').close();notice('Notebook saved locally. You can now render it offline.');}
+        try{const result=await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);$('usb-dialog').close();notice('Notebook saved locally.');}
         catch(error){$('usb-status').textContent=error.message+($('include-pdf').checked?' Try without the PDF for pages without text anchors. Any downloaded raw data is retained locally.':'');}
         finally{usbBusy=false;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=b.dataset.unsupported==='true');}
       };row.append(name,action);$('usb-items').append(row);
@@ -173,7 +213,10 @@ async function start(){
   $('backend').querySelector('[value=rust]').disabled=!capabilities.rust;
   $('backend').value=capabilities.rust?'rust':'python';
   if(!capabilities.ffmpeg)notice('FFmpeg was not found. Install it and restart the utility before generating videos.');
-  for(const id of ['width','height','offset-x','offset-y'])$(id).oninput=canvasSummary;
+  for(const id of ['width','height','offset-x','offset-y'])$(id).oninput=()=>{
+    resetClipping();canvasSummary();updateGenerateButton();
+  };
+  $('allow-clipping').onchange=updateGenerateButton;
   $('notebook').onchange=safely(selectNotebook);$('page').onchange=safely(selectPage);
   $('refresh').onclick=safely(()=>loadLibrary());$('generate').onclick=safely(generate);
   $('upload-open').onclick=()=>$('upload').click();$('upload').onchange=safely(()=>upload($('upload'),'/api/upload'));

@@ -438,3 +438,18 @@ def test_duration_cli_limits_frames_even_with_many_strokes(tmp_path):
     assert manifest["replay"]["duration_seconds"] == 2
     assert manifest["final_frame_matches_static"]
     assert (output / "frames/frame_000009.png").read_bytes() == (output / "static.png").read_bytes()
+
+
+@pytest.mark.parametrize("viewport", [(63, 48), (64, 47), None])
+def test_odd_video_dimensions_reject_before_writing_frames(tmp_path, viewport):
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=(63, 47)))
+    output = tmp_path / "output"
+    with pytest.raises(ReplayCommandError, match="even.*--viewport"):
+        run_local_replay(
+            source,
+            output_directory=output,
+            source_affine=(1, 0, 0, 1, 0, 0),
+            viewport=viewport,
+        )
+    assert not output.exists()

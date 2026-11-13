@@ -4,6 +4,7 @@ import json
 import mimetypes
 import secrets
 import shutil
+import threading
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -12,7 +13,7 @@ from uuid import uuid4
 
 from rm_redraw.acquisition.usb import UsbReader
 
-from .jobs import Jobs, page_info
+from .jobs import CanvasClippingError, Jobs, page_info
 from .library import MAX_BYTES, Library
 
 ASSETS = Path(__file__).with_name("static")
@@ -25,6 +26,7 @@ class App:
         self.library = Library(root / "library")
         self.jobs = Jobs(root / "jobs", self.library)
         self.usb = UsbReader()
+        self.import_lock = threading.Lock()
 
     def capabilities(self):
         try:
@@ -169,6 +171,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(error)}, 400)
 
     def do_POST(self):
+        importing = False
         try:
             if (
                 not self._trusted()
@@ -184,12 +187,25 @@ class Handler(BaseHTTPRequestHandler):
             url = urlsplit(self.path)
             upload = url.path in ("/api/upload", "/api/upload-pdf")
             limit = MAX_BYTES if upload else 16384
-            length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= limit:
-                raise ValueError("Request is empty or exceeds its size limit")
+            lengths = self.headers.get_all("Content-Length", [])
+            if len(lengths) != 1 or not lengths[0].isascii() or not lengths[0].isdigit():
+                raise ValueError("A valid Content-Length is required")
+            length = int(lengths[0])
+            if length == 0:
+                raise ValueError("Request is empty")
+            if length > limit:
+                maximum = "128 MiB" if upload else "16 KiB"
+                self._json({"error": f"Request exceeds the {maximum} limit"}, 413)
+                return
             expected = "application/octet-stream" if upload else "application/json"
             if self.headers.get_content_type() != expected:
-                raise ValueError(f"Expected {expected}")
+                self._json({"error": f"Expected {expected}"}, 415)
+                return
+            if upload or url.path == "/api/usb-import":
+                importing = self.app.import_lock.acquire(blocking=False)
+                if not importing:
+                    self._json({"error": "Another import is already in progress"}, 409)
+                    return
             self.connection.settimeout(120)
             body = self.rfile.read(length)
             if len(body) != length:
@@ -237,8 +253,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json(result)
         except (BrokenPipeError, ConnectionResetError):
             pass
+        except CanvasClippingError as error:
+            self._json({"error": str(error), "code": "canvas_clipping"}, 422)
         except Exception as error:
             self._json({"error": str(error)}, 400)
+        finally:
+            if importing:
+                self.app.import_lock.release()
 
 
 def create_server(root: Path, *, port=8765):

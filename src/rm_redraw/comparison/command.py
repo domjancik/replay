@@ -170,14 +170,20 @@ def _rasterize_pdf_ink_only(
         filtered_pdf = Path(temporary) / "native-ink-only.pdf"
         removed, text_painting = _write_text_filtered_pdf(pdf, page, filtered_pdf)
         image, rasterization = _rasterize_pdf(filtered_pdf, 1, size)
+    rasterization["filtered_pdf_page"] = 1
+    rasterization["pdf_page"] = page
     rasterization["content_filter"] = "remove-text-objects-before-rasterization"
-    return image, rasterization, {
-        "strategy": "remove-text-objects-from-native-pdf-content-stream",
-        "scope": "direct-page-content-only",
-        "removed_text_operators": removed,
-        "direct_text_painting_operators": text_painting,
-        "unfiltered_content": ["form-xobjects", "images", "annotations"],
-    }
+    return (
+        image,
+        rasterization,
+        {
+            "strategy": "remove-text-objects-from-native-pdf-content-stream",
+            "scope": "direct-page-content-only",
+            "removed_text_operators": removed,
+            "direct_text_painting_operators": text_painting,
+            "unfiltered_content": ["form-xobjects", "images", "annotations"],
+        },
+    )
 
 
 def _write_text_filtered_pdf(source: Path, page_number: int, destination: Path) -> tuple[int, int]:

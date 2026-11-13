@@ -1,105 +1,62 @@
 # rm-redraw
 
-## Try the local replay utility
+A local reMarkable ink renderer and stroke-replay utility. Import a notebook, choose a page, and export an animated drawing as MP4. Crop a finished replay and add a quick reverse to make a loop without rendering the ink again.
 
-Run `./scripts/start-replay.ps1`, then open **http://127.0.0.1:8765**. Browse/import notebooks over read-only USB or upload an existing `.rmdoc`, select a page, and generate/play/download a replay. Imported notebooks work offline. [Usage and limitations](docs/local-replay-utility.md).
+This is an experimental, single-user desktop utility with a browser interface. It runs on your computer; it is not a hosted service and has no cloud integration. Tablet access is read-only.
 
+## Get started
 
-Local, read-only tooling for acquiring native reMarkable documents, parsing complete stroke metadata, replaying strokes, and developing a renderer against tablet-native PDF exports.
-
-The source brief is [Codex Brief — reMarkable Stroke Replay + High-Fidelity Renderer.md](./Codex%20Brief%20%E2%80%94%20reMarkable%20Stroke%20Replay%20%2B%20High-Fidelity%20Renderer.md). Current kickoff evidence is in [plans/kickoff-readiness.md](plans/kickoff-readiness.md), and shared interfaces are frozen in [docs/contracts.md](docs/contracts.md).
-
-## Development environment
-
-CPython does not publish a separately branded LTS channel. This project pins CPython 3.13.15, the current 3.13 maintenance release as of 2026-09-05. Python 3.13 is presently in its bugfix phase; it later receives security-only fixes before reaching end of life in October 2029. The pinned parser supports Python 3.13.
-
-`rmscene==0.8.0` is the parser baseline. `rmc==0.3.0` is intentionally excluded from the main environment because it requires `rmscene<0.7`; it remains a renderer reference and can be evaluated in an isolated environment.
+On Windows, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and FFmpeg with H.264 encoding on PATH, then run from the source folder:
 
 ```powershell
-uv sync --all-groups
-uv run pytest
-uv run ruff check .
+./scripts/setup.ps1
+./scripts/start-replay.ps1
 ```
 
-Device-derived files belong under `fixtures/private/` or `fixtures/local/` and are excluded from Git. Existing tablet content is always read-only. Device writes require a separate explicit opt-in and may target only dedicated fixture documents.
+Open **http://127.0.0.1:8765**. Import a local `.rmdoc`, or enable the tablet's USB web interface and browse over USB. Saved imports can be replayed without a live tablet connection. This does not establish reference coverage for future renderer calibration.
 
-## Local replay command
+[Installation, dependencies and troubleshooting](docs/install.md) · [Utility guide](docs/local-replay-utility.md)
 
-For smooth directional drawing, select `--mode distance-per-second --distance-per-second 420` or `--mode seconds-per-stroke --seconds-per-stroke 0.5`. The default `stroke-step` mode reveals whole strokes. Use `--initial-pause 0.4 --pause-between-strokes 0.25 --final-hold 0.8` with either progressive mode to control pacing. These durations are synthesized; neither timing nor CRDT order is claimed to reproduce recorded wall-clock chronology. Visible layers finish from lowest to highest.
+## What it supports
 
-The renderer includes a provisionally calibrated ballpoint profile and layer-local erasing. Experimental pencil, mechanical-pencil and brush profiles use deterministic source-position grain and fixed deposition samples, so revealing a prefix does not resample its texture. These profiles are not yet native-calibrated, and speed response is not established. See [the milestone acceptance audit](plans/milestone-acceptance.md) for verified behavior and remaining fidelity gaps.
+- Native v6 scene parsing through `rmscene`, preserving stroke channels and diagnostic unknown data.
+- Layer-correct static rendering and smooth directional ink reveal.
+- Layer-by-layer or inferred entry order; configurable drawing duration and frame rate.
+- Experimental pencil, mechanical-pencil and brush textures, ordinary pens, calligraphy and layer-local erasing.
+- Rectangular crop export and forward/reverse loops at 2x, 4x or 8x reverse speed.
+- Local comparison against explicitly identified app PNG or tablet PDF references.
+- An optional Rust pencil kernel, validated separately against the Python reference on Windows.
 
-Replay one local `.rm` page or a selected page from a local `.rmdoc` archive:
+## Limits to understand
+
+Replay order and timing are inferred, not recovered wall-clock drawing history. The renderer handles ink, not templates, typed text or PDF/EPUB backgrounds. Text-anchored ink can require a matching native PDF. Scrolling/landscape pages may need explicit canvas dimensions and offsets; base screen metadata does not always describe the full drawing.
+
+Texture profiles are empirical approximations, not the proprietary native algorithm. Close appearance on one drawing is not universal fidelity. PDF export and app PNG export are distinct reference paths. Final forward PNG frames must match static rendering from the same backend/options byte-for-byte; H.264 itself is lossy. Reverse-loop exports intentionally finish at the first frame.
+
+[Calibration development story](docs/calibration-journey.md) · [Renderer landscape](docs/renderer-landscape.md) · [Technical contracts](docs/contracts.md)
+
+## Command line
 
 ```powershell
-uv run python -m rm_redraw.replay path/to/page.rm `
-  --output artifacts/replay-example `
-  --paper-size 1404 1872 `
-  --source-affine 1 0 0 1 702 0 `
-  --viewport 280 376 `
-  --mode seconds-per-stroke `
-  --seconds-per-stroke 0.5 `
-  --fps 30
+uv run --locked python -m rm_redraw.replay --help
+uv run --locked python -m rm_redraw.comparison --help
+uv run --locked python -m rm_redraw.parsing --help
 ```
 
-The geometry values above are explicit example inputs, not device defaults. Omit `--paper-size` only when the page contains `SceneInfo.paper_size`; supply a source affine transform unless parsed metadata provides one. Multi-page `.rmdoc` archives also require `--page-id`.
+The installed `rm-redraw` command starts the browser utility; `python -m rm_redraw.web` is equivalent. Use `--data <folder>` to choose a writable local library/output directory. Keep native drawings, PDFs and generated videos private unless you intend to share them.
 
-Root-text anchor matrices derived from the fixture-calibrated typography heuristic are retained for diagnostics but marked unresolved. Controlled native exports establish that type-2 group Y is `RootText.pos_y + final_layout_anchor_offset`; the stored threshold is not applied as a static cap or deadband. The raw scene does not contain native shaped line boxes, visual baselines, font metrics, or a stored anchor Y. A real edited document also places a later logical anchor above an earlier one, so a monotonic layout of the final CRDT text cannot reproduce both positions. Native-equivalent offsets therefore require external evidence or additional editing-history data; the parser does not label a current-text estimate as resolved.
+## Development
 
-Callers that already have evidence-backed offsets can supply them without coupling parsing to a renderer. The values are source-space Y offsets from `RootText.pos_y`, keyed by CRDT anchor ID:
-
-```json
-{
-  "schema_version": 1,
-  "evidence": "native-equivalent final text layout",
-  "offsets": {
-    "1:2206": 2258.6
-  }
-}
-```
-
-Pass the file as `--text-anchor-layout path/to/anchor-layout.json`. Matching anchors are marked resolved and the file path, evidence, and offsets are recorded in `manifest.json`; missing IDs continue to use the unresolved diagnostic heuristic.
-
-When a matching native PDF is available, add `--auto-text-anchors` alongside `--paired-native-pdf` and `--export-canvas` to derive offsets automatically. The command uses the local native raster, rejects ambiguous or unsupported matches before creating output, and records per-group decisions and source hashes. It cannot be combined with `--text-anchor-layout`. This is native-reference-assisted placement, not a raw-only typography engine; no tablet connection is required after the paired files are saved.
-
-When a paired native export establishes the target canvas, provide the local PDF and caller-validated canvas together. The command hashes and validates the PDF/page, records its MediaBox, and derives the centered X transform from the supplied width without assuming a DPI:
+Python is pinned in `.python-version`; the dependency graph is pinned in `uv.lock`. CPython has no separately branded LTS channel. Use the pinned interpreter for reproducibility.
 
 ```powershell
-uv run python -m rm_redraw.replay path/to/document.rmdoc `
-  --page-id PAGE_UUID `
-  --paired-native-pdf path/to/native.pdf `
-  --paired-pdf-page 1 `
-  --export-canvas 1872 6136 `
-  --output artifacts/replay-paired
+uv sync --locked --all-groups
+uv run --locked pytest
+uv run --locked ruff check src tests
 ```
 
-Each successful run creates deterministic numbered PNG frames, `static.png`, H.264 `replay.mp4`, and `manifest.json`. The manifest records input and output hashes, geometry and optional text-anchor evidence, timing, viewport, backend, and the final-frame equality result. The command fails if its final frame is not byte-identical to the static render.
+FFmpeg is required for video tests; Poppler (`pdftoppm`) is required for PDF comparisons and PDF-assisted anchors. Rust is optional: see [kernel build instructions](native/pencil-kernel/README.md). Linux/macOS and browser WASM have not been release-validated.
 
-## Local comparison command
+## Distribution status
 
-Compare a candidate PNG with either a same-size native PNG or one page of a native PDF:
-
-```powershell
-uv run python -m rm_redraw.comparison artifacts/replay-example/static.png `
-  --native-pdf fixtures/private/example/native.pdf `
-  --page 1 `
-  --output artifacts/comparison-example
-```
-
-Use `--native-png` instead of `--native-pdf` for a pre-rasterized reference. PNG inputs must have identical dimensions and must both use RGB or both use RGBA; convert them explicitly before comparison when their modes differ. Each run requires a new output directory and writes normalized input copies, absolute and high-gain differences, a red/native–blue/candidate overlay, and a provenance-rich `metrics.json` report with global, ink-ROI, and edge-geometry measurements.
-
-Add `--ink-only` with `--native-pdf` to remove direct page-content text objects before rasterization. The report records the filtered operators and explicitly lists unfiltered Form XObjects, images, and annotations.
-
-## Ballpoint rendering
-
-The render projection preserves the parsed tool code/name and all point channels. `BALLPOINT_2` uses five-point segments with recorded width, pressure, and speed, rounded caps/joins, pressure-dependent colour, and localized two-times antialiasing.
-
-The controlled three-stroke ballpoint page improved from ROI RMSE `29.9361` to `18.3519`, SSIM `0.941389` to `0.973088`, and symmetric edge distance `0.50431` to `0.38154` pixels. Candidate/native ROI coverage is `0.05072`/`0.04622`. This is one geometry-isolated fixture; the `0.75` Pillow width calibration remains provisional until held-out ballpoint pages cover more pressure, speed, and thickness ranges.
-
-## Capture-calibrated tool profiles
-
-Saved native exports establish current fineliner width from the first point's quarter-unit width, with round caps and joins. Current highlighter uses quarter-unit width with butt caps, bevel joins and Darken blending within its layer; cross-layer blending equivalence remains unverified. The current marker has a provisional smooth width envelope; native irregular edges are not reproduced.
-
-Current pencil and mechanical-pencil profiles use finer shared paper grain with modest clustering, irregular edges, full-pressure pinholes and a pressure curve fitted to app-exported PNG controls. Current brush adds clustered low-pressure coverage and antialiased irregular edges while retaining recorded width, pressure and speed geometry. Calligraphy retains its quarter-unit raw-width envelope and fourfold antialiasing. Textured previews composite at source resolution before reducing the completed frame, preventing overlapping strokes from filling downsampled paper holes. Native grain identity remains unknown: pencil pixel error can increase even when ink amounts and repeated-stroke buildup improve. See `plans/milestone-acceptance.md` for measured tradeoffs. `--pencil-boundary` selects the older PDF-fitted pencil profile for comparison; the app-PNG profile is the default.
-
-The default black, gray, yellow, blue and red palette values now match measured native export values. Explicit source RGBA takes precedence. Replay manifests name the palette, simple-pen, marker and experimental texture profiles so comparisons retain their provenance.
+MIT-licensed code, prepared for a local preview release. Public publication and selected artwork approval remain pending. Do not redistribute the development history or private visual annex as part of a release. See [publication readiness](docs/publication-readiness.md) and [third-party notices](THIRD_PARTY_NOTICES.md). No third-party native binaries or private reference drawings are bundled.
