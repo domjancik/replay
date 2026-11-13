@@ -453,3 +453,25 @@ def test_odd_video_dimensions_reject_before_writing_frames(tmp_path, viewport):
             viewport=viewport,
         )
     assert not output.exists()
+
+
+def test_static_only_preview_skips_video_and_frame_sequence(tmp_path, monkeypatch):
+    source = tmp_path / "page.rm"
+    source.write_bytes(_page_bytes(paper_size=(64, 64)))
+    import rm_redraw.replay.command as command
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Preview must not render a replay or encode video")
+
+    monkeypatch.setattr(command, "render_png_sequence", forbidden)
+    monkeypatch.setattr(command, "encode_h264", forbidden)
+    result = run_local_replay(
+        source,
+        output_directory=tmp_path / "preview",
+        viewport=(128, 128),
+        source_affine=(1, 0, 0, 1, 0, 0),
+        static_only=True,
+    )
+    assert (result.output_directory / "static.png").is_file()
+    assert not (result.output_directory / "frames").exists()
+    assert json.loads(result.manifest_path.read_text())["kind"] == "static-preview"

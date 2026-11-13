@@ -418,6 +418,7 @@ def run_local_replay(
     auto_text_anchors: bool = False,
     pencil_boundary: bool = False,
     pencil_backend: str = "python",
+    static_only: bool = False,
 ) -> ReplayResult:
     """Parse and replay one local page into a new deterministic output directory."""
     if auto_text_anchors and text_anchor_layout is not None:
@@ -539,6 +540,19 @@ def run_local_replay(
     options = RenderOptions(
         viewport=resolved_viewport, pencil_boundary=pencil_boundary, pencil_backend=pencil_backend
     )
+    if static_only:
+        output_path = Path(output_directory)
+        output_path.mkdir(parents=True, exist_ok=False)
+        write_png(PillowRenderer().render_static(render_page, options), output_path / "static.png")
+        manifest_path = _write_manifest(
+            output_path / "manifest.json",
+            {
+                "kind": "static-preview",
+                "page_id": source_input.page_id,
+                "input_sha256": source_input.input_sha256,
+            },
+        )
+        return ReplayResult(output_path, manifest_path)
     for option_name, duration in (
         ("--initial-pause", initial_pause_seconds),
         ("--pause-between-strokes", pause_between_strokes_seconds),

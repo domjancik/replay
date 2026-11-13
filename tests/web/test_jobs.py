@@ -232,3 +232,37 @@ def test_failed_running_status_write_releases_queue_slot(tmp_path, monkeypatch):
         assert "Test storage unavailable" in result["error"]
     finally:
         queue.close()
+
+
+def test_page_previews_deduplicate_and_cache_without_video(tmp_path):
+    import runpy
+    from concurrent.futures import ThreadPoolExecutor
+
+    from rm_redraw.web.library import Library
+    from rm_redraw.web.previews import Previews
+
+    library = Library(tmp_path / "library")
+    raw = runpy.run_path("scripts/release-smoke.py")["synthetic_archive"]()
+    doc = library.add(raw, provenance={"provider": "test"})
+    settings = dict(
+        width=1404,
+        height=1872,
+        offset_x=702,
+        offset_y=0,
+        seconds=6,
+        fps=6,
+        output_width=234,
+        backend="python",
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        previews = Previews(tmp_path / "previews", library, executor)
+        first = previews.submit(doc["id"], doc["pages"][0]["id"], settings)
+        second = previews.submit(doc["id"], doc["pages"][0]["id"], settings)
+        assert first["id"] == second["id"]
+    result = previews.get(first["id"])
+    assert result["state"] == "complete", result
+    assert previews.image(first["id"]).is_file()
+    assert not list((tmp_path / "previews").rglob("*.mp4"))
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        restored = Previews(tmp_path / "previews", library, executor)
+        assert restored.submit(doc["id"], doc["pages"][0]["id"], settings)["state"] == "complete"

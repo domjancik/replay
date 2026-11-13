@@ -62,3 +62,45 @@ def test_relay_concurrency_gate_rejects_before_transport(server):
         assert status == 503
     finally:
         server.app.relay_slots.release()
+
+
+def test_static_page_preview_endpoint_is_authenticated_and_serves_png(server):
+    import json
+    import runpy
+    import time
+
+    raw = runpy.run_path("scripts/release-smoke.py")["synthetic_archive"]()
+    doc = server.app.library.add(raw, provenance={"provider": "test"})
+    payload = json.dumps(
+        dict(
+            document=doc["id"],
+            page=doc["pages"][0]["id"],
+            settings=dict(
+                width=1404,
+                height=1872,
+                offset_x=702,
+                offset_y=0,
+                output_width=234,
+                seconds=6,
+                fps=6,
+                backend="python",
+            ),
+        )
+    ).encode()
+    assert request(server, "POST", "/api/page-preview", payload, {})[0] == 403
+    headers = session(server)
+    code, _, body = request(server, "POST", "/api/page-preview", payload, headers)
+    assert code == 200
+    result = json.loads(body)
+    for _ in range(100):
+        code, _, body = request(
+            server, "GET", "/api/page-preview?id=" + result["id"], headers=headers
+        )
+        result = json.loads(body)
+        if result["state"] not in ("queued", "running"):
+            break
+        time.sleep(0.05)
+    assert result["state"] == "complete", result
+    assert request(server, "GET", result["url"])[0] == 403
+    code, _, png = request(server, "GET", result["url"], headers=headers)
+    assert code == 200 and png.startswith(b"\x89PNG")

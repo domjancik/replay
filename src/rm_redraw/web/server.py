@@ -18,6 +18,7 @@ from rm_redraw.acquisition.usb import UsbReader
 
 from .jobs import CanvasClippingError, Jobs, page_info
 from .library import MAX_BYTES, Library
+from .previews import Previews
 
 ASSETS = Path(__file__).with_name("static")
 
@@ -28,6 +29,7 @@ class App:
         self.token = secrets.token_urlsafe(32)
         self.library = Library(root / "library")
         self.jobs = Jobs(root / "jobs", self.library)
+        self.previews = Previews(root / "previews", self.library, self.jobs.executor)
         self.usb = UsbReader()
         # Historical adapter remains injectable for compatibility tests only.
         # Normal app startup neither discovers nor launches a CLI companion.
@@ -169,6 +171,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.app.library.list())
             elif url.path == "/api/jobs":
                 self._json(self.app.jobs.list())
+            elif url.path == "/api/page-preview":
+                self._json(self.app.previews.get(query["id"][0]))
+            elif url.path.startswith("/page-previews/") and url.path.endswith(".png"):
+                self._file(self.app.previews.image(url.path.removeprefix("/page-previews/")[:-4]))
             elif url.path == "/api/page":
                 info, _ = page_info(self.app.library, query["document"][0], query["page"][0])
                 self._json(info)
@@ -311,6 +317,10 @@ class Handler(BaseHTTPRequestHandler):
                     )
                 elif url.path == "/api/jobs":
                     result = self.app.jobs.submit(data["document"], data["page"], data["settings"])
+                elif url.path == "/api/page-preview":
+                    result = self.app.previews.submit(
+                        data["document"], data["page"], data["settings"]
+                    )
                 elif url.path == "/api/export":
                     result = self.app.jobs.submit_export(
                         data["job"], data.get("crop"), data.get("reverse_speed", 0)

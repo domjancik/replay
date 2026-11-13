@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let token = '', library = [], jobs = [], selectedJob = null, pageReady = false, capabilities;
 let previewKey = '', pageRequest = 0, usbBusy = false;
+let selectionPreview = null, previewRefreshTimer;
 const notice = message => { $('notice').textContent = message; $('notice').hidden = !message; };
 async function api(path, body, raw = false) {
   const response = await fetch(path, body === undefined ? {} : {method:'POST',
@@ -25,6 +26,8 @@ async function loadLibrary(selected) {
   await selectNotebook();
 }
 async function selectNotebook() {
+  clearTimeout(previewRefreshTimer);
+  selectionPreview=null;
   $('notebook-preview').hidden=true;
   const notebook=library.find(n=>n.id===$('notebook').value);
   const previousPage = $('page').value;
@@ -59,6 +62,8 @@ function updateGenerateButton() {
 }
 function canvasSummary(){$('canvas-summary').textContent=`Canvas: ${$('width').value} × ${$('height').value} · manual offset (${$('offset-x').value}, ${$('offset-y').value})`;}
 async function selectPage() {
+  clearTimeout(previewRefreshTimer);
+  selectionPreview=null;
   showNotebookPreview();
   const version=++pageRequest;pageReady=false;resetClipping();updateGenerateButton();
   $('page-info').textContent='Reading page…';
@@ -74,7 +79,27 @@ async function selectPage() {
     canvasSummary();
     pageReady=!!info.strokes && !needsPdf && !needsPoppler;
     updateGenerateButton();
+    requestSelectionPreview(version);
   } catch(error) {if(version===pageRequest){$('page-info').textContent=error.message;throw error;}}
+}
+async function requestSelectionPreview(version) {
+  const pending={document:$('notebook').value,page:$('page').value,state:'queued'};
+  selectionPreview=pending;showNotebookPreview();
+  const settings={};
+  for(const key of ['width','height','offset-x','offset-y'])settings[key.replaceAll('-','_')]=Number($(key).value);
+  Object.assign(settings,{seconds:6,fps:6,output_width:234,backend:$('backend').value});
+  try {
+    let result=await api('/api/page-preview',{document:pending.document,page:pending.page,settings});
+    while(version===pageRequest && selectionPreview===pending){
+      Object.assign(pending,result);showNotebookPreview();
+      if(!['queued','running'].includes(result.state))return;
+      await new Promise(resolve=>setTimeout(resolve,1500));
+      if(version!==pageRequest || selectionPreview!==pending)return;
+      result=await api('/api/page-preview?id='+encodeURIComponent(result.id));
+    }
+  } catch(error){
+    if(version===pageRequest && selectionPreview===pending){pending.state='failed';pending.error=error.message;showNotebookPreview();}
+  }
 }
 async function upload(input, path) {
   const file=input.files[0];if(!file)return;
@@ -136,6 +161,15 @@ function showNotebookPreview() {
   const image=$('notebook-preview');
   const job=jobs.find(j=>j.state==='complete' && j.kind!=='export'
     && j.document_id===$('notebook').value && j.page_id===$('page').value);
+  const rendered=selectionPreview?.document===$('notebook').value && selectionPreview?.page===$('page').value ? selectionPreview : null;
+  if(rendered && (!job || rendered.state==='complete')){
+    image.hidden=rendered.state!=='complete';
+    $('notebook-preview-label').textContent=rendered.state==='complete'?'Rendered page preview':rendered.state==='failed'?'Preview unavailable: '+rendered.error:rendered.state==='queued'?'Page preview queued…':'Rendering page preview…';
+    if(rendered.state==='complete' && image.getAttribute('src')!==rendered.url){
+      image.alt='Rendered preview of selected page';image.onerror=()=>{image.hidden=true;};image.src=rendered.url;
+    }
+    return;
+  }
   image.hidden=!job;
   $('notebook-preview-label').textContent=job?'Saved render · selected page':'No saved preview for this page yet.';
   if(!job){image.removeAttribute('src');return;}
@@ -253,7 +287,10 @@ async function start(){
   if(!capabilities.ffmpeg)notice('FFmpeg was not found. Install it and restart the utility before generating videos.');
   for(const id of ['width','height','offset-x','offset-y'])$(id).oninput=()=>{
     resetClipping();canvasSummary();updateGenerateButton();
+    clearTimeout(previewRefreshTimer);
+    previewRefreshTimer=setTimeout(()=>requestSelectionPreview(pageRequest),600);
   };
+  $('backend').onchange=()=>requestSelectionPreview(pageRequest);
   $('allow-clipping').onchange=updateGenerateButton;
   $('notebook').onchange=safely(selectNotebook);$('page').onchange=safely(selectPage);
   $('refresh').onclick=safely(()=>loadLibrary());$('generate').onclick=safely(generate);
