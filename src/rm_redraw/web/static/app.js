@@ -2,6 +2,8 @@ const $ = id => document.getElementById(id);
 let token = '', library = [], jobs = [], selectedJob = null, pageReady = false, capabilities;
 let previewKey = '', pageRequest = 0, usbBusy = false;
 let selectionPreview = null, previewRefreshTimer;
+let expandedNotebook=null, galleryEpoch=0, galleryList=false, galleryFocused=false;
+const pageThumbnails=new Map();
 const notice = message => { $('notice').textContent = message; $('notice').hidden = !message; };
 async function api(path, body, raw = false) {
   const response = await fetch(path, body === undefined ? {} : {method:'POST',
@@ -23,7 +25,10 @@ async function loadLibrary(selected) {
   $('notebook').replaceChildren(...library.map(n=>option(n.id,n.name + (n.has_pdf?' · PDF paired':''))));
   if (!library.length) $('notebook').append(option('', 'Import a notebook to begin'));
   if (library.some(n=>n.id===previous)) $('notebook').value=previous;
+  expandedNotebook=$('notebook').value || null;
   await selectNotebook();
+  renderGallery();
+  warmGallery();
 }
 async function selectNotebook() {
   clearTimeout(previewRefreshTimer);
@@ -64,7 +69,12 @@ function canvasSummary(){$('canvas-summary').textContent=`Canvas: ${$('width').v
 async function selectPage() {
   clearTimeout(previewRefreshTimer);
   selectionPreview=null;
+  selectedJob=null;$('video').hidden=true;$('preview').hidden=true;$('downloads').hidden=true;$('view-progress').hidden=true;
   showNotebookPreview();
+  $('selected-notebook-title').textContent=library.find(n=>n.id===$('notebook').value)?.name || 'Choose a notebook';
+  $('view-title').textContent='Page '+($('page').selectedOptions[0]?.textContent.replace('Page ','') || '');
+  $('view-state').textContent='PREVIEW';
+  renderGallery();
   const version=++pageRequest;pageReady=false;resetClipping();updateGenerateButton();
   $('page-info').textContent='Reading page…';
   try {
@@ -91,7 +101,9 @@ async function requestSelectionPreview(version) {
   try {
     let result=await api('/api/page-preview',{document:pending.document,page:pending.page,settings});
     while(version===pageRequest && selectionPreview===pending){
-      Object.assign(pending,result);showNotebookPreview();
+      Object.assign(pending,result);
+      if(result.state==='complete'){pageThumbnails.set(pending.document+'/'+pending.page,result.url);updateGalleryImages();}
+      showNotebookPreview();
       if(!['queued','running'].includes(result.state))return;
       await new Promise(resolve=>setTimeout(resolve,1500));
       if(version!==pageRequest || selectionPreview!==pending)return;
@@ -138,7 +150,7 @@ function showJob(job) {
   if(!job)return;
   $('view-title').textContent=`${job.name} · page ${job.page}`;
   $('view-state').textContent=job.state.toUpperCase();
-  $('empty').hidden=true;
+  $('empty').hidden=true;$('notebook-preview').hidden=true;$('notebook-preview-label').hidden=true;
   const complete=job.state==='complete';
   $('video').hidden=!complete;$('downloads').hidden=!complete;
   $('export-open').disabled=!complete || job.kind==='export';
@@ -158,19 +170,21 @@ function showJob(job) {
   }
 }
 function showNotebookPreview() {
+  if(selectedJob)return;
+  $('notebook-preview-label').hidden=false;
   const image=$('notebook-preview');
   const job=jobs.find(j=>j.state==='complete' && j.kind!=='export'
     && j.document_id===$('notebook').value && j.page_id===$('page').value);
   const rendered=selectionPreview?.document===$('notebook').value && selectionPreview?.page===$('page').value ? selectionPreview : null;
   if(rendered && (!job || rendered.state==='complete')){
-    image.hidden=rendered.state!=='complete';
+    image.hidden=rendered.state!=='complete';$('empty').hidden=rendered.state==='complete';
     $('notebook-preview-label').textContent=rendered.state==='complete'?'Rendered page preview':rendered.state==='failed'?'Preview unavailable: '+rendered.error:rendered.state==='queued'?'Page preview queued…':'Rendering page preview…';
     if(rendered.state==='complete' && image.getAttribute('src')!==rendered.url){
       image.alt='Rendered preview of selected page';image.onerror=()=>{image.hidden=true;};image.src=rendered.url;
     }
     return;
   }
-  image.hidden=!job;
+  image.hidden=!job;$('empty').hidden=!!job;
   $('notebook-preview-label').textContent=job?'Saved render · selected page':'No saved preview for this page yet.';
   if(!job){image.removeAttribute('src');return;}
   const source=`/media/${job.id}/static.png`;
@@ -211,7 +225,7 @@ async function poll() {
     if(['queued','running'].includes(job.state)){const cancel=document.createElement('button');cancel.className='quiet';cancel.textContent='Cancel';cancel.onclick=safely(async()=>{await api('/api/cancel',{id:job.id});await poll();});row.append(cancel);}
     $('jobs').append(row);
   }
-  if(!selectedJob && jobs.length)selectedJob=jobs[0].id;
+  updateGalleryImages();
   showJob(jobs.find(j=>j.id===selectedJob));
 }
 async function browse(folder='', label='Tablet') {
@@ -275,7 +289,7 @@ function setupExport(){
   };
 }
 async function start(){
-  setupExport();
+  setupExport();setupGallery();
   capabilities=await api('/api/session');token=capabilities.token;
   const {setupCloud}=await import('/cloud-ui.mjs');
   setupCloud({sessionToken:()=>token,importArchive:async(raw)=>{
@@ -300,3 +314,94 @@ async function start(){
   await loadLibrary();await poll();setInterval(()=>poll().catch(error=>notice('Server unavailable: '+error.message)),2000);
 }
 safely(start)();
+
+
+function thumbnailFor(documentId,pageId){
+  const cached=pageThumbnails.get(documentId+'/'+pageId);
+  if(cached)return cached;
+  const job=jobs.find(j=>j.document_id===documentId && (!pageId || j.page_id===pageId) && j.state==='complete' && j.kind!=='export');
+  return job?`/media/${job.id}/static.png`:null;
+}
+function galleryImage(documentId,pageId){
+  const image=document.createElement('img');image.alt='';image.loading='lazy';image.decoding='async';
+  image.dataset.document=documentId;image.dataset.page=pageId || '';
+  image.onerror=()=>{image.hidden=true;};
+  const source=thumbnailFor(documentId,pageId);image.hidden=!source;if(source)image.src=source;
+  return image;
+}
+function updateGalleryImages(){
+  document.querySelectorAll('#notebook-gallery img,#page-gallery img').forEach(image=>{
+    const source=thumbnailFor(image.dataset.document,image.dataset.page);
+    if(source && image.getAttribute('src')!==source){image.src=source;image.hidden=false;}
+  });
+}
+function renderGallery(){
+  if(!$('notebook-gallery'))return;
+  const query=$('notebook-search').value.trim().toLocaleLowerCase();
+  const grid=$('notebook-gallery');grid.classList.toggle('list-view',galleryList);
+  const pages=$('page-gallery');
+  const scrollTop=pages.dataset.notebook===expandedNotebook?pages.scrollTop:0;
+  const drawer=$('page-drawer');if(drawer.parentElement===grid)grid.after(drawer);grid.replaceChildren();grid.hidden=galleryFocused;
+  $('drawer-open').hidden=galleryFocused;$('drawer-close').textContent=galleryFocused?'← All notebooks':'Collapse ↑';
+  drawer.classList.toggle('focused-notebook',galleryFocused);
+  const matches=library.filter(n=>n.name.toLocaleLowerCase().includes(query));
+  for(const notebook of matches){
+    const card=document.createElement('button');card.className='notebook-card';
+    card.setAttribute('aria-expanded',String(expandedNotebook===notebook.id));
+    card.setAttribute('aria-controls','page-drawer');
+    const cover=document.createElement('span');cover.className='notebook-cover';
+    cover.append(galleryImage(notebook.id,notebook.pages.find(p=>p.available)?.id));
+    const title=document.createElement('span');title.className='notebook-name';title.textContent=notebook.name;
+    const count=document.createElement('small');count.textContent=notebook.pages.length+' pages';
+    const arrow=document.createElement('span');arrow.className='cover-arrow';arrow.textContent=expandedNotebook===notebook.id?'⌄':'›';arrow.setAttribute('aria-hidden','true');
+    card.append(cover,title,count,arrow);
+    card.onclick=safely(async()=>{galleryEpoch++;if(expandedNotebook===notebook.id){expandedNotebook=null;renderGallery();return;}expandedNotebook=notebook.id;$('notebook').value=notebook.id;await selectNotebook();renderGallery();warmGallery();});
+    grid.append(card);
+  }
+  if(!matches.length){const text=document.createElement('p');text.className='hint';text.textContent=library.length?'No notebooks match your search.':'Connect your reMarkable or import a notebook to begin.';grid.append(text);}
+  const notebook=(galleryFocused?library:matches).find(n=>n.id===expandedNotebook);$('page-drawer').hidden=!notebook;
+  if(notebook && !galleryFocused){
+    const columns=galleryList?1:Math.max(1,getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+    const index=matches.findIndex(n=>n.id===notebook.id);const after=Math.min(matches.length-1,Math.floor(index/columns)*columns+columns-1);
+    grid.children[after]?.after(drawer);
+  }
+  pages.dataset.notebook=notebook?.id || '';pages.replaceChildren();if(!notebook)return;
+  $('drawer-title').textContent=notebook.name+' · '+notebook.pages.length+' pages';
+  for(const page of notebook.pages){
+    const card=document.createElement('button');card.className='page-card';card.disabled=!page.available;
+    card.setAttribute('aria-label','Page '+page.number+(page.available?'':' · no saved ink'));
+    card.setAttribute('aria-pressed',String($('notebook').value===notebook.id && $('page').value===page.id));
+    const paper=document.createElement('span');paper.className='page-paper';paper.append(galleryImage(notebook.id,page.id));
+    const number=document.createElement('span');number.textContent=String(page.number);card.append(paper,number);
+    card.onclick=safely(async()=>{$('page').value=page.id;await selectPage();});pages.append(card);
+  }
+  pages.scrollTop=scrollTop;
+}
+async function warmGallery(){
+  const epoch=++galleryEpoch,notebook=library.find(n=>n.id===expandedNotebook);if(!notebook)return;
+  for(const page of notebook.pages){
+    if(epoch!==galleryEpoch || expandedNotebook!==notebook.id)return;
+    if(!page.available || thumbnailFor(notebook.id,page.id))continue;
+    try{
+      const info=await api(`/api/page?document=${notebook.id}&page=${encodeURIComponent(page.id)}`);
+      if(epoch!==galleryEpoch)return;
+      const [width,height]=info.paper_size || [1404,1872];
+      const settings={width,height,offset_x:width/2,offset_y:0,seconds:6,fps:6,output_width:234,backend:$('backend').value};
+      let result=await api('/api/page-preview',{document:notebook.id,page:page.id,settings});
+      while(['queued','running'].includes(result.state)){
+        await new Promise(resolve=>setTimeout(resolve,1500));if(epoch!==galleryEpoch)return;
+        result=await api('/api/page-preview?id='+result.id);
+      }
+      if(result.state==='complete'){pageThumbnails.set(notebook.id+'/'+page.id,result.url);updateGalleryImages();}
+    }catch{ /* An unavailable page must not block the rest of the notebook. */ }
+  }
+}
+function setupGallery(){
+  $('notebook-search').oninput=renderGallery;
+  $('drawer-close').onclick=()=>{if(galleryFocused){galleryFocused=false;renderGallery();return;}galleryEpoch++;expandedNotebook=null;renderGallery();};
+  $('drawer-open').onclick=()=>{galleryFocused=true;renderGallery();};
+  window.addEventListener('resize',()=>renderGallery());
+  for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
+  for(const [id,delta] of [['page-prev',-1],['page-next',1]])$(id).onclick=safely(async()=>{const pages=[...$('page').options].filter(p=>!p.disabled);const i=pages.findIndex(p=>p.value===$('page').value);const next=pages[i+delta];if(next){$('page').value=next.value;await selectPage();}});
+  $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('seconds').value=button.dataset.seconds;$('duration-buttons').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));});
+}
