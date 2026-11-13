@@ -4,6 +4,11 @@ import { createCloudClient } from './cloud-client.mjs';
 export function setupCloud({ sessionToken, importArchive }) {
   const $ = (id) => document.getElementById(id);
   const vault = createVault();
+  const previewUrls = new Set();
+  function clearPreviews() {
+    for (const url of previewUrls) URL.revokeObjectURL(url);
+    previewUrls.clear();
+  }
   let client = null, data = null, exists = false, busy = false, accountBusy = false, epoch = 0, idle;
   const status = (message) => { $('cloud-status').textContent = message; };
   function controls() {
@@ -21,6 +26,7 @@ export function setupCloud({ sessionToken, importArchive }) {
     $('cloud-items').querySelectorAll('button').forEach((button) => { button.disabled = busy; });
   }
   function lock(message = 'Locked. Unlock with your vault passphrase.') {
+    clearPreviews();
     epoch++; clearTimeout(idle); client?.lock(); client = null; data = null; vault.lock();
     $('cloud-items').replaceChildren(); $('cloud-code').value = '';
     $('cloud-passphrase').value = ''; $('cloud-confirm').value = '';
@@ -74,10 +80,28 @@ export function setupCloud({ sessionToken, importArchive }) {
     }
   }
   function renderEntries(entries) {
+    clearPreviews();
     $('cloud-items').replaceChildren();
     for (const entry of entries.filter((item) => item.kind !== 'folder')) {
       const row = document.createElement('div'); row.className = 'usb-item';
       const label = document.createElement('span'); label.textContent = entry.path || entry.name;
+      const image = document.createElement('img'); image.className = 'notebook-thumbnail';
+      image.alt = `Cloud thumbnail for ${entry.name}`; image.hidden = true;
+      const preview = document.createElement('button'); preview.textContent = 'Preview';
+      preview.className = 'secondary';
+      preview.onclick = () => action(async (generation) => {
+        status('Looking for a notebook thumbnail…');
+        await client.list();
+        if (generation !== epoch) return;
+        const bytes = await client.preview(entry.id);
+        if (generation !== epoch) return;
+        if (!bytes) { status('No cloud thumbnail available for this notebook. You can still import it.'); return; }
+        if (previewUrls.has(image.src)) { URL.revokeObjectURL(image.src); previewUrls.delete(image.src); }
+        const url = URL.createObjectURL(new Blob([bytes], {type: 'image/png'})); previewUrls.add(url);
+        image.onerror = () => { image.hidden = true; status('Thumbnail could not be displayed. You can still import this notebook.'); };
+        image.src = url; image.hidden = false;
+        status('Cloud thumbnail shown. It may represent a different page from the one you choose to animate.');
+      });
       const button = document.createElement('button'); button.textContent = 'Import ink';
       button.onclick = () => action(async (generation) => {
         status('Downloading and verifying notebook in this browser…');
@@ -88,7 +112,7 @@ export function setupCloud({ sessionToken, importArchive }) {
         await importArchive(archive);
         $('cloud-dialog').close();
       });
-      row.append(label, button); $('cloud-items').append(row);
+      row.append(image, label, preview, button); $('cloud-items').append(row);
     }
   }
   $('cloud-open').onclick = async () => {

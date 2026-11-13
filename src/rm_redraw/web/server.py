@@ -83,7 +83,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+            "default-src 'self'; img-src 'self' blob:; object-src 'none'; "
+            "base-uri 'none'; frame-ancestors 'none'",
         )
         if cookie:
             self.send_header(

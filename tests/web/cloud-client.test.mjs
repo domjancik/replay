@@ -11,7 +11,7 @@ const document = '11112233-4455-4677-8899-aabbccddeeff';
 const hidden = '22112233-4455-4677-8899-aabbccddeeff';
 const page = '33112233-4455-4677-8899-aabbccddeeff';
 
-function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash'} = {}) {
+function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash', thumbnail} = {}) {
   const files = new Map();
   const requests = [];
   let generation = 0;
@@ -40,6 +40,11 @@ function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParen
     const content = blob(`${document}.content`, {fileType, pages: [page]});
     const ink = blob(`${document}/${page}.rm`, 'Synthetic ink');
     const members = [oversized ? {...ink, size: 128 * 1024 * 1024} : ink, docMeta, content];
+    if (thumbnail) {
+      const name = `${document}.thumbnails/${page}.png`;
+      const entry = {filename: name, hash: sha256(thumbnail), size: thumbnail.length};
+      files.set(`${entry.hash}/${name}`, thumbnail); members.push(entry);
+    }
     if (badPath) members.push(blob(badPath, 'Escape'));
     const docIndex = index(`${document}.docSchema`, members, document);
     const folderIndex = index(`${folder}.docSchema`, [folderMeta], folder, false);
@@ -305,5 +310,31 @@ test('locking or changing tokens invalidates a pending session', async () => {
     finishSession(encode('late-session'));
     await assert.rejects(listing, /connection changed/i);
     assert.equal(client.getCache(), null);
+  }
+});
+
+const previewPng = new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'));
+test('preview fetches only bounded verified PNG and handles absent thumbnails', async () => {
+  const f = fixture({thumbnail: previewPng});
+  const client = createCloudClient({relay: f.relay});
+  client.setDeviceToken('synthetic-device'); await client.list();
+  assert.deepEqual(await client.preview(document), previewPng);
+  assert.equal(f.requests.some(r => r.filename?.endsWith('.rm')), false);
+  const key = [...f.files.keys()].find(k => k.endsWith('.png'));
+  f.files.set(key, new Uint8Array(previewPng.length));
+  await assert.rejects(client.preview(document), /hash/i);
+  client.lock(); await assert.rejects(client.preview(document), /locked/i);
+  const absent = createCloudClient({relay: fixture().relay});
+  absent.setDeviceToken('synthetic-device'); await absent.list();
+  assert.equal(await absent.preview(document), null);
+});
+
+test('preview rejects excessive decoded dimensions and non-PNG content', async () => {
+  for (const invalid of [new Uint8Array(30), (() => {
+    const bytes = previewPng.slice(); new DataView(bytes.buffer).setUint32(16, 100000); return bytes;
+  })()]) {
+    const client = createCloudClient({relay: fixture({thumbnail: invalid}).relay});
+    client.setDeviceToken('synthetic-device'); await client.list();
+    await assert.rejects(client.preview(document), /preview PNG/i);
   }
 });

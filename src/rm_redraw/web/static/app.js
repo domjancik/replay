@@ -25,6 +25,7 @@ async function loadLibrary(selected) {
   await selectNotebook();
 }
 async function selectNotebook() {
+  $('notebook-preview').hidden=true;
   const notebook=library.find(n=>n.id===$('notebook').value);
   const previousPage = $('page').value;
   $('page').replaceChildren();$('pair-open').disabled=!notebook;
@@ -58,6 +59,7 @@ function updateGenerateButton() {
 }
 function canvasSummary(){$('canvas-summary').textContent=`Canvas: ${$('width').value} × ${$('height').value} · manual offset (${$('offset-x').value}, ${$('offset-y').value})`;}
 async function selectPage() {
+  showNotebookPreview();
   const version=++pageRequest;pageReady=false;resetClipping();updateGenerateButton();
   $('page-info').textContent='Reading page…';
   try {
@@ -130,8 +132,23 @@ function showJob(job) {
     if(job.frames>=2 && key!==previewKey){$('preview').src=base+'latest.png?frame='+job.frames;previewKey=key;}
   }
 }
+function showNotebookPreview() {
+  const image=$('notebook-preview');
+  const job=jobs.find(j=>j.state==='complete' && j.kind!=='export'
+    && j.document_id===$('notebook').value && j.page_id===$('page').value);
+  image.hidden=!job;
+  $('notebook-preview-label').textContent=job?'Saved render · selected page':'No saved preview for this page yet.';
+  if(!job){image.removeAttribute('src');return;}
+  const source=`/media/${job.id}/static.png`;
+  if(image.getAttribute('src')!==source){
+    image.alt=`${job.name} · page ${job.page}`;
+    image.onerror=()=>{image.hidden=true;$('notebook-preview-label').textContent='Preview unavailable.';};
+    image.src=source;
+  }
+}
 async function poll() {
   jobs=await api('/api/jobs');
+  showNotebookPreview();
   $('jobs').replaceChildren();
   if(!jobs.length){const p=document.createElement('p');p.className='hint';p.textContent='Your render queue is empty.';$('jobs').append(p);}
   for(const job of jobs){

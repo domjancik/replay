@@ -476,6 +476,30 @@ export function createCloudClient({relay, cache, onCache} = {}) {
         if (listing === pending) listing = undefined;
       }
     },
+    async preview(id) {
+      const device = requireDevice();
+      if (listing || downloading) throw new Error('Wait for the current cloud request');
+      const selected = documents.get(id);
+      if (!selected) throw new Error('Select a visible cloud document');
+      const {signal} = connection;
+      const session = sessionReads(device, signal, sessionToken);
+      const index = await fetchIndex(`${id}.docSchema`, selected.hash, id, blobCache(snapshot), session.read, signal);
+      const candidates = [...index.values()].filter(entry =>
+        entry.name.startsWith(`${id}.thumbnails/`) && entry.name.endsWith('.png') && entry.size <= 2 * MiB);
+      candidates.sort((a, b) => compare(a.name, b.name));
+      if (!candidates.length) return null;
+      const entry = candidates[0];
+      const bytes = await session.read({action: 'file', hash: entry.hash, filename: entry.name}, 2 * MiB);
+      await verifyBlob(bytes, entry); check(signal);
+      const header = [137, 80, 78, 71, 13, 10, 26, 10];
+      if (bytes.length < 24 || !header.every((value, i) => bytes[i] === value) ||
+          decoder.decode(bytes.subarray(12, 16)) !== 'IHDR') throw new Error('Invalid preview PNG');
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const width = view.getUint32(16), height = view.getUint32(20);
+      if (!width || !height || width > 8192 || height > 8192 || width * height > 16 * 1024 * 1024) throw new Error('Oversized preview PNG');
+      sessionToken = session.token();
+      return bytes;
+    },
     async download(id) {
       const device = requireDevice();
       if (listing) throw new Error('Wait for the cloud library refresh');
