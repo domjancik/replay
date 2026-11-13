@@ -98,3 +98,20 @@ test('scrolling away before metadata resolves prevents an offscreen render',asyn
  observer([{target:context.slots[0],isIntersecting:false}]);resolveInfo({paper_size:[64,64]});await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls.length,1);assert.equal(vm.runInContext("thumbnailStatus('0','0').state",context),'waiting');
 });
+
+test('dedicated queue hides notebooks and restores gallery on exit',()=>{
+ const {el}=fixture();el('source-queue').onclick();
+ assert.equal(el('local-library').hidden,true);
+ assert.equal(el('cloud-library').hidden,true);
+ assert.equal(el('queue-controls').hidden,false);
+ assert.equal(el('source-queue').attrs['aria-pressed'],'true');
+ el('source-local').onclick();
+ assert.equal(el('queue-controls').hidden,true);
+ assert.equal(el('local-library').hidden,false);
+});
+test('queue filters active work and sorts waiting jobs oldest first',()=>{
+ const {context}=fixture();
+ vm.runInContext(`jobs=[{id:'new',state:'queued',created:3},{id:'done',state:'complete',created:0},{id:'old',state:'queued',created:1},{id:'run',state:'running',created:2}];`,context);
+ assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(queueJobs('active').map(j=>j.id))",context)),['run','old','new']);
+ assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(queueJobs('complete').map(j=>j.id))",context)),['done']);
+});

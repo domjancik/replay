@@ -211,24 +211,38 @@ function recentPreview(job) {
   }
   recentPreviewCache.set(key,tile);return tile;
 }
-async function poll() {
-  jobs=await api('/api/jobs');
-  const previewKeys=new Set(jobs.map(j=>j.id+':'+(j.state==='complete')));
-  for(const key of recentPreviewCache.keys())if(!previewKeys.has(key))recentPreviewCache.delete(key);
-  showNotebookPreview();
+let queueView=false;
+function queueJobs(filter='all'){
+  const rank={running:0,queued:1};
+  return jobs.filter(j=>filter==='all'||(filter==='active'?['queued','running'].includes(j.state):j.state===filter))
+    .slice().sort((a,b)=>(rank[a.state]??2)-(rank[b.state]??2)||(a.state==='queued'&&b.state==='queued'?a.created-b.created:b.created-a.created));
+}
+function renderJobs(){
+  const active=jobs.filter(j=>['queued','running'].includes(j.state)).length;
+  $('source-queue').textContent=`Queue${active?' · '+active:''}`;
+  $('queue-summary').textContent=`${jobs.filter(j=>j.state==='running').length} running · ${jobs.filter(j=>j.state==='queued').length} waiting · ${jobs.filter(j=>j.state==='complete').length} complete · ${jobs.filter(j=>j.state==='failed').length} failed`;
+  const shown=queueView?queueJobs($('queue-filter').value||'all'):jobs;
   $('jobs').replaceChildren();
-  if(!jobs.length){const p=document.createElement('p');p.className='hint';p.textContent='Your render queue is empty.';$('jobs').append(p);}
-  for(const job of jobs){
+  if(!shown.length){const p=document.createElement('p');p.className='hint';p.textContent='No replays in this view.';$('jobs').append(p);}
+  for(const job of shown){
     const row=document.createElement('div');row.className='job';
     const open=document.createElement('button');open.className='open';
     const label=document.createElement('span');label.className='recent-label';label.textContent=`${job.name} · page ${job.page}`;
     const totalSeconds=(job.state==='complete'?job.frames:job.expected_frames)/job.settings.fps;
     const detail=document.createElement('small');detail.textContent=`${totalSeconds.toFixed(1)}s total · ${job.settings.fps} fps · ${job.settings.ordering==='entry'?'entry order':'by layer'} · ${job.settings.viewport.join(' × ')}${job.finished&&job.started?' · rendered in '+Math.round(job.finished-job.started)+'s':''}`;label.append(detail);open.append(recentPreview(job),label);
     open.onclick=()=>{selectedJob=job.id;previewKey='';showJob(job);};
-    const state=document.createElement('span');state.className='state';state.textContent=job.state;row.append(open,state);
+    const state=document.createElement('span');state.className='state';state.textContent=job.state+(job.state==='running'&&job.expected_frames?' · '+Math.min(100,Math.round((job.frames||0)/job.expected_frames*100))+'%':'');row.append(open,state);
     if(['queued','running'].includes(job.state)){const cancel=document.createElement('button');cancel.className='quiet';cancel.textContent='Cancel';cancel.onclick=safely(async()=>{await api('/api/cancel',{id:job.id});await poll();});row.append(cancel);}
+    if(queueView&&job.error){const error=document.createElement('small');error.className='job-error';error.textContent=job.error;row.append(error);}
     $('jobs').append(row);
   }
+}
+async function poll() {
+  jobs=await api('/api/jobs');
+  const previewKeys=new Set(jobs.map(j=>j.id+':'+(j.state==='complete')));
+  for(const key of recentPreviewCache.keys())if(!previewKeys.has(key))recentPreviewCache.delete(key);
+  showNotebookPreview();
+  renderJobs();
   updateGalleryImages();
   showJob(jobs.find(j=>j.id===selectedJob));
 }
@@ -483,13 +497,20 @@ async function processThumbnailQueue(){
   }
 }
 function setLibrarySource(source){
-  const cloud=source==='cloud';
-  $('local-library').hidden=cloud;$('cloud-library').hidden=!cloud;
+  const cloud=source==='cloud';queueView=source==='queue';
+  $('queue-controls').hidden=!queueView;
+  $('replay-history').classList.toggle('queue-view',queueView);
+  $('history-title').textContent=queueView?'Replay queue':'Your replays';
+  $('source-queue').setAttribute('aria-pressed',String(queueView));
+  $('local-library').hidden=cloud||queueView;$('cloud-library').hidden=!cloud;
   $('source-cloud').setAttribute('aria-pressed',String(cloud));
-  $('source-local').setAttribute('aria-pressed',String(!cloud));
-  $('notebook-search').hidden=cloud;$('gallery-grid').hidden=cloud;$('gallery-list').hidden=cloud;
+  $('source-local').setAttribute('aria-pressed',String(!cloud&&!queueView));
+  $('notebook-search').hidden=cloud||queueView;$('gallery-grid').hidden=cloud||queueView;$('gallery-list').hidden=cloud||queueView;
+  renderJobs();
 }
 function setupGallery(){
+  $('source-queue').onclick=()=>setLibrarySource('queue');
+  $('queue-filter').onchange=renderJobs;
   $('source-local').onclick=()=>setLibrarySource('local');
   $('source-cloud').onclick=()=>setLibrarySource('cloud');
   $('cloud-gallery-connect').onclick=()=>$('cloud-open').onclick();
