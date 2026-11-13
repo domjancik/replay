@@ -64,6 +64,28 @@ def test_browser_and_pairing_prototype_sources_are_reviewed(tmp_path):
         assert run_check(wheel, sdist).returncode != 0
 
 
+def test_rust_renderer_release_includes_sources_not_generated_wasm(tmp_path):
+    root = CHECKER.parents[1]
+    config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    included = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+    assert "/native/renderer/src" in included
+    assert "/native/renderer/LICENSE-PILLOW" in included
+    for path in (
+        "native/renderer/src/render.rs",
+        "native/renderer/src/bin/render-json.rs",
+        "native/renderer/LICENSE-PILLOW",
+        "native/renderer/Cargo.lock",
+        "native/renderer/renderer.mjs",
+        "native/renderer/browser/worker.mjs",
+        "native/renderer/tests/raster_differential.mjs",
+        "docs/rust-renderer.md",
+    ):
+        wheel, sdist = archives(tmp_path, path)
+        assert run_check(wheel, sdist).returncode == 0
+    wheel, sdist = archives(tmp_path, "native/renderer/target/release/renderer.wasm")
+    assert run_check(wheel, sdist).returncode != 0
+
+
 def archives(tmp_path, extra=None, entry=True, license=False):
     wheel = tmp_path / "rm_redraw-0.1.0-py3-none-any.whl"
     sdist = tmp_path / "rm_redraw-0.1.0.tar.gz"

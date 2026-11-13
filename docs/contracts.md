@@ -2,6 +2,14 @@
 
 This document freezes the integration boundary. Version 2 corrects the parsed page transform from a silently assumed identity to an optional evidence-backed value. Additive evolution is allowed; further renames, type changes, or semantic changes require coordinator review and a version bump.
 
+## Standalone Rust renderer ABI v1
+
+The additive `native/renderer` backend consumes normalized render-page JSON, render options and optional visibility. It does not acquire or parse raw tablet files, resolve text anchors, schedule frames or encode video. It implements the current Python renderer's ink profiles, including their experimental fidelity limitations. A null visibility renders the complete static page. Reveal order never changes layer compositing order; the final forward frame must equal static RGBA for the same options.
+
+The Rust library and standalone WASM share owned input allocation/free and output pointer/length calls. Input is bounded to 32 MiB. All native calls for an instance must occur on the same thread; write input only before the render call and copy result/error bytes before the next call that replaces them. The JavaScript adapter refreshes memory views after potential WASM growth and returns a copied RGBA buffer. Current rendering is stateless between frames and does not port Python's append-prefix cache. Validation constrains dimensions and numeric geometry; it does not provide a strict CPU-time or peak-memory budget. Hosts accepting untrusted requests must isolate rendering in a cancellable worker/process.
+
+The Python reference and both Rust targets are compared on the same immutable normalized inputs and raw RGBA. This verifies backend compatibility, not equivalence to proprietary reMarkable rendering. Build and reproduction instructions are in `docs/rust-renderer.md`.
+
 ## Snapshot manifest
 
 A snapshot directory is immutable after successful acquisition. Its `manifest.json` contains:

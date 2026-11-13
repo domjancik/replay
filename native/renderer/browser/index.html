@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rust WASM replay probe</title>
+  <style>
+    body { max-width: 42rem; margin: 3rem auto; padding: 0 1rem; font: 1rem/1.5 system-ui; }
+    canvas, video { display: block; width: min(100%, 360px); margin: 1rem 0; image-rendering: pixelated; }
+    output { display: block; margin-top: 0.75rem; }
+    [hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Rust WASM replay probe</h1>
+  <p>Render a synthetic layered drawing in a local browser worker and compare raw pixels with the desktop reference.</p>
+  <button id="render">Render sample</button>
+  <button id="encode">Render and encode</button>
+  <output id="status" aria-live="polite"></output>
+  <canvas id="frame" aria-label="Static result" hidden></canvas>
+  <video id="video" controls muted playsinline hidden></video>
+  <a id="download" hidden>Download video</a>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

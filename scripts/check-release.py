@@ -29,6 +29,7 @@ DOCS = {
     "cloud-connector.md",
     "cloud-app-feasibility.md",
     "wasm-feasibility.md",
+    "rust-renderer.md",
 }
 SCRIPTS = {"start-replay.ps1", "setup.ps1", "check-release.py", "release-smoke.py"}
 BAD_PARTS = {
@@ -67,6 +68,30 @@ def allowed_source(name):
         return allowed_package("/".join(parts[1:]))
     if parts[0] == "tests":
         return name.endswith(".py")
+    if parts[:2] == ("native", "renderer"):
+        if len(parts) == 3:
+            return parts[2] in {
+                "Cargo.toml",
+                "Cargo.lock",
+                "LICENSE-PILLOW",
+                "generate_goldens.py",
+                "renderer.mjs",
+                "renderer.test.mjs",
+                "verify.mjs",
+            }
+        if parts[2] in {"src", "tests"}:
+            return name.endswith(".rs") or (parts[2] == "tests" and name.endswith((".py", ".mjs")))
+        return (
+            len(parts) == 4
+            and parts[2] == "browser"
+            and parts[3]
+            in {
+                "app.mjs",
+                "index.html",
+                "serve.mjs",
+                "worker.mjs",
+            }
+        )
     prototype_files = {
         "browser-prototype": {
             "fetch-runtime.ps1",

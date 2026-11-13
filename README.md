@@ -2,7 +2,7 @@
 
 A local reMarkable ink renderer and stroke-replay utility. Import a notebook, choose a page, and export an animated drawing as MP4. Crop a finished replay and add a quick reverse to make a loop without rendering the ink again.
 
-This is an experimental, single-user desktop utility with a browser interface. It runs on your computer; it is not a hosted service and has no cloud integration. Tablet access is read-only.
+This is an experimental, single-user desktop utility with a browser interface. It runs on your computer; it is not a hosted service. An experimental cloud import connector is described below. Tablet access is read-only.
 
 ## Get started
 
@@ -26,6 +26,7 @@ Open **http://127.0.0.1:8765**. Import a local `.rmdoc`, or enable the tablet's 
 - Rectangular crop export and forward/reverse loops at 2x, 4x or 8x reverse speed.
 - Local comparison against explicitly identified app PNG or tablet PDF references.
 - An optional Rust pencil kernel, validated separately against the Python reference on Windows.
+- A standalone full Rust/WASM ink renderer and browser replay probe, separate from the local utility.
 
 ## Limits to understand
 
@@ -61,6 +62,6 @@ FFmpeg is required for video tests; Poppler (`pdftoppm`) is required for PDF com
 
 The checkout also includes an experimental **Browse cloud** flow using separately installed `rmctl 1.2.0`. It imports one notebook into the existing animation pipeline. An optional stdin-enabled companion supports in-app pairing and explicit revocation, with credentials kept in its local profile. Live account validation remains pending. See the [cloud connector](docs/cloud-connector.md) and [cloud app plan](docs/cloud-app-feasibility.md).
 
-A [browser renderer prototype](docs/wasm-feasibility.md) runs the existing parser, scheduler and renderer in Pyodide. On a small synthetic mixed-tool page, all 29 animation frames and the static frame match desktop Python byte for byte; the browser encodes and plays an MP4 locally. A separate Rust/WASM pencil kernel matches six synthetic masks. These research harnesses are separate from the local app; full-size drawings, browser notebook import, mobile limits and cloud acquisition still need validation.
+A [standalone Rust/WASM renderer](docs/rust-renderer.md) now implements the existing renderer's full ink tool set, layer compositing and progressive reveal without a Python runtime. All 114 integrated synthetic cases match Python byte for byte on native Rust and WASM. The browser probe renders and encodes a synthetic replay locally. Raw notebook parsing, scheduling and video encoding remain separate; the local utility still uses its existing backend. Browser import, long-replay performance and mobile limits need further integration and validation. The earlier [Pyodide prototype](docs/wasm-feasibility.md) remains available as a reference.
 
 MIT-licensed code, prepared for a local preview release. Public publication and selected artwork approval remain pending. Do not redistribute the development history or private visual annex as part of a release. See [publication readiness](docs/publication-readiness.md) and [third-party notices](THIRD_PARTY_NOTICES.md). No third-party native binaries or private reference drawings are bundled.
