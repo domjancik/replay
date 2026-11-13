@@ -91,3 +91,25 @@ test('failed stale-vault deletion locks UI after either revoke or forget', async
     });
   }
 });
+
+test('completed replay opens with its drawing as poster without resetting playback on poll', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const {runInNewContext} = await import('node:vm');
+  const source = await readFile(new URL('../../src/rm_redraw/web/static/app.js', import.meta.url), 'utf8');
+  const elements = new Map();
+  const context = {document: {getElementById(id) {
+    if (!elements.has(id)) elements.set(id, {dataset: {}, pause() {}});
+    return elements.get(id);
+  }}};
+  runInNewContext(source.replace('safely(start)();', ''), context);
+  context.job = {id: 'synthetic', name: 'Drawing', page: 1, state: 'complete', frames: 10, expected_frames: 10};
+  runInNewContext('showJob(job)', context);
+  const video = elements.get('video');
+  assert.equal(video.poster, '/media/synthetic/static.png');
+  video.currentTime = 4;
+  runInNewContext('showJob(job)', context);
+  assert.equal(video.currentTime, 4);
+  context.job.id = 'another';
+  runInNewContext('showJob(job)', context);
+  assert.equal(video.poster, '/media/another/static.png');
+});

@@ -122,7 +122,7 @@ function showJob(job) {
   $('progress-text').textContent=job.error || (job.state==='queued'?'Queued — another replay will finish first.':`${job.frames} / ~${job.expected_frames} frames · ${job.state}${job.state==='running'?' · final verification and video encoding follow':''}`);
   const base=`/media/${job.id}/`;
   if(complete){
-    if($('video').dataset.job!==job.id){$('video').src=base+'replay.mp4';$('video').dataset.job=job.id;}
+    if($('video').dataset.job!==job.id){$('video').poster=base+'static.png';$('video').src=base+'replay.mp4';$('video').dataset.job=job.id;}
     $('preview').hidden=true;
     $('download-video').href=base+'replay.mp4';$('download-image').href=base+'static.png';$('download-manifest').href=base+'manifest.json';
   }else{

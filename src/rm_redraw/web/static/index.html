@@ -1,24 +1,23 @@
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>replay · local studio</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<title>rePlay — drawings in motion</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
 <body>
-<header><div><span class="mark">r/</span><strong>replay</strong><span class="muted">local studio</span></div><span class="badge">ON YOUR COMPUTER</span></header>
+<header><a class="wordmark" href="/" aria-label="rePlay home">rePlay</a><nav aria-label="Notebook sources"><button id="cloud-open" class="quiet">Connect reMarkable</button><button id="upload-open" class="header-import">Import a file ↗</button><input id="upload" type="file" accept=".rmdoc" hidden></nav></header>
 <main>
-<div class="intro"><p class="eyebrow">FROM INK TO MOTION</p><h1>Watch a drawing unfold.</h1><p>Choose a notebook, pick a page, make a replay.</p></div>
+<div class="intro"><div><p class="eyebrow">A SECOND LIFE FOR YOUR SKETCHES</p><h1>Let your drawing unfold.</h1></div><p>From the first line to the finishing touch.<br>Turn a page into a film.</p></div>
 <div id="notice" role="status" hidden></div>
 <div class="layout">
-<aside>
-<section><div class="section-heading"><h2>01 <span>Your notebooks</span></h2><button id="refresh" class="quiet" title="Refresh saved notebooks">↻</button></div>
-<div class="import-row"><button id="usb-open">Browse tablet</button><button id="cloud-open" class="secondary">Browse cloud</button><button id="upload-open" class="secondary">Import .rmdoc</button><input id="upload" type="file" accept=".rmdoc" hidden></div>
-<p class="hint">USB imports are read-only. Saved notebooks work offline.</p>
-<label for="notebook">Saved notebook</label><select id="notebook"><option value="">Import a notebook to begin</option></select>
+<aside class="editor-controls" aria-label="Create a replay">
+<section><div class="section-heading"><h2><span class="step">01</span> Your drawing</h2><button id="refresh" class="quiet" title="Refresh saved notebooks">↻</button></div>
+<button id="usb-open" class="quiet usb-source">Import from a connected tablet ↗</button>
+<label for="notebook">Notebook</label><select id="notebook"><option value="">Import a notebook to begin</option></select>
 <div class="page-row"><div><label for="page">Page</label><select id="page" disabled></select></div><div><button id="pair-open" class="quiet" disabled>Attach matching PDF</button><input id="pair" type="file" accept=".pdf" hidden></div></div>
 <p id="page-info" class="hint">Your original files stay untouched.</p>
 <img id="notebook-preview" alt="Selected notebook preview" hidden><p id="notebook-preview-label" class="hint">No saved preview for this page yet.</p>
 </section>
-<section><h2>02 <span>Replay settings</span></h2>
-<div class="fields"><div><label for="seconds">Drawing duration</label><select id="seconds"><option value="6">6 seconds · quick try</option><option value="12" selected>12 seconds</option><option value="24">24 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option></select></div><div><label for="fps">Frame rate</label><select id="fps"><option value="6">6 fps · draft</option><option value="12" selected>12 fps</option><option value="24">24 fps</option><option value="30">30 fps</option></select></div></div>
+<section class="replay-settings"><h2><span class="step">02</span> Make it move</h2>
+<div class="duration-field"><label for="seconds">Duration</label><select id="seconds"><option value="6">6 seconds · quick try</option><option value="12" selected>12 seconds</option><option value="24">24 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option></select></div><details class="advanced-options"><summary>Fine-tune your replay</summary><label for="fps">Frame rate</label><select id="fps"><option value="6">6 fps · draft</option><option value="12" selected>12 fps</option><option value="24">24 fps</option><option value="30">30 fps</option></select>
 <label for="ordering">Replay ordering</label><select id="ordering"><option value="layer">Layer by layer</option><option value="entry">Entry order · across layers</option></select>
 <label for="output-width">Output width</label><select id="output-width"><option value="468">468 px · small</option><option value="702" selected>702 px</option><option value="1404">1404 px · full size</option></select>
 <p id="canvas-summary" class="hint">Manual canvas: 1404 × 1872 · X +702, Y 0</p>
@@ -27,23 +26,23 @@
 <div class="fields"><div><label for="width">Canvas width</label><input id="width" type="number" value="1404" min="64" max="4096"></div><div><label for="height">Canvas height</label><input id="height" type="number" value="1872" min="64" max="8192"></div><div><label for="offset-x">X offset</label><input id="offset-x" type="number" value="702"></div><div><label for="offset-y">Y offset</label><input id="offset-y" type="number" value="0"></div></div>
 <label for="backend">Pencil renderer</label><select id="backend"><option value="python">Python</option><option value="rust">Rust · faster, validated prototype</option></select>
 </details>
-<div id="canvas-clipping" hidden>
+
+<p class="hint">Layer mode finishes each layer bottom to top. Entry mode follows the inferred entry sequence across layers. Timing is synthesized. One-second final hold. Dense pencil pages can take several minutes.</p>
+</details><div id="canvas-clipping" hidden>
 <p id="canvas-warning" class="hint" role="status"></p>
 <label class="checkbox"><input id="allow-clipping" type="checkbox"> Allow clipping outside the selected canvas</label>
-</div>
-<p class="hint">Layer mode finishes each layer bottom to top. Entry mode follows the inferred entry sequence across layers. Timing is synthesized. One-second final hold. Dense pencil pages can take several minutes.</p>
-<button id="generate" class="primary" disabled>Generate replay <span>↗</span></button>
+</div><button id="generate" class="primary" disabled>Create replay <span aria-hidden="true">↗</span></button><p class="creation-note">Your original notebook stays untouched.</p>
 </section>
 </aside>
-<div class="viewer-column"><section class="viewer"><div class="section-heading"><h2 id="view-title">The replay appears here</h2><span id="view-state" class="badge">READY WHEN YOU ARE</span></div>
-<div id="empty"><div class="draw-icon">✎</div><p>A little history of every line.</p><span>Generate a replay or open one from your queue.</span></div>
+<div class="viewer-column"><section class="viewer"><div class="section-heading"><h2 id="view-title">Your drawing, in motion</h2><span id="view-state" class="badge">PREVIEW</span></div>
+<div id="empty"><div class="paper-mark" aria-hidden="true"><span>↗</span></div><p>Every drawing has a beginning.</p><span>Choose a notebook and a page. Bring the lines back to life.</span></div>
 <video id="video" controls playsinline loop hidden></video><img id="preview" alt="Latest rendered frame" hidden>
 <div id="view-progress" hidden><progress id="progress" max="1" value="0"></progress><p id="progress-text" class="hint"></p></div>
-<div id="downloads" hidden><button id="export-open" class="secondary">Crop / loop export</button><a id="download-video" download>Download MP4 ↓</a><a id="download-image" download>Final PNG ↓</a><a id="download-manifest" download>Run details ↓</a></div>
+<div id="downloads" hidden><button id="export-open" class="secondary">Crop &amp; loop</button><a id="download-video" download>Save video ↓</a><a id="download-image" download>Save image ↓</a><a id="download-manifest" download>Run details ↓</a></div>
 </section>
-<section><div class="section-heading"><h2>Recent replays</h2><span class="hint">One render at a time</span></div><div id="jobs"><p class="hint">Your render queue is empty.</p></div></section>
+<section class="history"><div class="section-heading"><h2>Your replays</h2><span class="hint">Made one line at a time</span></div><div id="jobs"><p class="hint">Your render queue is empty.</p></div></section>
 </div></div>
-<footer>Local files, local rendering. Experimental ink profiles · inferred drawing order · optional local cloud connector.</footer>
+<footer><span>rePlay <span class="footer-note">A little history of every line.</span></span><span>Independent project for reMarkable notebooks.</span></footer><details class="about"><summary>About &amp; privacy</summary><p>This preview imports and renders on your computer. Cloud pairing is encrypted in your browser; requests pass through a relay. Rendering and drawing order are reconstructed and may differ from the original. Not affiliated with reMarkable.</p></details>
 </main>
 <dialog id="usb-dialog"><div class="section-heading"><h2>Import from tablet</h2><button id="usb-close" class="quiet">Close</button></div><p class="hint">Connect USB and enable USB web interface in the tablet’s Storage settings. Close the notebook before importing.</p>
 <div class="usb-toolbar"><button id="usb-up" class="secondary">↑ Root</button><span id="usb-location">Tablet</span></div>
@@ -60,9 +59,9 @@
 <p id="export-status" role="status"></p><button id="export-save" class="primary" disabled>Export video</button>
 </dialog>
 <dialog id="cloud-dialog">
-<div class="section-heading"><h2>reMarkable cloud · local preview</h2><button id="cloud-close" class="quiet">Close</button></div>
-<p>Your pairing and notebook tree are encrypted in this browser. No companion CLI is needed. The relay forwards requests without saving credentials or the tree. While unlocked, it sees the credentials needed for cloud access.</p>
-<p class="hint">Use a unique vault passphrase, not your reMarkable password. Page scripts can access credentials while unlocked; lock the vault on shared computers. The cloud token can authorize writes, although this app only reads documents.</p>
+<div class="section-heading"><h2>Your reMarkable notebooks</h2><button id="cloud-close" class="quiet">Close</button></div>
+<details class="privacy-details"><summary>How your connection stays private</summary><p>Your pairing and notebook tree are encrypted in this browser. No companion CLI is needed. The relay forwards requests without saving credentials or the tree. While unlocked, it sees the credentials needed for cloud access.</p>
+<p class="hint">Use a unique vault passphrase, not your reMarkable password. Page scripts can access credentials while unlocked; lock the vault on shared computers. The cloud token can authorize writes, although this app only reads documents.</p></details>
 <details open><summary>Pair or unlock this browser</summary>
 <p>Get a one-time code from <a href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">your reMarkable account</a>, then pair this browser below.</p>
 <label for="cloud-code">One-time pairing code</label><input id="cloud-code" type="password" autocomplete="off" spellcheck="false" maxlength="8" pattern="[A-Za-z0-9]{8}" placeholder="8-character code" disabled>
