@@ -1,0 +1,10 @@
+{
+  "name": "rm-redraw-video-prototype",
+  "private": true,
+  "dependencies": {
+    "mediabunny": "1.65.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

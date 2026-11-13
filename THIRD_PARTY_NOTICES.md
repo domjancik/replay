@@ -22,7 +22,11 @@ The versions below describe the locked environment inspected for this preview. S
 
 FFmpeg/ffprobe and Poppler/pdftoppm are separate executables installed by the user. They are not bundled. FFmpeg licensing depends on build configuration; the tested video path uses libx264. Any future bundled installer must review the exact binaries and include their required source/notice obligations. This preview does not make a blanket claim about distributing arbitrary third-party binary builds.
 
-The optional Rust pencil kernel has no third-party Cargo dependencies. The Rust toolchain is a build dependency and is not bundled.
+The optional cloud import preview uses user-installed rmctl or rmctl-lite v1.2.0. The rmctl project is MIT-licensed. Its release archives may have additional notices for bundled components. The optional stdin pairing patch contains MIT-licensed upstream context, with its notice in `native/rmctl-pairing/LICENSE`. The rm-redraw distribution excludes generated rmctl and pairing companion executables. [rmctl v1.2.0 license](https://github.com/altessa-s/rmctl/blob/v1.2.0/LICENSE) · [Upstream release](https://github.com/altessa-s/rmctl/releases/tag/v1.2.0)
+
+The optional Rust pencil kernel and research WASM wrapper have no third-party Cargo dependencies. Rust and Node are external toolchains for building and running the probe. The Python package does not bundle their executables or generated WASM.
+
+The separate browser video probe builds against Mediabunny 1.65.2 (MPL-2.0), using esbuild 0.28.2 (MIT) as a build tool. Its generated bundle stays outside the Python distribution. A future redistributed bundle should preserve the Mediabunny notice and provide its corresponding source under MPL-2.0. [Mediabunny license](https://github.com/Vanilagy/mediabunny/blob/v1.65.2/LICENSE) · [esbuild license](https://github.com/evanw/esbuild/blob/v0.28.2/LICENSE.md) · [Mozilla MPL distribution guidance](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)
 
 ## References versus dependencies
 

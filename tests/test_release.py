@@ -3,10 +3,65 @@ import json
 import subprocess
 import sys
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
 CHECKER = Path(__file__).resolve().parents[1] / "scripts" / "check-release.py"
+
+
+def test_cloud_setup_docs_are_in_source_release(tmp_path):
+    root = CHECKER.parents[1]
+    config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    included = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+    for name in ("cloud-connector.md", "cloud-app-feasibility.md", "wasm-feasibility.md"):
+        assert f"/docs/{name}" in included
+        wheel, sdist = archives(tmp_path, f"docs/{name}")
+        result = run_check(wheel, sdist)
+        assert result.returncode == 0, result.stdout
+
+
+def test_wasm_reproduction_sources_are_in_source_release(tmp_path):
+    root = CHECKER.parents[1]
+    config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    included = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+    for name in (
+        "Cargo.toml",
+        "Cargo.lock",
+        "src/lib.rs",
+        "pencil.mjs",
+        "pencil.test.mjs",
+        "make_goldens.py",
+    ):
+        path = f"native/wasm-prototype/{name}"
+        assert f"/{path}" in included
+        wheel, sdist = archives(tmp_path, path)
+        result = run_check(wheel, sdist)
+        assert result.returncode == 0, result.stdout
+    wheel, sdist = archives(tmp_path, "native/wasm-prototype/unreviewed.wasm")
+    assert run_check(wheel, sdist).returncode != 0
+
+
+def test_browser_and_pairing_prototype_sources_are_reviewed(tmp_path):
+    root = CHECKER.parents[1]
+    config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    included = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+    for path in (
+        "native/browser-prototype/worker.mjs",
+        "native/video-prototype/package-lock.json",
+        "native/rmctl-pairing/code-stdin.patch",
+        "native/rmctl-pairing/LICENSE",
+    ):
+        assert f"/{path}" in included
+        wheel, sdist = archives(tmp_path, path)
+        assert run_check(wheel, sdist).returncode == 0
+    for path in (
+        "native/browser-prototype/unreviewed.zip",
+        "native/video-prototype/node_modules/anything.js",
+        "native/rmctl-pairing/token.json",
+    ):
+        wheel, sdist = archives(tmp_path, path)
+        assert run_check(wheel, sdist).returncode != 0
 
 
 def archives(tmp_path, extra=None, entry=True, license=False):

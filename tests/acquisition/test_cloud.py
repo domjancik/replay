@@ -73,17 +73,141 @@ def test_lists_visible_nested_documents_without_using_cloud_overrides(executable
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(subprocess, "run", run)
-    assert CloudSource(executable).status()["state"] == "available"
     assert CloudSource(executable).list_documents() == [
         CloudDocument(NOTEBOOK_ID, "Ink & paper", "/Projects/Ink & paper", "notebook"),
         CloudDocument(OTHER_ID, "Annotated", "/Projects/Ink & paper", "annotated-pdf"),
     ]
 
 
+def test_pairing_code_only_goes_to_stdin_and_revocation_uses_fixed_args(executable, monkeypatch):
+    code = "testA123"
+    calls = []
+
+    def run(argv, *, stdout, stdin=None, input=None, stderr, shell, timeout, **kwargs):
+        calls.append(argv[1:])
+        assert all(code not in str(arg) for arg in argv)
+        assert shell is False and stderr == subprocess.DEVNULL
+        assert 0 < timeout <= 60
+        if argv[1:] == ["register", "--help"]:
+            assert stdin == subprocess.DEVNULL and input is None
+            stdout.write(b"Flags:\n      --code-stdin   read the code from standard input\n")
+        elif argv[4:] == ["register", "--code-stdin"]:
+            assert input == code.encode("ascii") + b"\n"
+            assert stdin is None
+            assert stdout == subprocess.DEVNULL
+        else:
+            assert argv[4:] == ["logout", "--revoke"]
+            assert stdin == subprocess.DEVNULL and input is None
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    source = CloudSource(executable)
+    assert source.status()["can_pair"] is True
+    assert source.status()["pairing"] == "unknown"
+    source.pair(code)
+    assert source.status()["pairing"] == "paired"
+    source.revoke()
+    assert source.status()["pairing"] == "unpaired"
+    assert calls == [
+        ["register", "--help"],
+        ["--offline=false", "--no-cache", "--json", "register", "--code-stdin"],
+        ["--offline=false", "--no-cache", "--json", "logout", "--revoke"],
+    ]
+
+
+def test_stock_companion_never_receives_the_code(executable, monkeypatch):
+    def run(argv, *, stdout, **kwargs):
+        assert argv[1:] == ["register", "--help"]
+        assert kwargs.get("input") is None
+        stdout.write(b"Usage: register <code>\n")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    source = CloudSource(executable)
+    assert source.status()["can_pair"] is False
+    with pytest.raises(CloudError, match="patched rmctl"):
+        source.pair("testA123")
+
+
+def test_separate_pairing_companion_uses_same_profile_and_keeps_stock_reads(
+    executable, tmp_path, monkeypatch
+):
+    pairing_executable = tmp_path / "rmctl-pairing.exe"
+    pairing_executable.touch(mode=0o700)
+    monkeypatch.setenv("RMCTL_PROFILE", "rm-redraw")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RMCTL_CONFIG_DIR", "profile")
+    monkeypatch.setenv("RMCTL_CONFIG_FILE", "settings/config.toml")
+    monkeypatch.setenv("RMCTL_CACHE_DIR", "cache")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "xdg-config")
+    monkeypatch.setenv("XDG_CACHE_HOME", "xdg-cache")
+    calls = []
+
+    def run(argv, *, stdout, env, **kwargs):
+        calls.append((argv[0], argv[1:]))
+        assert env["RMCTL_PROFILE"] == "rm-redraw"
+        assert env["RMCTL_CONFIG_DIR"] == str(tmp_path / "profile")
+        assert env["RMCTL_CONFIG_FILE"] == str(tmp_path / "settings/config.toml")
+        assert env["RMCTL_CACHE_DIR"] == str(tmp_path / "cache")
+        assert env["XDG_CONFIG_HOME"] == str(tmp_path / "xdg-config")
+        assert env["XDG_CACHE_HOME"] == str(tmp_path / "xdg-cache")
+        if argv[1:] == ["register", "--help"]:
+            stdout.write(b"      --code-stdin    read from standard input\n")
+        elif argv[-1] == "find":
+            write_json(stdout, [])
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    source = CloudSource(executable, pairing_executable=pairing_executable)
+    monkeypatch.chdir(tmp_path.parent)
+    source.pair("testA123")
+    assert source.list_documents() == []
+    source.revoke()
+    assert calls == [
+        (str(pairing_executable), ["register", "--help"]),
+        (
+            str(pairing_executable),
+            ["--offline=false", "--no-cache", "--json", "register", "--code-stdin"],
+        ),
+        (str(executable), ["--offline=false", "--no-cache", "--json", "find"]),
+        (
+            str(executable),
+            ["--offline=false", "--no-cache", "--json", "logout", "--revoke"],
+        ),
+    ]
+
+
+@pytest.mark.parametrize("code", [None, "0123", "012345678", "abcdefgh\n", "non-ASCIIé"])
+def test_invalid_pairing_code_does_not_launch_companion(executable, monkeypatch, code):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Invalid pairing code reached the companion")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    with pytest.raises(CloudError, match="eight"):
+        CloudSource(executable).pair(code)
+
+
+def test_pairing_failure_does_not_echo_upstream_or_mark_paired(executable, monkeypatch):
+    def run(argv, *, stdout, **kwargs):
+        if argv[1:] == ["register", "--help"]:
+            stdout.write(b"      --code-stdin    read from standard input\n")
+            return subprocess.CompletedProcess(argv, 0)
+        assert stdout == subprocess.DEVNULL
+        return subprocess.CompletedProcess(argv, 1, stderr=b"testA123")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    source = CloudSource(executable)
+    with pytest.raises(CloudError, match="pairing failed") as failure:
+        source.pair("testA123")
+    assert "testA123" not in str(failure.value)
+    assert "private-output" not in str(failure.value)
+    assert source.status()["pairing"] == "unknown"
+
+
 @pytest.mark.parametrize(
     ("code", "error_type", "message"),
     [
-        (3, CloudNotPairedError, "pair"),
+        (3, CloudNotPairedError, "Pair"),
         (2, CloudError, "1.2.0"),
         (1, CloudError, "local terminal"),
     ],

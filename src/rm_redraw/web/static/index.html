@@ -60,11 +60,16 @@
 </dialog>
 <dialog id="cloud-dialog">
 <div class="section-heading"><h2>reMarkable cloud · local preview</h2><button id="cloud-close" class="quiet">Close</button></div>
-<p>This preview uses a separately installed, locally paired <strong>rmctl</strong> client. Your account credentials stay in that client's local profile. This app only lists and downloads; the underlying credential is not a read-only cloud permission.</p>
-<details><summary>Pair this computer first</summary>
-<p>Install the reviewed rmctl v1.2.0 client from <a href="https://github.com/altessa-s/rmctl/releases/tag/v1.2.0" target="_blank" rel="noreferrer">its upstream release</a>, then follow its local registration instructions using a one-time desktop pairing code from your reMarkable account. Never paste a code or token into this chat or a shared terminal. The current helper accepts the code on its command line; registration is user-operated outside this preview.</p>
-<p>rmctl stores tokens in its local profile. Review its credential-storage documentation. To disconnect later, use its documented logout/revoke flow. No browser-only or hosted account service is running here.</p></details>
+<p>Your cloud credential stays in the local <strong>rmctl</strong> profile. This app reads notebooks; the underlying credential also permits cloud writes. Pairing grants this computer access to your account.</p>
+<details><summary>Pair this computer</summary>
+<p>Get a one-time code from <a href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">your reMarkable account</a>. In-app pairing requires the rm-redraw stdin-enabled companion. The standard <a href="https://github.com/altessa-s/rmctl/releases/tag/v1.2.0" target="_blank" rel="noreferrer">rmctl v1.2.0 release</a> can browse an already paired profile.</p>
+<label for="cloud-code">One-time pairing code</label><input id="cloud-code" type="password" autocomplete="off" spellcheck="false" maxlength="8" pattern="[A-Za-z0-9]{8}" placeholder="8-character code" disabled>
+<button id="cloud-pair" disabled>Pair this computer</button>
+<p id="cloud-pair-hint" class="hint">Checking companion support…</p>
+<p class="hint">The code is sent through this local app to reMarkable and cleared from the field. It is not saved in browser storage or command history. rmctl stores the resulting credential in its local profile.</p>
+</details>
 <button id="cloud-refresh" class="secondary">Refresh cloud notebooks</button>
+<details><summary>Disconnect this profile</summary><p>Revoking disconnects the selected rmctl profile and clears its companion cache, including for other apps using it. Close other clients using this profile before pairing or revoking. Notebooks and videos imported into this app stay on this computer.</p><label class="checkbox"><input id="cloud-revoke-confirm" type="checkbox"> Disconnect this shared local profile</label><button id="cloud-revoke" class="secondary" disabled>Revoke cloud access</button></details>
 <p id="cloud-status" role="status"></p><div id="cloud-items"></div>
 <p class="hint">Downloaded ink feeds the same local replay engine. Templates and PDF backgrounds are omitted. Text-anchored pages may need a separately attached matching PDF. Live cloud-account validation is pending; this connector is experimental.</p>
 </dialog>

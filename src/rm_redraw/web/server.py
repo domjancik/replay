@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
-from rm_redraw.acquisition.cloud import CloudSource
+from rm_redraw.acquisition.cloud import CloudError, CloudSource
 from rm_redraw.acquisition.usb import UsbReader
 
 from .jobs import CanvasClippingError, Jobs, page_info
@@ -177,6 +177,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         importing = False
+        cloud_account = False
         try:
             if (
                 not self._trusted()
@@ -190,6 +191,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get("Transfer-Encoding"):
                 raise ValueError("Chunked requests are not supported")
             url = urlsplit(self.path)
+            cloud_account = url.path in ("/api/cloud-pair", "/api/cloud-revoke")
             upload = url.path in ("/api/upload", "/api/upload-pdf")
             limit = MAX_BYTES if upload else 16384
             lengths = self.headers.get_all("Content-Length", [])
@@ -245,6 +247,15 @@ class Handler(BaseHTTPRequestHandler):
                     result = self.app.library.add(raw, provenance=provenance, pdf=pdf)
                 elif url.path == "/api/cloud-list":
                     result = [asdict(item) for item in self.app.cloud.list_documents()]
+                elif url.path == "/api/cloud-pair":
+                    if not isinstance(data.get("code"), str):
+                        self._json({"error": "Enter a pairing code"}, 400)
+                        return
+                    self.app.cloud.pair(data["code"])
+                    result = {"paired": True}
+                elif url.path == "/api/cloud-revoke":
+                    self.app.cloud.revoke()
+                    result = {"revoked": True}
                 elif url.path == "/api/cloud-import":
                     raw = self.app.cloud.download_archive(data["id"])
                     result = self.app.library.add(
@@ -274,7 +285,12 @@ class Handler(BaseHTTPRequestHandler):
         except CanvasClippingError as error:
             self._json({"error": str(error), "code": "canvas_clipping"}, 422)
         except Exception as error:
-            self._json({"error": str(error)}, 400)
+            message = (
+                "Cloud account action failed. Check the local companion."
+                if cloud_account and not isinstance(error, CloudError)
+                else str(error)
+            )
+            self._json({"error": message}, 400)
         finally:
             if importing:
                 self.app.import_lock.release()

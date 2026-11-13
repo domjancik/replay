@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Browser video encoding probe</title>
+<h1>Browser video encoding probe</h1>
+<p>Generate a short video from synthetic frames on this device.</p>
+<label>Format <select id="format"><option value="auto">Automatic</option><option value="mp4">MP4</option><option value="webm">WebM</option></select></label>
+<button id="start">Encode</button>
+<button id="cancel" disabled>Cancel</button>
+<output id="status" aria-live="polite"></output>
+<video id="preview" controls muted playsinline></video>
+<a id="download" hidden>Download video</a>
+<script type="module" src="harness.mjs"></script>
+</html>

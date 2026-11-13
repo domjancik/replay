@@ -179,3 +179,55 @@ def test_cloud_import_obeys_shared_import_lock(server):
     finally:
         server.app.import_lock.release()
     assert status == 409
+
+
+def test_cloud_pair_and_revoke_require_local_session_and_do_not_echo_code(server):
+    from types import SimpleNamespace
+
+    calls = []
+    server.app.cloud = SimpleNamespace(
+        pair=lambda code: calls.append(("pair", code)),
+        revoke=lambda: calls.append(("revoke", None)),
+    )
+    payload = json.dumps({"code": "AB12CD34"})
+    assert request(server, "POST", "/api/cloud-pair", payload, {})[0] == 403
+    assert calls == []
+    headers = session(server)
+    status, _, body = request(server, "POST", "/api/cloud-pair", payload, headers)
+    assert status == 200, body
+    assert json.loads(body) == {"paired": True}
+    assert b"AB12CD34" not in body
+    status, _, body = request(server, "POST", "/api/cloud-revoke", b"{}", headers)
+    assert status == 200, body
+    assert json.loads(body) == {"revoked": True}
+    assert calls == [("pair", "AB12CD34"), ("revoke", None)]
+
+
+def test_cloud_pair_rejects_missing_or_non_string_code(server):
+    from types import SimpleNamespace
+
+    def forbidden(_):
+        raise AssertionError("Invalid pairing input must not reach companion")
+
+    server.app.cloud = SimpleNamespace(pair=forbidden)
+    headers = session(server)
+    for payload in ({}, {"code": 12345678}, {"code": None}):
+        status, _, body = request(
+            server, "POST", "/api/cloud-pair", json.dumps(payload), headers
+        )
+        assert status == 400
+        assert json.loads(body)["error"] == "Enter a pairing code"
+
+
+def test_cloud_pair_unexpected_error_does_not_disclose_credentials(server):
+    from types import SimpleNamespace
+
+    def broken(_):
+        raise RuntimeError("credential AB12CD34 token private-bearer")
+
+    server.app.cloud = SimpleNamespace(pair=broken)
+    status, _, body = request(
+        server, "POST", "/api/cloud-pair", b'{"code":"AB12CD34"}', session(server)
+    )
+    assert status == 400
+    assert json.loads(body)["error"] == "Cloud account action failed. Check the local companion."

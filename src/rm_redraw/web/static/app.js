@@ -172,12 +172,38 @@ async function browse(folder='', label='Tablet') {
   }catch(error){$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
 }
 let cloudBusy=false;
+let cloudAvailable=false, cloudCanPair=false;
+function cloudControls(){
+  $('cloud-refresh').disabled=cloudBusy;
+  $('cloud-code').disabled=cloudBusy||!cloudCanPair;
+  $('cloud-pair').disabled=cloudBusy||!cloudCanPair;
+  $('cloud-revoke').disabled=cloudBusy||!cloudAvailable||!$('cloud-revoke-confirm').checked;
+  document.querySelectorAll('#cloud-items button').forEach(b=>b.disabled=cloudBusy);
+}
+async function cloudAccountAction(action){
+  if(cloudBusy)return;
+  if(action==='pair'&&!cloudCanPair)return;
+  if(action==='revoke'&&(!cloudAvailable||!$('cloud-revoke-confirm').checked))return;
+  const payload=action==='pair'?{code:$('cloud-code').value.trim()}:{};
+  $('cloud-code').value='';
+  cloudBusy=true;cloudControls();
+  $('cloud-status').textContent=action==='pair'?'Pairing this computer…':'Revoking cloud access…';
+  try{
+    await api('/api/cloud-'+action,payload);
+    $('cloud-items').replaceChildren();
+    $('cloud-revoke-confirm').checked=false;
+    $('cloud-status').textContent=action==='pair'?'Paired. Refresh cloud notebooks to browse.':'Cloud access revoked. Local notebooks and videos are unchanged.';
+  }catch(error){$('cloud-status').textContent=error.message;}
+  finally{delete payload.code;cloudBusy=false;cloudControls();}
+}
 async function browseCloud(){
   if(cloudBusy)return;
-  cloudBusy=true;$('cloud-refresh').disabled=true;$('cloud-items').replaceChildren();
+  cloudBusy=true;cloudControls();$('cloud-items').replaceChildren();
   $('cloud-status').textContent='Checking the local cloud client…';
   try{
     const status=await api('/api/cloud-status');
+    cloudAvailable=status.state==='available';cloudCanPair=status.can_pair===true;
+    $('cloud-pair-hint').textContent=cloudCanPair?'This companion supports private stdin pairing.':'In-app pairing needs the stdin-enabled companion. An existing standard rmctl profile can still be used.';
     if(status.state!=='available'){$('cloud-status').textContent=status.message;return;}
     $('cloud-status').textContent='Reading cloud notebook list…';
     const entries=await api('/api/cloud-list',{});
@@ -188,16 +214,16 @@ async function browseCloud(){
       const button=document.createElement('button');button.textContent='Import ink';
       button.onclick=async()=>{
         if(cloudBusy)return;
-        cloudBusy=true;$('cloud-refresh').disabled=true;document.querySelectorAll('#cloud-items button').forEach(b=>b.disabled=true);
+        cloudBusy=true;cloudControls();
         $('cloud-status').textContent='Downloading a verified notebook archive…';
         try{const result=await api('/api/cloud-import',{id:entry.id});await loadLibrary(result.id);$('cloud-dialog').close();notice('Cloud notebook saved locally. Choose a page to animate.');}
         catch(error){$('cloud-status').textContent=error.message;}
-        finally{cloudBusy=false;$('cloud-refresh').disabled=false;document.querySelectorAll('#cloud-items button').forEach(b=>b.disabled=false);}
+        finally{cloudBusy=false;cloudControls();}
       };
       row.append(label,button);$('cloud-items').append(row);
     }
   }catch(error){$('cloud-status').textContent=error.message;}
-  finally{cloudBusy=false;$('cloud-refresh').disabled=false;}
+  finally{cloudBusy=false;cloudControls();}
 }
 let cropImage=null, cropRect=null, cropStart=null, exportSource=null;
 function drawCrop(){
@@ -238,7 +264,11 @@ function setupExport(){
 async function start(){
   setupExport();
   $('cloud-open').onclick=()=>{$('cloud-dialog').showModal();browseCloud();};
-  $('cloud-close').onclick=()=>$('cloud-dialog').close();
+  $('cloud-close').onclick=()=>{$('cloud-code').value='';$('cloud-dialog').close();};
+  $('cloud-dialog').addEventListener('close',()=>{$('cloud-code').value='';});
+  $('cloud-pair').onclick=()=>cloudAccountAction('pair');
+  $('cloud-revoke').onclick=()=>cloudAccountAction('revoke');
+  $('cloud-revoke-confirm').onchange=cloudControls;
   $('cloud-refresh').onclick=browseCloud;
   capabilities=await api('/api/session');token=capabilities.token;
   $('backend').querySelector('[value=rust]').disabled=!capabilities.rust;

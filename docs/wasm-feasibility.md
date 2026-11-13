@@ -1,6 +1,20 @@
 # Browser replay feasibility
 
-The current pencil and mechanical-pencil deposition kernel can run on the user's device as WebAssembly. On this Windows machine, the same Rust source produced six synthetic alpha masks byte-identical to Python/NumPy and native Rust. This covers the pixel-deposition step after pressure calibration and dab generation. The browser parser, replay renderer, compositor, and video exporter still need end-to-end validation.
+The existing Python parser, scheduler and mixed-tool renderer ran in a Pyodide browser worker on a synthetic v6 page. All 29 replay frames and a separate static frame matched desktop Python byte for byte. The browser encoded the verified replay frames to MP4 and played the file to its end. The separate Rust WASM module reproduced six synthetic current-pencil alpha masks. The browser replay used the renderer's Python pencil backend.
+
+## Measured browser replay
+
+The worker reads a synthetic ZIP containing one generated v6 `.rm` page and runs the repository's unchanged parser, render projection, duration schedule, and Pillow renderer. It uses six tools across two layers, including fineliner, pencil, brush, highlighter, calligraphy, and a layer-local eraser. Interleaved entry-order replay exercises layer composition. The 96×72 viewport reduces a 128×96 source canvas after composition. Across the 29 forward frames, 23 changed from the preceding frame. The last forward frame equals the separately rendered static frame. The concatenated 30 RGBA buffers total 829,440 bytes and have SHA-256 `cdd1562bfc9f9319ace41e5e4dba043f139cd708062d87d54e2af54f94b1f6f5`.
+
+| Runtime | Parse/project | Render and static | Pyodide startup from local assets |
+| --- | ---: | ---: | ---: |
+| Desktop Python 3.13.15, NumPy 2.5.2, Pillow 12.3.0 | 5.8 ms | 877 ms | |
+| Node v26.4.0, Pyodide 0.29.5 | 3.0 ms | 1,885 ms | 2,189 ms |
+| Codex in-app browser worker, Pyodide 0.29.5 | 4.8 ms | 3,379 ms | 1,692 ms |
+
+Pyodide used Python 3.13.2, NumPy 2.2.5, and Pillow 11.3.0. Runtime files and wheels total 15.48 MiB on disk, plus about 37 KiB of zipped Python engine source. Measurements are one local run per runtime and include neither WAN transfer nor mobile device performance. The small harness buffers every rendered frame for exact comparison. Production export needs a bounded render-to-encoder stream. The ZIP contains one hand-selected generated page member and the probe supplies an explicit identity affine. General archive selection, naturally authored documents, anchored geometry, and cloud access still need acceptance.
+
+In a separate browser run with export enabled, the worker repeated the full byte comparison before passing the 29 forward frames to the WebCodecs encoder and MP4 muxer at 12 fps. The browser loaded a 96×72 MP4 and played through to the end at 2.416667 seconds. Lossless equality was checked on the rendered RGBA before video encoding. The separate static frame was excluded from the movie. Browser screenshots and output evidence are under ignored `artifacts/browser-prototype-20261113/`.
 
 ## Measured prototype
 
@@ -19,7 +33,7 @@ Each case uses the exact NumPy-produced float64 occupancy and 65,536-entry gain 
 
 ## Route to a client-side animator
 
-Test the existing Python parser, scheduler, and renderer in a Pyodide worker before committing to a full port. The CPython 3.13-based Pyodide 0.29 series publishes compatible-range NumPy and Pillow builds, and `rmscene==0.8.0` has a universal wheel. Its `packaging>=23,<24` dependency needs explicit resolution because the published Pyodide 0.29.2 package list has `packaging==24.2`. The current Pyodide 314 series uses Python 3.14, outside this project's declared range. Start by exercising the Python pencil path, then consider calling the measured Rust WASM kernel through the worker's JS bridge in place of the native DLL adapter. Desktop FFmpeg and Poppler subprocesses require separate browser replacements or exclusion from the initial input scope. Measure cold download, Python/JS/WASM copies, peak memory, full-frame parity, and render speed before deciding how much to port. This option has package-level evidence and awaits an actual engine run. [Pyodide package list](https://pyodide.org/en/0.29.2/usage/packages-in-pyodide.html), [Pyodide release notes](https://pyodide.org/en/stable/project/changelog.html), [Pyodide workers](https://pyodide.org/en/0.29.2/usage/webworker.html), [rmscene wheel](https://pypi.org/project/rmscene/0.8.0/), [Python subprocess availability](https://docs.python.org/3.13/library/subprocess.html)
+The Pyodide worker can reuse the existing renderer as an initial client implementation. The CPython 3.13-based Pyodide 0.29 series publishes compatible-range NumPy and Pillow builds. The probe adds pinned pure-Python wheels for `rmscene==0.8.0` and its `packaging==23.2` dependency to the worker's import path. The current Pyodide 314 series uses Python 3.14, outside this project's declared range. A future JS bridge could call the measured Rust WASM pencil kernel from Pyodide. Desktop FFmpeg and Poppler subprocesses require browser replacements or exclusion from the initial input scope. Measure cold download, Python/JS/WASM copies, peak memory, full-frame parity, and render speed at realistic sizes before deciding how much to port. [Pyodide package list](https://pyodide.org/en/0.29.2/usage/packages-in-pyodide.html), [Pyodide release notes](https://pyodide.org/en/stable/project/changelog.html), [Pyodide workers](https://pyodide.org/en/0.29.2/usage/webworker.html), [rmscene wheel](https://pypi.org/project/rmscene/0.8.0/), [Python subprocess availability](https://docs.python.org/3.13/library/subprocess.html)
 
 If startup or throughput calls for a dedicated Rust and TypeScript implementation, the normalized contracts support an incremental port.
 
@@ -36,9 +50,23 @@ Load a page once and send compact replay options and progress updates to the wor
 
 Cloud pairing has its own feasibility gate. Direct browser requests require the selected API to allow the app origin, preflight, authentication headers and any credentials used by the flow. A read-only connector may be needed if the supported API or its cross-origin rules prevent direct access. Client-side rendering and encoding can remove per-job server compute and video storage. Hosting and any required connector still have traffic and operational costs. [Fetch CORS protocol](https://fetch.spec.whatwg.org/#http-cors-protocol)
 
-The next experiment is a local browser-worker pipeline using a page with layered ordinary ink, current pencil, brush and an eraser. Compare complete RGBA frames against Python, verify the worker's last forward frame equals its static output byte for byte, and play the resulting muxed video. Run the same measurement on desktop Chromium and a representative mobile browser, including elapsed time, peak memory, and cancellation. Evaluate cloud acquisition against the same normalized contract.
+Extend the browser acceptance to representative dimensions and supported document geometry on desktop and mobile. Measure full-resolution latency, peak memory, and cancellation. Evaluate cloud acquisition against the same normalized contract.
 
 ## Reproduce
+
+Run the browser replay proof from the repository root with PowerShell, the project Python environment, and Node. The first command downloads only pinned public dependencies and verifies wheel hashes. Subsequent commands use local files.
+
+```powershell
+pwsh -NoProfile -File native/browser-prototype/fetch-runtime.ps1
+.venv/Scripts/python.exe native/browser-prototype/make_fixture.py
+.venv/Scripts/python.exe native/browser-prototype/render_probe.py artifacts/browser-prototype-20261113
+node --test native/browser-prototype/replay.test.mjs
+node native/browser-prototype/serve.mjs
+```
+
+Open the printed loopback address to run the same parity comparison in a browser worker. Build the encoder bundle using the [video prototype instructions](../native/video-prototype/README.md), then add `?encode=1` to encode the verified forward frames and load the resulting video locally.
+
+### Rust pencil kernel
 
 Run from the repository root using PowerShell, the project Python environment, Rust with the WASM target installed, and Node. Generated inputs, masks and binaries are written under the ignored `artifacts/wasm-feasibility-20261113/` directory.
 

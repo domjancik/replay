@@ -26,6 +26,9 @@ DOCS = {
     "calibration-journey.md",
     "renderer-landscape.md",
     "publication-readiness.md",
+    "cloud-connector.md",
+    "cloud-app-feasibility.md",
+    "wasm-feasibility.md",
 }
 SCRIPTS = {"start-replay.ps1", "setup.ps1", "check-release.py", "release-smoke.py"}
 BAD_PARTS = {
@@ -64,6 +67,43 @@ def allowed_source(name):
         return allowed_package("/".join(parts[1:]))
     if parts[0] == "tests":
         return name.endswith(".py")
+    prototype_files = {
+        "browser-prototype": {
+            "fetch-runtime.ps1",
+            "index.html",
+            "make_fixture.py",
+            "render_probe.py",
+            "replay.mjs",
+            "replay.test.mjs",
+            "serve.mjs",
+            "worker.mjs",
+        },
+        "video-prototype": {
+            "README.md",
+            "package.json",
+            "package-lock.json",
+            "encoder.mjs",
+            "browser.mjs",
+            "build.mjs",
+            "harness.html",
+            "harness.mjs",
+            "harness-worker.mjs",
+            "encode.test.mjs",
+            "smoke.mjs",
+        },
+        "rmctl-pairing": {"code-stdin.patch", "README.md", "LICENSE"},
+    }
+    if parts[0] == "native" and parts[1] in prototype_files:
+        return len(parts) == 3 and parts[2] in prototype_files[parts[1]]
+    if parts[:2] == ("native", "wasm-prototype"):
+        return "/".join(parts[2:]) in {
+            "Cargo.toml",
+            "Cargo.lock",
+            "src/lib.rs",
+            "pencil.mjs",
+            "pencil.test.mjs",
+            "make_goldens.py",
+        }
     if parts[:2] == ("native", "pencil-kernel"):
         return (len(parts) == 3 and parts[2] in {"Cargo.toml", "Cargo.lock", "README.md"}) or (
             len(parts) == 4 and parts[2] in {"src", "tests"} and name.endswith(".rs")

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synthetic reMarkable replay test</title>
+</head>
+<body>
+  <h1>Synthetic reMarkable replay test</h1>
+  <p id="status" role="status">Loading Pyodide in a worker…</p>
+  <canvas id="frame" aria-label="Final synthetic replay frame" width="96" height="72"></canvas>
+  <p id="video-status" hidden></p>
+  <video id="video" width="288" height="216" controls muted hidden></video>
+  <pre id="metrics"></pre>
+  <script type="module">
+    const status = document.querySelector('#status');
+    const videoStatus = document.querySelector('#video-status');
+    const encode = new URLSearchParams(location.search).get('encode') === '1';
+    const worker = new Worker('./worker.mjs', { type: 'module' });
+    worker.onmessage = ({ data: { manifest, finalRgba, error, video } }) => {
+      if (error) {
+        const target = videoStatus.hidden ? status : videoStatus;
+        target.textContent = error;
+        worker.terminate();
+      }
+      if (manifest) {
+        const [width, height] = manifest.viewport;
+        const image = new ImageData(new Uint8ClampedArray(finalRgba.buffer), width, height);
+        document.querySelector('#frame').getContext('2d').putImageData(image, 0, 0);
+        document.querySelector('#metrics').textContent = JSON.stringify(manifest, null, 2);
+        status.textContent = `Matched ${manifest.frameCount} replay frames and the static frame byte for byte.`;
+        if (encode) {
+          videoStatus.hidden = false;
+          videoStatus.textContent = 'Encoding verified replay frames…';
+        } else {
+          worker.terminate();
+        }
+      }
+      if (video) {
+        const player = document.querySelector('#video');
+        player.hidden = false;
+        player.onloadeddata = () => {
+          videoStatus.textContent = `Loaded ${video.extension.toUpperCase()} video with ${video.frameCount} frames for playback.`;
+        };
+        player.onerror = () => { videoStatus.textContent = player.error.message; };
+        player.src = URL.createObjectURL(new Blob([video.buffer], { type: video.mimeType }));
+        worker.terminate();
+      }
+    };
+    worker.onerror = ({ message }) => { status.textContent = message; };
+    worker.postMessage({ encode });
+  </script>
+</body>
+</html>
