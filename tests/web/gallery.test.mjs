@@ -61,3 +61,10 @@ test('cloud gallery view hides local notebooks and keeps a visible unlock action
  assert.equal(el('local-library').hidden,false);
  assert.equal(el('cloud-library').hidden,true);
 });
+test('switching to companion ignores a stale direct USB listing',async()=>{
+ const {context,el}=fixture();
+ const pending=vm.runInContext("api=()=>new Promise(resolve=>{globalThis.resolveUsb=resolve});browse();",context);
+ el('usb-companion-use').checked=true;el('usb-status').textContent='Connect companion';
+ context.resolveUsb([]);await pending;
+ assert.equal(el('usb-status').textContent,'Connect companion');
+});

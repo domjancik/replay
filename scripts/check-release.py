@@ -30,8 +30,15 @@ DOCS = {
     "cloud-app-feasibility.md",
     "wasm-feasibility.md",
     "rust-renderer.md",
+    "usb-companion.md",
 }
-SCRIPTS = {"start-replay.ps1", "setup.ps1", "check-release.py", "release-smoke.py"}
+SCRIPTS = {
+    "start-replay.ps1",
+    "setup.ps1",
+    "check-release.py",
+    "release-smoke.py",
+    "build-usb-companion.ps1",
+}
 BAD_PARTS = {
     ".git",
     ".uv-cache",
@@ -56,6 +63,7 @@ def allowed_package(name):
         "rm_redraw/web/static/cloud-ui.mjs",
         "rm_redraw/web/static/cloud-client.mjs",
         "rm_redraw/web/static/cloud-vault.mjs",
+        "rm_redraw/web/static/usb-companion.mjs",
     }
 
 
@@ -71,8 +79,11 @@ def allowed_source(name):
         return allowed_package("/".join(parts[1:]))
     if parts[0] == "tests":
         return name.endswith(".py") or name in {
-            "tests/web/cloud-client.test.mjs", "tests/web/cloud-vault.test.mjs",
+            "tests/web/cloud-client.test.mjs",
+            "tests/web/cloud-vault.test.mjs",
             "tests/web/cloud-ui.test.mjs",
+            "tests/web/usb-companion.test.mjs",
+            "tests/web/gallery.test.mjs",
         }
     if parts[:2] == ("native", "renderer"):
         if len(parts) == 3:
@@ -84,6 +95,7 @@ def allowed_source(name):
                 "renderer.mjs",
                 "renderer.test.mjs",
                 "verify.mjs",
+                "benchmark-cache.mjs",
             }
         if parts[2] in {"src", "tests"}:
             return name.endswith(".rs") or (parts[2] == "tests" and name.endswith((".py", ".mjs")))

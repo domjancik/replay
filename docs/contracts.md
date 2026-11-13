@@ -133,3 +133,7 @@ The local UI rejects submissions whose resolved visible stroke centers fall outs
 
 
 The Python/Pillow orchestration path (including its Rust pencil backend) retains per-layer completed-stroke prefixes for interleaved entry-order replay within a 64 MiB persistent RGBA-canvas budget. This budget excludes temporary compositing images and texture caches. Unsupported or oversized cases retain the stateless path; page identity and options invalidate retained pixels. Identical consecutive visibility states reuse PNG bytes by file copy, preserving independent frame files and the existing compression settings. Static verification remains independent. The standalone full-page Rust/WASM ABI now uses the equivalent bounded per-layer prefix and repeated-frame strategy; it still parses the complete JSON page on each call.
+
+## Optional USB desktop bridge
+
+The companion is independent of cloud pairing, rendering and file import. It binds only loopback port 8786, requires an exact configured origin and an ephemeral connection key on every GET, and exposes only status, folder listing and stable raw notebook download. It reuses the fixed-host read-only USB reader. The browser adapter returns bounded archive bytes to the existing import consumer; it must not forward them to a hosted service implicitly. No cloud tokens or raw notebook files are persisted by the companion. Preflight allows the one origin, GET and the key header only. See `docs/usb-companion.md` for the desktop lifecycle and validation limits.

@@ -18,6 +18,9 @@ dependencies = [
 [project.scripts]
 rm-redraw = "rm_redraw.web.__main__:main"
 
+[project.gui-scripts]
+replay-usb-companion = "rm_redraw.companion.desktop:main"
+
 [dependency-groups]
 dev = [
   "pytest>=8,<9",
@@ -56,6 +59,7 @@ include = [
   "/native/renderer/benchmark-cache.mjs",
   "/native/renderer/browser/app.mjs", "/native/renderer/browser/index.html",
   "/native/renderer/browser/serve.mjs", "/native/renderer/browser/worker.mjs",
+  "/scripts/build-usb-companion.ps1", "/docs/usb-companion.md",
   "/scripts/start-replay.ps1", "/scripts/setup.ps1",
   "/scripts/check-release.py", "/scripts/release-smoke.py",
   "/docs/install.md", "/docs/local-replay-utility.md", "/docs/contracts.md",

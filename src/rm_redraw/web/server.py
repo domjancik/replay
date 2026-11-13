@@ -85,7 +85,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' blob:; object-src 'none'; "
+            "default-src 'self'; connect-src 'self' http://127.0.0.1:8786; "
+            "img-src 'self' blob:; object-src 'none'; "
             "base-uri 'none'; frame-ancestors 'none'",
         )
         if cookie:
@@ -157,6 +158,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/cloud-ui.mjs",
                 "/cloud-client.mjs",
                 "/cloud-vault.mjs",
+                "/usb-companion.mjs",
             ):
                 name = "index.html" if url.path == "/" else url.path[1:]
                 self._file(ASSETS / name, cookie=url.path == "/")

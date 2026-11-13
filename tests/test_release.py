@@ -22,7 +22,7 @@ def test_cloud_setup_docs_are_in_source_release(tmp_path):
 
 
 def test_browser_cloud_sources_are_allowed_in_release(tmp_path):
-    for name in ("cloud-ui.mjs", "cloud-client.mjs", "cloud-vault.mjs"):
+    for name in ("cloud-ui.mjs", "cloud-client.mjs", "cloud-vault.mjs", "usb-companion.mjs"):
         wheel, sdist = archives(tmp_path, f"src/rm_redraw/web/static/{name}")
         with zipfile.ZipFile(wheel, "a") as package:
             package.writestr(f"rm_redraw/web/static/{name}", "// synthetic module")

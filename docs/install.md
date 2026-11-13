@@ -41,3 +41,7 @@ Install Rust and its platform linker, then follow `native/pencil-kernel/README.m
 ## Local verification
 
 The release check must inspect both source and wheel contents and smoke-test the installed wheel outside the source tree. The release readiness document records the actual commands and observed platform; a successful package build alone is insufficient.
+
+### Optional USB companion
+
+For USB access through a browser bridge, use the double-clickable Windows companion described in [USB companion setup](usb-companion.md). Cloud pairing and importing existing files remain companion-free. The development build lives in `artifacts/usb-companion/dist/rePlay-USB-Companion.exe`; no terminal or Python installation is needed to run it.

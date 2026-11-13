@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let token = '', library = [], jobs = [], selectedJob = null, pageReady = false, capabilities;
 let previewKey = '', pageRequest = 0, usbBusy = false;
+let usbCompanion=null;
 let selectionPreview = null, previewRefreshTimer;
 let expandedNotebook=null, galleryEpoch=0, galleryList=false, galleryFocused=false;
 const pageThumbnails=new Map(), thumbnailStates=new Map();
@@ -231,9 +232,13 @@ async function poll() {
 }
 async function browse(folder='', label='Tablet') {
   if(usbBusy)return;
+  const companion=!!$('usb-companion-use').checked;
   $('usb-status').textContent='Connecting to USB web interface…';$('usb-items').replaceChildren();
   try{
-    const entries=await api('/api/usb?folder='+encodeURIComponent(folder));
+    const entries=$('usb-companion-use').checked
+      ? await (usbCompanion || {documents:async()=>{throw new Error('Connect the USB companion first');}}).documents(folder)
+      : await api('/api/usb?folder='+encodeURIComponent(folder));
+    if(companion!==!!$('usb-companion-use').checked)return;
     $('usb-location').textContent=label;$('usb-status').textContent='Choose a folder or import a notebook.';
     for(const entry of entries.sort((a,b)=>Number(b.folder)-Number(a.folder)||a.name.localeCompare(b.name))){
       const row=document.createElement('div');row.className='usb-item';
@@ -244,14 +249,16 @@ async function browse(folder='', label='Tablet') {
       action.onclick=async()=>{
         if(usbBusy)return;
         if(entry.folder){await browse(entry.id,entry.name);return;}
-        usbBusy=true;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=true);
+        usbBusy=true;$('usb-companion-use').disabled=true;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=true);
         $('usb-status').textContent='Saving notebook and verifying two raw reads… This can take a minute.';
-        try{const result=await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);$('usb-dialog').close();notice('Notebook saved locally.');}
+        try{const result=$('usb-companion-use').checked
+          ? await api('/api/upload',await usbCompanion.download(entry.id),true)
+          : await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);$('usb-dialog').close();notice('Notebook saved locally.');}
         catch(error){$('usb-status').textContent=error.message+($('include-pdf').checked?' Try without the PDF for pages without text anchors. Any downloaded raw data is retained locally.':'');}
-        finally{usbBusy=false;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=b.dataset.unsupported==='true');}
+        finally{usbBusy=false;$('usb-companion-use').disabled=false;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=b.dataset.unsupported==='true');}
       };row.append(name,action);$('usb-items').append(row);
     }
-  }catch(error){$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
+  }catch(error){if(companion!==!!$('usb-companion-use').checked)return;$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
 }
 let cropImage=null, cropRect=null, cropStart=null, exportSource=null;
 function drawCrop(){
@@ -311,7 +318,8 @@ async function start(){
   $('refresh').onclick=safely(()=>loadLibrary());$('generate').onclick=safely(generate);
   $('upload-open').onclick=()=>$('upload').click();$('upload').onchange=safely(()=>upload($('upload'),'/api/upload'));
   $('pair-open').onclick=()=>$('pair').click();$('pair').onchange=safely(()=>upload($('pair'),'/api/upload-pdf?document='+encodeURIComponent($('notebook').value)));
-  $('usb-open').onclick=()=>{$('usb-dialog').showModal();browse();};$('usb-close').onclick=()=>$('usb-dialog').close();$('usb-up').onclick=()=>browse();
+  $('usb-open').onclick=()=>{$('usb-dialog').showModal();if(!$('usb-companion-use').checked)browse();};$('usb-close').onclick=()=>$('usb-dialog').close();$('usb-up').onclick=()=>browse();
+  setupUsbCompanion();
   await loadLibrary();await poll();setInterval(()=>poll().catch(error=>notice('Server unavailable: '+error.message)),2000);
 }
 safely(start)();
@@ -457,4 +465,27 @@ function setupGallery(){
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
   for(const [id,delta] of [['page-prev',-1],['page-next',1]])$(id).onclick=safely(async()=>{const pages=[...$('page').options].filter(p=>!p.disabled);const i=pages.findIndex(p=>p.value===$('page').value);const next=pages[i+delta];if(next){$('page').value=next.value;await selectPage();}});
   $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('seconds').value=button.dataset.seconds;$('duration-buttons').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));});
+}
+
+function setupUsbCompanion(){
+  $('usb-companion-origin').textContent=location.origin;
+  $('usb-companion-use').onchange=()=>{
+    const enabled=$('usb-companion-use').checked;
+    $('usb-companion-settings').hidden=!enabled;
+    $('include-pdf').disabled=enabled;if(enabled)$('include-pdf').checked=false;
+    $('usb-items').replaceChildren();$('usb-status').textContent=enabled?'Start the companion and paste its connection key.':'';
+    if(!enabled){usbCompanion?.disconnect();usbCompanion=null;browse();}
+  };
+  $('usb-companion-connect').onclick=async()=>{
+    $('usb-companion-connect').disabled=true;
+    try{
+      const {createUsbCompanion}=await import('/usb-companion.mjs');
+      usbCompanion?.disconnect();usbCompanion=createUsbCompanion();
+      const key=$('usb-companion-key').value.trim();$('usb-companion-key').value='';
+      await usbCompanion.connect(key);await browse();
+    }catch(error){$('usb-status').textContent=error.message;}
+    finally{$('usb-companion-connect').disabled=false;}
+  };
+  $('usb-companion-disconnect').onclick=()=>{usbCompanion?.disconnect();usbCompanion=null;$('usb-items').replaceChildren();$('usb-status').textContent='Companion disconnected from this tab.';};
+  window.addEventListener('pagehide',()=>usbCompanion?.disconnect());
 }
