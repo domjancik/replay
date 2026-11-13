@@ -53,6 +53,9 @@ def allowed_package(name):
         "rm_redraw/web/static/index.html",
         "rm_redraw/web/static/app.js",
         "rm_redraw/web/static/style.css",
+        "rm_redraw/web/static/cloud-ui.mjs",
+        "rm_redraw/web/static/cloud-client.mjs",
+        "rm_redraw/web/static/cloud-vault.mjs",
     }
 
 
@@ -67,7 +70,10 @@ def allowed_source(name):
     if parts[:2] == ("src", "rm_redraw"):
         return allowed_package("/".join(parts[1:]))
     if parts[0] == "tests":
-        return name.endswith(".py")
+        return name.endswith(".py") or name in {
+            "tests/web/cloud-client.test.mjs", "tests/web/cloud-vault.test.mjs",
+            "tests/web/cloud-ui.test.mjs",
+        }
     if parts[:2] == ("native", "renderer"):
         if len(parts) == 3:
             return parts[2] in {

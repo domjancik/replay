@@ -12,7 +12,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
-from rm_redraw.acquisition.cloud import CloudError, CloudSource
+from rm_redraw.acquisition.cloud import CloudError
+from rm_redraw.acquisition.cloud_relay import CloudRelay, CloudRelayError
 from rm_redraw.acquisition.usb import UsbReader
 
 from .jobs import CanvasClippingError, Jobs, page_info
@@ -28,7 +29,11 @@ class App:
         self.library = Library(root / "library")
         self.jobs = Jobs(root / "jobs", self.library)
         self.usb = UsbReader()
-        self.cloud = CloudSource()
+        # Historical adapter remains injectable for compatibility tests only.
+        # Normal app startup neither discovers nor launches a CLI companion.
+        self.cloud = None
+        self.cloud_relay = CloudRelay()
+        self.relay_slots = threading.BoundedSemaphore(2)
         self.import_lock = threading.Lock()
 
     def capabilities(self):
@@ -114,7 +119,9 @@ class Handler(BaseHTTPRequestHandler):
             extra["Content-Range"] = f"bytes {start}-{end}/{size}"
         self._headers(
             code,
-            mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            "text/javascript; charset=utf-8"
+            if path.suffix in (".js", ".mjs")
+            else mimetypes.guess_type(path.name)[0] or "application/octet-stream",
             end - start + 1,
             cookie=cookie,
             extra=extra,
@@ -140,7 +147,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "Only this local origin is allowed"}, 403)
                 return
             url = urlsplit(self.path)
-            if url.path in ("/", "/app.js", "/style.css"):
+            if url.path in (
+                "/",
+                "/app.js",
+                "/style.css",
+                "/cloud-ui.mjs",
+                "/cloud-client.mjs",
+                "/cloud-vault.mjs",
+            ):
                 name = "index.html" if url.path == "/" else url.path[1:]
                 self._file(ASSETS / name, cookie=url.path == "/")
                 return
@@ -158,7 +172,9 @@ class Handler(BaseHTTPRequestHandler):
                 info, _ = page_info(self.app.library, query["document"][0], query["page"][0])
                 self._json(info)
             elif url.path == "/api/cloud-status":
-                self._json(self.app.cloud.status())
+                self._json(
+                    self.app.cloud.status() if self.app.cloud else {"state": "browser-managed"}
+                )
             elif url.path == "/api/usb":
                 self._json(self.app.usb.documents(query.get("folder", [""])[0]))
             elif url.path.startswith("/media/"):
@@ -177,6 +193,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         importing = False
+        relaying = False
         cloud_account = False
         try:
             if (
@@ -191,9 +208,22 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get("Transfer-Encoding"):
                 raise ValueError("Chunked requests are not supported")
             url = urlsplit(self.path)
+            if url.path == "/api/cloud-relay":
+                relaying = self.app.relay_slots.acquire(blocking=False)
+                if not relaying:
+                    self._json({"error": "Cloud relay is busy; retry shortly"}, 503)
+                    return
+            if self.app.cloud is None and url.path in (
+                "/api/cloud-pair",
+                "/api/cloud-revoke",
+                "/api/cloud-list",
+                "/api/cloud-import",
+            ):
+                self._json({"error": "Use browser pairing; the CLI connector is retired"}, 410)
+                return
             cloud_account = url.path in ("/api/cloud-pair", "/api/cloud-revoke")
             upload = url.path in ("/api/upload", "/api/upload-pdf")
-            limit = MAX_BYTES if upload else 16384
+            limit = MAX_BYTES if upload else (32768 if relaying else 16384)
             lengths = self.headers.get_all("Content-Length", [])
             if len(lengths) != 1 or not lengths[0].isascii() or not lengths[0].isdigit():
                 raise ValueError("A valid Content-Length is required")
@@ -201,7 +231,7 @@ class Handler(BaseHTTPRequestHandler):
             if length == 0:
                 raise ValueError("Request is empty")
             if length > limit:
-                maximum = "128 MiB" if upload else "16 KiB"
+                maximum = "128 MiB" if upload else ("32 KiB" if relaying else "16 KiB")
                 self._json({"error": f"Request exceeds the {maximum} limit"}, 413)
                 return
             expected = "application/octet-stream" if upload else "application/json"
@@ -236,6 +266,17 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(body)
                 if not isinstance(data, dict):
                     raise ValueError("Expected a JSON object")
+                if url.path == "/api/cloud-relay":
+                    try:
+                        response, kind = self.app.cloud_relay.request(data)
+                    except CloudRelayError as error:
+                        self._json({"error": str(error)}, error.status)
+                    except Exception:
+                        self._json({"error": "Cloud relay failed"}, 502)
+                    else:
+                        self._headers(200, kind, len(response))
+                        self.wfile.write(response)
+                    return
                 if url.path == "/api/usb-import":
                     if type(data.get("pdf")) is not bool:
                         raise ValueError("pdf must be true or false")
@@ -292,6 +333,8 @@ class Handler(BaseHTTPRequestHandler):
             )
             self._json({"error": message}, 400)
         finally:
+            if relaying:
+                self.app.relay_slots.release()
             if importing:
                 self.app.import_lock.release()
 

@@ -112,7 +112,9 @@ def main():
             status, _, body = request(server.server_port, "/api/session", {"Cookie": cookie})
             if status != 200 or not json.loads(body).get("token"):
                 raise RuntimeError("Session request failed")
-            for asset in ("/app.js", "/style.css"):
+            for asset in (
+                "/app.js", "/style.css", "/cloud-ui.mjs", "/cloud-client.mjs", "/cloud-vault.mjs",
+            ):
                 status, _, body = request(server.server_port, asset)
                 if status != 200 or not body:
                     raise RuntimeError(f"Asset request failed: {asset}")

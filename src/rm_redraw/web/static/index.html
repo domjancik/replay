@@ -60,16 +60,19 @@
 </dialog>
 <dialog id="cloud-dialog">
 <div class="section-heading"><h2>reMarkable cloud · local preview</h2><button id="cloud-close" class="quiet">Close</button></div>
-<p>Your cloud credential stays in the local <strong>rmctl</strong> profile. This app reads notebooks; the underlying credential also permits cloud writes. Pairing grants this computer access to your account.</p>
-<details><summary>Pair this computer</summary>
-<p>Get a one-time code from <a href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">your reMarkable account</a>. In-app pairing requires the rm-redraw stdin-enabled companion. The standard <a href="https://github.com/altessa-s/rmctl/releases/tag/v1.2.0" target="_blank" rel="noreferrer">rmctl v1.2.0 release</a> can browse an already paired profile.</p>
+<p>Your pairing and notebook tree are encrypted in this browser. No companion CLI is needed. The relay forwards requests without saving credentials or the tree. While unlocked, it sees the credentials needed for cloud access.</p>
+<p class="hint">Use a unique vault passphrase, not your reMarkable password. Page scripts can access credentials while unlocked; lock the vault on shared computers. The cloud token can authorize writes, although this app only reads documents.</p>
+<details open><summary>Pair or unlock this browser</summary>
+<p>Get a one-time code from <a href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">your reMarkable account</a>, then pair this browser below.</p>
 <label for="cloud-code">One-time pairing code</label><input id="cloud-code" type="password" autocomplete="off" spellcheck="false" maxlength="8" pattern="[A-Za-z0-9]{8}" placeholder="8-character code" disabled>
-<button id="cloud-pair" disabled>Pair this computer</button>
-<p id="cloud-pair-hint" class="hint">Checking companion support…</p>
-<p class="hint">The code is sent through this local app to reMarkable and cleared from the field. It is not saved in browser storage or command history. rmctl stores the resulting credential in its local profile.</p>
+<label for="cloud-passphrase">Vault passphrase</label><input id="cloud-passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024">
+<label for="cloud-confirm">Repeat passphrase when pairing</label><input id="cloud-confirm" type="password" autocomplete="off" minlength="12" maxlength="1024">
+<button id="cloud-pair">Pair and remember</button><button id="cloud-unlock" class="secondary">Unlock saved pairing</button><button id="cloud-lock" class="quiet">Lock</button>
+<p class="hint">At least 12 characters. The passphrase is never sent to the relay. Forgotten passphrases require pairing again. Closing this dialog locks the vault.</p>
+<p class="hint">The code is sent through the relay to reMarkable and cleared from the field. Only the resulting pairing is saved, encrypted in this browser.</p>
 </details>
 <button id="cloud-refresh" class="secondary">Refresh cloud notebooks</button>
-<details><summary>Disconnect this profile</summary><p>Revoking disconnects the selected rmctl profile and clears its companion cache, including for other apps using it. Close other clients using this profile before pairing or revoking. Notebooks and videos imported into this app stay on this computer.</p><label class="checkbox"><input id="cloud-revoke-confirm" type="checkbox"> Disconnect this shared local profile</label><button id="cloud-revoke" class="secondary" disabled>Revoke cloud access</button></details>
+<details><summary>Disconnect this browser</summary><p>Revoke removes this cloud registration and browser vault. Forget only removes this browser's saved pairing and tree. Imported notebooks and videos remain in the local replay library.</p><label class="checkbox"><input id="cloud-revoke-confirm" type="checkbox"> Confirm disconnecting this browser</label><button id="cloud-revoke" class="secondary" disabled>Revoke cloud access</button><button id="cloud-forget" class="quiet" disabled>Forget browser vault only</button></details>
 <p id="cloud-status" role="status"></p><div id="cloud-items"></div>
 <p class="hint">Downloaded ink feeds the same local replay engine. Templates and PDF backgrounds are omitted. Text-anchored pages may need a separately attached matching PDF. Live cloud-account validation is pending; this connector is experimental.</p>
 </dialog>

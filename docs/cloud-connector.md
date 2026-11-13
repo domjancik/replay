@@ -1,5 +1,23 @@
 # Import from reMarkable Cloud
 
+## Current browser-owned connection
+
+The app no longer requires rmctl or any companion CLI for cloud access. **Browse cloud** exchanges a desktop pairing code through a fixed-endpoint, stateless relay. Choose a unique vault passphrase of at least 12 characters. The browser stores the device token and verified notebook tree together in IndexedDB, encrypted with AES-256-GCM using a PBKDF2-SHA256 key (600,000 iterations and a random salt). Neither the passphrase nor the derived key is persisted or sent to the relay. Short-lived user tokens stay in memory. Reloading, closing the dialog, or five minutes of inactivity locks this tab. Unlocking restores the saved tree without a cloud request; refreshing checks the current root hash and reuses verified cached metadata.
+
+The relay does not write credentials, pairing codes, tree indexes or downloaded blobs to disk. It sees the credential while forwarding a request: this is **no server persistence**, not end-to-end secrecy from the relay. Browser CORS restrictions still require this transport. It only allows registration, session exchange, root/file reads and explicit revocation at fixed HTTPS provider endpoints; document writes and arbitrary URLs are unavailable. Authenticated same-origin requests, bounded concurrency through response delivery, no-store responses and redacted upstream errors apply. The current Python host remains a loopback utility; deploying the relay publicly needs HTTPS, abuse limits and deployment-specific logging/crash-dump controls.
+
+The browser verifies content hashes and assembles the selected notebook archive. **Import ink** currently sends that selected archive to the existing local replay library, which persists it and its outputs. Pairing and the tree stay browser-owned; the complete document/render pipeline is not yet browser-only.
+
+**Revoke cloud access** revokes this registration and deletes its vault. **Forget browser vault only** deletes local pairing/cache without cloud revocation. Neither deletes imported notebooks. A forgotten passphrase requires forgetting the vault and pairing again. Browser storage is origin-specific; changing host or port uses a different vault. Persistent-storage permission is requested but not guaranteed, and clearing site data removes the vault. Existing rmctl profiles are not migrated or modified.
+
+Encrypted storage protects a locked vault against casual storage inspection. It does not protect an unlocked token from malicious same-origin scripts, a compromised browser, or an untrusted relay. Keep the strict CSP and self-hosted scripts; do not add analytics to the credential origin. See [OWASP browser-storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html) and [browser persistence behavior](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist).
+
+Automated tests use synthetic credentials and a fake provider. Live account pairing and exports remain unverified until exercised with a user-provided pairing code. The provider protocol is unofficial and may change.
+
+## Historical CLI prototype (retired from the normal app)
+
+The following describes the earlier adapter, retained as research and compatibility-test code. Its HTTP routes return 410 in the normal app; it is not a setup requirement.
+
 The local replay app can browse synced notebooks and annotated PDFs through a user-installed rmctl companion. It saves the selected document as a local `.rmdoc`. Choose an ink page in the local library to make a replay and export an MP4.
 
 ## Set up the companion

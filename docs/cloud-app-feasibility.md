@@ -2,6 +2,8 @@
 
 *Feasibility review, November 13, 2026.*
 
+**Implementation update:** the normal app now uses an encrypted IndexedDB vault and browser-side cloud index/archive handling, with a stateless HTTP relay. No companion CLI is required and no pairing/tree persistence is needed on the relay. The selected archive still enters the existing local replay library; full browser import/render integration remains separate. See the [current connection contract](cloud-connector.md). The rmctl analysis below records the earlier prototype.
+
 The loopback prototype browses and fetches one selected cloud document through an installed `rmctl` companion, then passes a validated archive to the existing local replay pipeline. The optional `rmctl-pairing` helper adds in-app pairing and revocation on the same user-local profile. Live account access remains unverified. The direct website-to-cloud route failed the credential-free preflights described below.
 
 ## Cloud transport evidence

@@ -21,6 +21,17 @@ def test_cloud_setup_docs_are_in_source_release(tmp_path):
         assert result.returncode == 0, result.stdout
 
 
+def test_browser_cloud_sources_are_allowed_in_release(tmp_path):
+    for name in ("cloud-ui.mjs", "cloud-client.mjs", "cloud-vault.mjs"):
+        wheel, sdist = archives(tmp_path, f"src/rm_redraw/web/static/{name}")
+        with zipfile.ZipFile(wheel, "a") as package:
+            package.writestr(f"rm_redraw/web/static/{name}", "// synthetic module")
+        assert run_check(wheel, sdist).returncode == 0
+    for name in ("cloud-client.test.mjs", "cloud-vault.test.mjs", "cloud-ui.test.mjs"):
+        wheel, sdist = archives(tmp_path, f"tests/web/{name}")
+        assert run_check(wheel, sdist).returncode == 0
+
+
 def test_wasm_reproduction_sources_are_in_source_release(tmp_path):
     root = CHECKER.parents[1]
     config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))

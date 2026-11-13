@@ -60,7 +60,7 @@ FFmpeg is required for video tests; Poppler (`pdftoppm`) is required for PDF com
 
 ## Distribution status
 
-The checkout also includes an experimental **Browse cloud** flow using separately installed `rmctl 1.2.0`. It imports one notebook into the existing animation pipeline. An optional stdin-enabled companion supports in-app pairing and explicit revocation, with credentials kept in its local profile. Live account validation remains pending. See the [cloud connector](docs/cloud-connector.md) and [cloud app plan](docs/cloud-app-feasibility.md).
+The experimental **Browse cloud** flow pairs directly without a companion CLI. Pairing and the verified tree cache live in a passphrase-encrypted browser vault; a stateless relay forwards provider requests without saving them. Selected notebook imports still enter the local replay library. Live account validation remains pending. See the [cloud connector](docs/cloud-connector.md) and [cloud app plan](docs/cloud-app-feasibility.md).
 
 A [standalone Rust/WASM renderer](docs/rust-renderer.md) now implements the existing renderer's full ink tool set, layer compositing and progressive reveal without a Python runtime. All 114 integrated synthetic cases match Python byte for byte on native Rust and WASM. The browser probe renders and encodes a synthetic replay locally. Raw notebook parsing, scheduling and video encoding remain separate; the local utility still uses its existing backend. Browser import, long-replay performance and mobile limits need further integration and validation. The earlier [Pyodide prototype](docs/wasm-feasibility.md) remains available as a reference.
 
