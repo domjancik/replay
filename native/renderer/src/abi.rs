@@ -5,6 +5,7 @@ const MAX_INPUT: usize = 32 * 1024 * 1024;
 #[derive(Default)]
 struct State {
     allocations: HashMap<usize, Box<[u8]>>,
+    cache: crate::render::CachedRenderer,
     output: Vec<u8>,
     error: Vec<u8>,
     width: usize,
@@ -66,7 +67,7 @@ pub extern "C" fn rm_renderer_render_json(ptr: usize, len: usize) -> u32 {
         serde_json::from_slice::<crate::model::Request>(&bytes[..len])
             .map_err(|e| format!("invalid render request: {e}"))
     });
-    let result = request.and_then(|r| crate::render::render(&r));
+    let result = request.and_then(|r| STATE.with(|cell| cell.borrow_mut().cache.render(&r)));
     STATE.with(|cell| {
         let mut state = cell.borrow_mut();
         match result {
@@ -77,6 +78,7 @@ pub extern "C" fn rm_renderer_render_json(ptr: usize, len: usize) -> u32 {
                 0
             }
             Err(message) => {
+                state.cache.clear();
                 state.error = message.into_bytes();
                 1
             }

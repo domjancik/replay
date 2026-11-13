@@ -17,7 +17,7 @@ fn one() -> f64 {
     1.0
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Stroke {
     pub stroke_id: String,
     pub group_id: String,
@@ -30,13 +30,13 @@ pub struct Stroke {
     pub tool_name: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Group {
     pub group_id: String,
     pub visible: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Page {
     pub page_id: String,
     pub paper_size: Option<[f64; 2]>,
@@ -45,13 +45,13 @@ pub struct Page {
     pub compositing_order: Vec<String>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Viewport {
     pub width: usize,
     pub height: usize,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Options {
     #[serde(default)]
     pub viewport: Option<Viewport>,
@@ -73,7 +73,7 @@ impl Default for Options {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
 pub struct Visibility {
     #[serde(default)]
     pub completed_stroke_ids: Vec<String>,
@@ -83,7 +83,7 @@ pub struct Visibility {
     pub active_progress: f64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Request {
     pub page: Page,
     #[serde(default)]

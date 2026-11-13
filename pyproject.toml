@@ -53,6 +53,7 @@ include = [
   "/native/renderer/Cargo.lock", "/native/renderer/LICENSE-PILLOW",
   "/native/renderer/generate_goldens.py", "/native/renderer/renderer.mjs",
   "/native/renderer/renderer.test.mjs", "/native/renderer/verify.mjs",
+  "/native/renderer/benchmark-cache.mjs",
   "/native/renderer/browser/app.mjs", "/native/renderer/browser/index.html",
   "/native/renderer/browser/serve.mjs", "/native/renderer/browser/worker.mjs",
   "/scripts/start-replay.ps1", "/scripts/setup.ps1",
