@@ -176,3 +176,73 @@ def test_hidden_groups_and_out_of_order_layer_strokes_do_not_change_pixels():
             renderer.render(page, options, state).tobytes()
             == renderer._render_uncached(page, options, state).tobytes()
         )
+
+
+def test_interleaved_layer_cache_reuses_completed_ink(monkeypatch):
+    page = _page()
+    actual = pillow._draw_stroke
+    calls = []
+
+    def count(*args, **kwargs):
+        calls.append(args[2].stroke_id)
+        return actual(*args, **kwargs)
+
+    monkeypatch.setattr(pillow, "_draw_stroke", count)
+    renderer = PillowRenderer()
+    for progress in (0.2, 0.4, 0.8):
+        renderer.render(
+            page, RenderOptions(), VisibilityState(frozenset({"red"}), "black", progress)
+        )
+    assert calls.count("red") == 1
+    assert calls.count("black") == 3
+
+
+@pytest.mark.parametrize("viewport", [Viewport(40, 30), Viewport(160, 120)])
+def test_interleaved_texture_eraser_and_backwards_frames_match_reference(viewport):
+    page = _page()
+    strokes = list(page.strokes)
+    strokes[0] = replace(strokes[0], tool_code=14)
+    strokes[1] = replace(strokes[1], tool_code=18, rgba=(254, 253, 96, 255))
+    page = replace(page, strokes=tuple(strokes))
+    renderer = PillowRenderer()
+    options = RenderOptions(viewport=viewport)
+    order = ["red", "black", "erase", "white", "later"]
+    states = [
+        VisibilityState(frozenset(order[:i]), sid, progress)
+        for i, sid in enumerate(order)
+        for progress in (0.2, 0.8, 1)
+    ]
+    for state in states + list(reversed(states)):
+        assert (
+            renderer.render(page, options, state).tobytes()
+            == renderer._render_uncached(page, options, state).tobytes()
+        )
+    assert (
+        renderer.render(page, options, VisibilityState(frozenset(order))).tobytes()
+        == renderer.render_static(page, options).tobytes()
+    )
+
+
+def test_interleaved_cache_budget_falls_back_without_allocating(monkeypatch):
+    renderer = PillowRenderer()
+    sentinel = object()
+    monkeypatch.setattr(renderer, "_render_uncached", lambda *args: sentinel)
+    assert (
+        renderer._render_interleaved(
+            _page(),
+            RenderOptions(viewport=Viewport(4096, 4096)),
+            VisibilityState(frozenset({"red"})),
+        )
+        is sentinel
+    )
+    assert renderer._layer_cache is None
+
+
+def test_interleaved_cache_drops_old_page_on_prefix_switch():
+    page = _page()
+    renderer = PillowRenderer()
+    renderer.render(page, RenderOptions(), VisibilityState(frozenset({"red"})))
+    assert renderer._layer_cache is not None
+    replacement = replace(page, page_id="replacement")
+    renderer.render(replacement, RenderOptions(), VisibilityState())
+    assert renderer._layer_cache is None

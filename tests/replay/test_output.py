@@ -63,3 +63,26 @@ def test_encoder_writes_h264_mp4_from_png_sequence(tmp_path) -> None:
     video = encode_h264(sequence, fps=4, output_path=tmp_path / "replay.mp4")
 
     assert video.read_bytes()[4:8] == b"ftyp"
+
+
+def test_hold_frames_reuse_encoded_png_without_rendering(tmp_path):
+    from dataclasses import replace
+
+    frames = progressive_distance_schedule(_page(), fps=4, drawing_speed=14)
+    frame = frames[-1]
+    held = [replace(frame, index=i) for i in range(5)]
+
+    class CountingRenderer(PillowRenderer):
+        calls = 0
+
+        def render(self, *args):
+            self.calls += 1
+            return super().render(*args)
+
+    renderer = CountingRenderer()
+    paths = render_png_sequence(renderer, _page(), RenderOptions(), held, tmp_path / "holds")
+    assert renderer.calls == 1
+    assert len(paths) == 5
+    assert len({path.read_bytes() for path in paths}) == 1
+    paths[0].write_bytes(b"changed")
+    assert paths[1].read_bytes() != b"changed"

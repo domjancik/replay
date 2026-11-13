@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from collections.abc import Iterable
 from pathlib import Path
@@ -30,9 +31,20 @@ def render_png_sequence(
 ) -> tuple[Path, ...]:
     """Render independent frames from immutable states into a numbered sequence."""
     paths: list[Path] = []
+    previous_visibility = None
+    previous_path = None
     for frame in frames:
         path = output_directory / f"frame_{frame.index:06d}.png"
-        paths.append(write_png(renderer.render(page, options, frame.visibility), path))
+        if (
+            previous_path is not None
+            and frame.visibility == previous_visibility
+            and path != previous_path
+        ):
+            shutil.copyfile(previous_path, path)
+        else:
+            write_png(renderer.render(page, options, frame.visibility), path)
+        paths.append(path)
+        previous_visibility, previous_path = frame.visibility, path
     return tuple(paths)
 
 

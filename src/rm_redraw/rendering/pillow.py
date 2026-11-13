@@ -42,13 +42,14 @@ class _PrefixCache:
 class PillowRenderer:
     """Render immutable visibility with a bounded, exact append-prefix cache.
 
-    Only two canvases persist: completed lower layers and the current layer's
-    completed strokes. Active ink is drawn on a disposable copy. Nonprefix
-    visibility falls back to a stateless render, never reordered painting.
+    Layer-major playback retains two canvases. Interleaved playback can retain
+    per-layer prefixes within a 64 MiB persistent-canvas budget. Active ink is
+    disposable; unsupported visibility still uses the stateless reference path.
     """
 
     def __init__(self) -> None:
         self._prefix_cache: _PrefixCache | None = None
+        self._layer_cache = None
 
     def render(
         self,
@@ -62,6 +63,10 @@ class PillowRenderer:
             return self.render(page, composition, visibility).resize(
                 (viewport.width, viewport.height), Image.Resampling.BOX
             )
+        if self._layer_cache is not None and (
+            self._layer_cache[0] is not page or self._layer_cache[1] != options
+        ):
+            self._layer_cache = None
         cache = self._prefix_cache
         if cache is None or cache.page is not page or cache.options != options:
             cache = self._new_prefix_cache(page, options)
@@ -80,7 +85,7 @@ class PillowRenderer:
         )
         if not valid_prefix:
             self._prefix_cache = None
-            return self._render_uncached(page, options, visibility)
+            return self._render_interleaved(page, options, visibility)
         if count < cache.completed_count:
             cache = self._new_prefix_cache(page, options)
         self._prefix_cache = cache
@@ -108,6 +113,51 @@ class PillowRenderer:
         if points:
             _draw_stroke(active_layer, points, stroke, page, cache.viewport, options)
         result.alpha_composite(active_layer)
+        return result
+
+    def _render_interleaved(self, page, options, visibility):
+        """Reuse per-layer prefixes while preserving the original composite order."""
+        viewport = _resolve_viewport(page, options)
+        groups = [g for g in page.groups if g.visible and g.group_id in page.compositing_order]
+        # Two persistent RGBA canvases per child; reserve two for the normal cache.
+        if (
+            len(groups) < 2
+            or len(set(page.compositing_order)) != len(page.compositing_order)
+            or len({s.stroke_id for s in page.strokes}) != len(page.strokes)
+            or viewport.width * viewport.height * 8 * (len(groups) + 1) > 64 * 1024 * 1024
+        ):
+            self._layer_cache = None
+            return self._render_uncached(page, options, visibility)
+        if (
+            self._layer_cache is None
+            or self._layer_cache[0] is not page
+            or self._layer_cache[1] != options
+        ):
+            layers = {}
+            for group in groups:
+                strokes = tuple(s for s in page.strokes if s.group_id == group.group_id)
+                ids = frozenset(s.stroke_id for s in strokes)
+                layer_page = replace(
+                    page,
+                    groups=(group,),
+                    strokes=strokes,
+                    compositing_order=(group.group_id,),
+                    replay_order=tuple(s for s in page.replay_order if s in ids),
+                )
+                layers[group.group_id] = (layer_page, ids, PillowRenderer())
+            self._layer_cache = (page, options, layers)
+        result = Image.new("RGBA", (viewport.width, viewport.height), options.background)
+        layer_options = replace(options, background=(0, 0, 0, 0))
+        for group_id in page.compositing_order:
+            if group_id not in self._layer_cache[2]:
+                continue
+            layer_page, ids, renderer = self._layer_cache[2][group_id]
+            state = VisibilityState(
+                visibility.completed_stroke_ids & ids,
+                visibility.active_stroke_id if visibility.active_stroke_id in ids else None,
+                visibility.active_progress,
+            )
+            result.alpha_composite(renderer.render(layer_page, layer_options, state))
         return result
 
     @staticmethod
