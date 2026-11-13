@@ -266,3 +266,38 @@ def test_page_previews_deduplicate_and_cache_without_video(tmp_path):
     with ThreadPoolExecutor(max_workers=1) as executor:
         restored = Previews(tmp_path / "previews", library, executor)
         assert restored.submit(doc["id"], doc["pages"][0]["id"], settings)["state"] == "complete"
+
+
+@pytest.mark.parametrize("output,expected", [(2106, (2106, 2808)), (2808, (2808, 3744))])
+def test_high_resolution_preserves_source_geometry(output, expected):
+    result = validate_settings(
+        dict(
+            width=1404,
+            height=1872,
+            offset_x=702,
+            offset_y=0,
+            seconds=2,
+            fps=6,
+            output_width=output,
+            backend="rust",
+        )
+    )
+    assert result["viewport"] == expected
+    assert result["paper_size"] == (1404, 1872)
+    assert result["source_affine"] == (1, 0, 0, 1, 702, 0)
+
+
+def test_high_resolution_scrolling_page_pixel_budget():
+    with pytest.raises(ValueError, match="12 megapixel"):
+        validate_settings(
+            dict(
+                width=1404,
+                height=3000,
+                offset_x=702,
+                offset_y=0,
+                seconds=2,
+                fps=6,
+                output_width=2808,
+                backend="rust",
+            )
+        )

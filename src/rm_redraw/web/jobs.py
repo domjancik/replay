@@ -46,10 +46,12 @@ def validate_settings(data: dict) -> dict:
     height = number("height", 64, 8192, integer=True)
     if width * height > 12_000_000:
         raise ValueError("Canvas exceeds the local utility's 12 megapixel limit")
-    output = number("output_width", 128, 1404, integer=True)
+    output = number("output_width", 128, 2808, integer=True)
     output += output % 2
     out_height = max(2, round(output * height / width / 2) * 2)
-    if out_height > 4096:
+    if output * out_height > 12_000_000:
+        raise ValueError("Output exceeds the 12 megapixel limit; reduce output width")
+    if out_height > 8192:
         raise ValueError("Output is too tall; reduce output width")
     seconds = number("seconds", 2, 60)
     fps = number("fps", 6, 30, integer=True)
