@@ -132,3 +132,19 @@ test('recent replay previews reuse static images and degrade to a placeholder', 
   assert.equal(ready.children.length, 0);
   assert.equal(ready.textContent, '—');
 });
+test('unlocked cloud notebooks appear in gallery and explicit lock clears them',async(t)=>{
+ installGlobal(t,'indexedDB',fakeIndexedDB());
+ const vault=createVault();await vault.create('synthetic long passphrase',{deviceToken:'test-device',cache:null,entries:[{id:'test-id',kind:'notebook',name:'Test notebook',path:'Drawings/Test notebook'}]});
+ const elements=new Map();
+ function make(){return {children:[],value:'',checked:false,disabled:false,textContent:'',handlers:{},querySelectorAll(){return [];},append(...children){this.children.push(...children);},replaceChildren(){this.children=[];},addEventListener(name,fn){this.handlers[name]=fn;},showModal(){},close(){this.handlers.close?.();}};}
+ const el=id=>{if(!elements.has(id))elements.set(id,make());return elements.get(id);};
+ installGlobal(t,'document',{getElementById:el,createElement:make});installGlobal(t,'window',{addEventListener(){}});
+ t.mock.timers.enable({apis:['setTimeout']});
+ setupCloud({sessionToken:()=>'',importArchive(){}});
+ await el('cloud-open').onclick();el('cloud-passphrase').value='synthetic long passphrase';await el('cloud-unlock').onclick();
+ assert.equal(el('cloud-gallery').children.length,1);
+ assert.equal(el('cloud-gallery').children[0].children[1].textContent,'Drawings/Test notebook');
+ assert.equal(el('cloud-gallery-refresh').disabled,false);
+ el('cloud-dialog').close();assert.equal(el('cloud-gallery').children.length,1);
+ el('cloud-lock').onclick();assert.equal(el('cloud-gallery').children.length,0);assert.equal(el('cloud-gallery-refresh').disabled,true);
+});

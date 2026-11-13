@@ -51,3 +51,13 @@ test('missing thumbnails display status instead of looking like blank paper',()=
  vm.runInContext("thumbnailStates.set('1/0',{state:'running'})",context);
  assert.equal(vm.runInContext("galleryImage('1','0').children[1].textContent",context),'Generating…');
 });
+test('cloud gallery view hides local notebooks and keeps a visible unlock action',()=>{
+ const {el,context}=fixture();
+ vm.runInContext("setLibrarySource('cloud')",context);
+ assert.equal(el('local-library').hidden,true);
+ assert.equal(el('cloud-library').hidden,false);
+ assert.equal(el('source-cloud').attrs['aria-pressed'],'true');
+ vm.runInContext("setLibrarySource('local')",context);
+ assert.equal(el('local-library').hidden,false);
+ assert.equal(el('cloud-library').hidden,true);
+});

@@ -295,7 +295,7 @@ async function start(){
   const {setupCloud}=await import('/cloud-ui.mjs');
   setupCloud({sessionToken:()=>token,importArchive:async(raw)=>{
     const result=await api('/api/upload',raw,true);
-    await loadLibrary(result.id);notice('Cloud notebook saved locally. Choose a page to animate.');
+    await loadLibrary(result.id);setLibrarySource('local');notice('Cloud notebook saved locally. Choose a page to animate.');
   }});
   $('backend').querySelector('[value=rust]').disabled=!capabilities.rust;
   $('backend').value=capabilities.rust?'rust':'python';
@@ -438,7 +438,18 @@ async function warmGallery(){
     }catch(error){thumbnailStates.set(notebook.id+'/'+page.id,{state:'failed',error:error.message});updateGalleryImages();}
   }
 }
+function setLibrarySource(source){
+  const cloud=source==='cloud';
+  $('local-library').hidden=cloud;$('cloud-library').hidden=!cloud;
+  $('source-cloud').setAttribute('aria-pressed',String(cloud));
+  $('source-local').setAttribute('aria-pressed',String(!cloud));
+  $('notebook-search').hidden=cloud;$('gallery-grid').hidden=cloud;$('gallery-list').hidden=cloud;
+}
 function setupGallery(){
+  $('source-local').onclick=()=>setLibrarySource('local');
+  $('source-cloud').onclick=()=>setLibrarySource('cloud');
+  $('cloud-gallery-connect').onclick=()=>$('cloud-open').onclick();
+  $('cloud-gallery-refresh').onclick=()=>$('cloud-refresh').onclick();
   $('notebook-search').oninput=renderGallery;
   $('drawer-close').onclick=()=>{if(galleryFocused){galleryFocused=false;renderGallery();return;}galleryEpoch++;expandedNotebook=null;renderGallery();};
   $('drawer-open').onclick=()=>{galleryFocused=true;renderGallery();};

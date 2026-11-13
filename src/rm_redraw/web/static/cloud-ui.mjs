@@ -10,12 +10,14 @@ export function setupCloud({ sessionToken, importArchive }) {
     previewUrls.clear();
   }
   let client = null, data = null, exists = false, busy = false, accountBusy = false, epoch = 0, idle;
-  const status = (message) => { $('cloud-status').textContent = message; };
+  const status = (message) => { $('cloud-status').textContent = message; if($('cloud-gallery-status'))$('cloud-gallery-status').textContent=message; };
   function controls() {
     $('cloud-pair').disabled = busy || exists;
     $('cloud-code').disabled = busy || exists;
     $('cloud-unlock').disabled = busy || !exists || !!data;
     $('cloud-refresh').disabled = busy || !data;
+    if($('cloud-gallery-refresh'))$('cloud-gallery-refresh').disabled=busy || !data;
+    if($('cloud-gallery-connect'))$('cloud-gallery-connect').textContent=data?'Connection settings':'Connect / unlock';
     $('cloud-lock').disabled = !data || accountBusy;
     $('cloud-close').disabled = accountBusy;
     $('cloud-pair').textContent = data && !exists ? 'Save pairing' : 'Pair and remember';
@@ -23,12 +25,12 @@ export function setupCloud({ sessionToken, importArchive }) {
     $('cloud-revoke').disabled = busy || !data || !$('cloud-revoke-confirm').checked;
     $('cloud-passphrase').disabled = busy || (!!data && exists);
     $('cloud-confirm').disabled = busy || exists;
-    $('cloud-items').querySelectorAll('button').forEach((button) => { button.disabled = busy; });
+    for(const id of ['cloud-items','cloud-gallery'])$(id)?.querySelectorAll('button').forEach((button) => { button.disabled = busy; });
   }
   function lock(message = 'Locked. Unlock with your vault passphrase.') {
     clearPreviews();
     epoch++; clearTimeout(idle); client?.lock(); client = null; data = null; vault.lock();
-    $('cloud-items').replaceChildren(); $('cloud-code').value = '';
+    $('cloud-items').replaceChildren();$('cloud-gallery')?.replaceChildren(); $('cloud-code').value = '';
     $('cloud-passphrase').value = ''; $('cloud-confirm').value = '';
     $('cloud-revoke-confirm').checked = false;
     status(message); controls();
@@ -82,8 +84,10 @@ export function setupCloud({ sessionToken, importArchive }) {
   function renderEntries(entries) {
     clearPreviews();
     $('cloud-items').replaceChildren();
+    $('cloud-gallery')?.replaceChildren();
+    for (const target of [$('cloud-items'),$('cloud-gallery')].filter(Boolean)) {
     for (const entry of entries.filter((item) => item.kind !== 'folder')) {
-      const row = document.createElement('div'); row.className = 'usb-item';
+      const row = document.createElement('div'); row.className = target===$('cloud-gallery')?'cloud-notebook-card':'usb-item';
       const label = document.createElement('span'); label.textContent = entry.path || entry.name;
       const image = document.createElement('img'); image.className = 'notebook-thumbnail';
       image.alt = `Cloud thumbnail for ${entry.name}`; image.hidden = true;
@@ -112,8 +116,9 @@ export function setupCloud({ sessionToken, importArchive }) {
         await importArchive(archive);
         $('cloud-dialog').close();
       });
-      row.append(image, label, preview, button); $('cloud-items').append(row);
+      row.append(image, label, preview, button); target.append(row);
     }
+  }
   }
   $('cloud-open').onclick = async () => {
     $('cloud-dialog').showModal();
@@ -125,7 +130,11 @@ export function setupCloud({ sessionToken, importArchive }) {
   };
   $('cloud-close').onclick = () => { if (!accountBusy) $('cloud-dialog').close(); };
   $('cloud-dialog').addEventListener('cancel', (event) => { if (accountBusy) event.preventDefault(); });
-  $('cloud-dialog').addEventListener('close', () => lock('Cloud vault locked.'));
+  // Closing settings keeps the in-memory session usable by the gallery.
+  // Explicit lock, page exit and the existing idle timeout still clear it.
+  $('cloud-dialog').addEventListener('close', touch);
+  $('cloud-library')?.addEventListener('pointerdown',touch);
+  $('cloud-library')?.addEventListener('keydown',touch);
   $('cloud-dialog').addEventListener('keydown', touch);
   $('cloud-dialog').addEventListener('pointerdown', touch);
   window.addEventListener('pagehide', () => lock());
@@ -162,6 +171,8 @@ export function setupCloud({ sessionToken, importArchive }) {
       if (generation !== epoch) return;
       data = unlocked; activate(); renderEntries(data.entries || []);
       status('Unlocked. Showing saved tree; refresh to check for cloud changes.');
+      $('source-cloud')?.onclick?.();
+      if($('cloud-library'))$('cloud-dialog').close();
     } finally { passphrase = ''; }
   });
   $('cloud-refresh').onclick = () => action(showList);
