@@ -27,6 +27,14 @@ To seed a notebook from the command line, append `--import path/to/notebook.rmdo
 
 ## Validation
 
+### Reference-backed anchor overrides
+
+Dense drawings can defeat automatic per-group PDF matching: empty groups have no template, overlapping ink contaminates local shape checks, and tiny groups can have several plausible positions. The utility still rejects ambiguous automatic matches.
+
+For a separately reviewed page, a local sidecar beside its saved `document.rmdoc` can provide the existing CLI text-anchor layout. Name it `anchor-layout-<SHA256 of UTF-8 page ID>.json`. It contains `schema_version: 1`, finite `offsets` keyed by anchor ID, nonblank `evidence`, and a `binding` object containing the exact `archive_sha256`, `pdf_sha256`, `page_id`, one-based `pdf_page`, `paper_size` array and `source_affine` array. Hashes cover the complete saved files. The utility checks this binding and the layout schema before using `--text-anchor-layout` instead of automatic fitting. Changed references or geometry fail closed. Sidecars are not read from imported archives and are not a general layout solver; prepare them only from independently checked placement evidence. Keep private sidecars with the ignored local library.
+
+### Test evidence
+
 Tests cover recorded page ordering/blank slots, archive traversal rejection, stable USB reads and retained failures, bounded replay settings, local-origin/session guards, media ranges, actual CLI job completion and persisted history. The browser smoke test browsed the live tablet, imported the three-page tap-control notebook through two stable raw reads, and generated a control replay. The optional PDF export of that notebook timed out, with the raw read retained; this is recorded separately from successful raw import. A representative portrait page completed through the duration UI: 156 frames, 702x936 at 12 fps, 13 seconds including the hold, in 284 seconds. Its final RGBA pixels exactly match the accepted static golden, and final/static PNG bytes match. The USB-imported control replay contains 42 frames at 6 fps (7 seconds). FFprobe verified both encoded durations. Browser playback was inspected. Evidence remains under ignored `artifacts/replay-workbench/validation.json`.
 
 On a completed original replay, choose **Crop / loop export**. Drag a rectangle over the final image or enter pixel bounds; **Reset to full page** removes the crop. Choose forward only, or forward followed by 2x, 4x (default), or 8x reverse. Export reuses saved lossless frames without rendering the ink again. Bounds snap to even pixels for H.264. Each export is a separate history item; use the original replay to try another crop. The forward ending retains its hold; reverse skips that hold and returns to the first frame. The browser player loops; downloaded MP4s contain one forward/reverse cycle.

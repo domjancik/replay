@@ -18,6 +18,7 @@ from rm_redraw.parsing import parse_page
 from rm_redraw.pipeline import to_render_page
 from rm_redraw.replay.schedule import ordered_stroke_ids
 
+from .anchor_layouts import anchor_arguments
 from .library import Library, _local_id
 
 LOGGER = logging.getLogger(__name__)
@@ -298,8 +299,13 @@ class Jobs:
                     config["backend"],
                 ]
                 if document["has_pdf"]:
+                    args += anchor_arguments(
+                        self.library.source(job["document_id"]),
+                        job["page_id"],
+                        job["page"],
+                        config,
+                    )
                     args += [
-                        "--auto-text-anchors",
                         "--paired-native-pdf",
                         str(self.library.source(job["document_id"]).with_name("native.pdf")),
                         "--paired-pdf-page",
