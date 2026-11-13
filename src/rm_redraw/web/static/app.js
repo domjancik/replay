@@ -146,16 +146,32 @@ function showNotebookPreview() {
     image.src=source;
   }
 }
+const recentPreviewCache = new Map();
+function recentPreview(job) {
+  const key=job.id+':'+(job.state==='complete');
+  if(recentPreviewCache.has(key))return recentPreviewCache.get(key);
+  const tile=document.createElement('span');tile.className='recent-preview';tile.textContent='—';
+  if(job.state==='complete'){
+    const image=document.createElement('img');image.alt='';image.loading='lazy';image.decoding='async';
+    image.src=`/media/${job.id}/static.png`;
+    image.onerror=()=>{tile.replaceChildren();tile.textContent='—';};
+    tile.textContent='';tile.append(image);
+  }
+  recentPreviewCache.set(key,tile);return tile;
+}
 async function poll() {
   jobs=await api('/api/jobs');
+  const previewKeys=new Set(jobs.map(j=>j.id+':'+(j.state==='complete')));
+  for(const key of recentPreviewCache.keys())if(!previewKeys.has(key))recentPreviewCache.delete(key);
   showNotebookPreview();
   $('jobs').replaceChildren();
   if(!jobs.length){const p=document.createElement('p');p.className='hint';p.textContent='Your render queue is empty.';$('jobs').append(p);}
   for(const job of jobs){
     const row=document.createElement('div');row.className='job';
-    const open=document.createElement('button');open.className='open';open.textContent=`${job.name} · page ${job.page}`;
+    const open=document.createElement('button');open.className='open';
+    const label=document.createElement('span');label.className='recent-label';label.textContent=`${job.name} · page ${job.page}`;
     const totalSeconds=(job.state==='complete'?job.frames:job.expected_frames)/job.settings.fps;
-    const detail=document.createElement('small');detail.textContent=`${totalSeconds.toFixed(1)}s total · ${job.settings.fps} fps · ${job.settings.ordering==='entry'?'entry order':'by layer'} · ${job.settings.viewport.join(' × ')}${job.finished&&job.started?' · rendered in '+Math.round(job.finished-job.started)+'s':''}`;open.append(detail);
+    const detail=document.createElement('small');detail.textContent=`${totalSeconds.toFixed(1)}s total · ${job.settings.fps} fps · ${job.settings.ordering==='entry'?'entry order':'by layer'} · ${job.settings.viewport.join(' × ')}${job.finished&&job.started?' · rendered in '+Math.round(job.finished-job.started)+'s':''}`;label.append(detail);open.append(recentPreview(job),label);
     open.onclick=()=>{selectedJob=job.id;previewKey='';showJob(job);};
     const state=document.createElement('span');state.className='state';state.textContent=job.state;row.append(open,state);
     if(['queued','running'].includes(job.state)){const cancel=document.createElement('button');cancel.className='quiet';cancel.textContent='Cancel';cancel.onclick=safely(async()=>{await api('/api/cancel',{id:job.id});await poll();});row.append(cancel);}

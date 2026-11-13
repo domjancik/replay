@@ -113,3 +113,22 @@ test('completed replay opens with its drawing as poster without resetting playba
   runInNewContext('showJob(job)', context);
   assert.equal(video.poster, '/media/another/static.png');
 });
+
+test('recent replay previews reuse static images and degrade to a placeholder', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const {runInNewContext} = await import('node:vm');
+  const source = await readFile(new URL('../../src/rm_redraw/web/static/app.js', import.meta.url), 'utf8');
+  const context = {document: {createElement(tag) { return {tag, children: [], append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; }}; }}};
+  runInNewContext(source.replace('safely(start)();', ''), context);
+  context.job = {id:'one',state:'queued'};
+  const pending = runInNewContext('recentPreview(job)', context);
+  assert.equal(pending.children.length, 0);
+  context.job.state = 'complete';
+  const ready = runInNewContext('recentPreview(job)', context);
+  assert.equal(ready.children[0].src, '/media/one/static.png');
+  assert.equal(ready.children[0].loading, 'lazy');
+  assert.equal(runInNewContext('recentPreview(job)', context), ready);
+  ready.children[0].onerror();
+  assert.equal(ready.children.length, 0);
+  assert.equal(ready.textContent, '—');
+});
