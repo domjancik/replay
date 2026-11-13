@@ -115,3 +115,21 @@ test('queue filters active work and sorts waiting jobs oldest first',()=>{
  assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(queueJobs('active').map(j=>j.id))",context)),['run','old','new']);
  assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(queueJobs('complete').map(j=>j.id))",context)),['done']);
 });
+
+test('selected page lists only its completed replays including exports and opens a saved video',()=>{
+ const {context,el}=fixture();el('page').value='4';
+ vm.runInContext(`jobs=[
+ {id:'older',document_id:'1',page_id:'4',state:'complete',created:1,frames:24,settings:{fps:12,viewport:[702,936]}},
+ {id:'loop',kind:'export',document_id:'1',page_id:'4',state:'complete',created:3,frames:36,settings:{fps:12,viewport:[468,624]}},
+ {id:'other',document_id:'2',page_id:'4',state:'complete'},
+ {id:'pending',document_id:'1',page_id:'4',state:'running'},
+ {id:'page',document_id:'1',page_id:'5',state:'complete'}];renderPageReplays();`,context);
+ assert.equal(el('page-replays').hidden,false);
+ assert.equal(el('page-replay-list').children.length,2);
+ el('page-replay-list').children[0].onclick();
+ assert.equal(el('video').src,'/media/loop/replay.mp4');
+ assert.equal(el('download-video').href,'/media/loop/replay.mp4');
+ el('page').value='9';vm.runInContext('renderPageReplays()',context);
+ assert.equal(el('page-replays').hidden,true);
+ assert.equal(el('page-replay-list').children.length,0);
+});

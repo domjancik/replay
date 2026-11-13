@@ -72,6 +72,7 @@ async function selectPage() {
   clearTimeout(previewRefreshTimer);
   selectionPreview=null;
   selectedJob=null;$('video').hidden=true;$('preview').hidden=true;$('downloads').hidden=true;$('view-progress').hidden=true;
+  renderPageReplays();
   showNotebookPreview();
   $('selected-notebook-title').textContent=library.find(n=>n.id===$('notebook').value)?.name || 'Choose a notebook';
   $('view-title').textContent='Page '+($('page').selectedOptions[0]?.textContent.replace('Page ','') || '');
@@ -149,6 +150,24 @@ async function generate() {
       $('canvas-clipping').hidden=false;
     }
   } finally {updateGenerateButton();}
+}
+function renderPageReplays(){
+  const matching=jobs.filter(j=>j.state==='complete' && j.document_id===$('notebook').value && j.page_id===$('page').value)
+    .sort((a,b)=>b.created-a.created);
+  $('page-replays').hidden=!matching.length;
+  $('page-replay-count').textContent=String(matching.length);
+  const list=$('page-replay-list');list.replaceChildren();
+  for(const job of matching){
+    const button=document.createElement('button');button.className='page-replay';
+    button.setAttribute('aria-pressed',String(selectedJob===job.id));
+    const image=document.createElement('img');image.alt='';image.loading='lazy';image.src=`/media/${job.id}/static.png`;image.onerror=()=>{image.hidden=true;};
+    const label=document.createElement('span');
+    label.textContent=`${job.kind==='export'?'Export':'Replay'} · ${(job.frames/job.settings.fps).toFixed(1)}s · ${job.settings.fps} fps`;
+    const detail=document.createElement('small');detail.textContent=`${job.settings.viewport.join(' × ')} · ${job.settings.ordering==='entry'?'entry order':'by layer'}`;
+    label.append(detail);button.append(image,label);
+    button.onclick=()=>{selectedJob=job.id;previewKey='';showJob(job);renderPageReplays();};
+    list.append(button);
+  }
 }
 function showJob(job) {
   if(!job)return;
@@ -243,6 +262,7 @@ async function poll() {
   for(const key of recentPreviewCache.keys())if(!previewKeys.has(key))recentPreviewCache.delete(key);
   showNotebookPreview();
   renderJobs();
+  renderPageReplays();
   updateGalleryImages();
   showJob(jobs.find(j=>j.id===selectedJob));
 }
