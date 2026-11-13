@@ -21,7 +21,7 @@ All local data defaults to ignored `artifacts/replay-workbench/`:
 - `import-attempts/`: successful and failed USB read evidence; retained for diagnosis.
 - `jobs/<id>/`: job state/log plus `output/{frames,static.png,replay.mp4,manifest.json}`.
 
-Only this loopback address is accepted. The service checks Host, Origin and a per-process local session/token, does not enable CORS, accepts only bounded uploads, and serves an allowlist of generated media with byte-range support. USB requests target only `10.11.99.1`, reject redirects, bypass HTTP proxies and are serialized. There is no generic URL proxy, arbitrary filesystem browser, tablet write endpoint, cloud integration or network deployment configuration. This is a single-user local utility, not a production web service.
+Only this loopback address is accepted. The service checks Host, Origin and a per-process local session/token, does not enable CORS, accepts only bounded uploads, and serves an allowlist of generated media with byte-range support. USB requests target only `10.11.99.1`, reject redirects, bypass HTTP proxies and are serialized. There is no generic URL proxy, arbitrary filesystem browser, tablet write endpoint or network deployment configuration. Optional cloud imports use the separately installed local rmctl companion; see [cloud setup](cloud-connector.md). This is a single-user local utility, not a production web service.
 
 To seed a notebook from the command line, append `--import path/to/notebook.rmdoc` once. Restart without that argument to reuse the saved library. `--port` and `--data` override the port and local data directory; keep private data under ignored paths.
 

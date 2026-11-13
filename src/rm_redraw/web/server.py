@@ -5,12 +5,14 @@ import mimetypes
 import secrets
 import shutil
 import threading
+from dataclasses import asdict
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
+from rm_redraw.acquisition.cloud import CloudSource
 from rm_redraw.acquisition.usb import UsbReader
 
 from .jobs import CanvasClippingError, Jobs, page_info
@@ -26,6 +28,7 @@ class App:
         self.library = Library(root / "library")
         self.jobs = Jobs(root / "jobs", self.library)
         self.usb = UsbReader()
+        self.cloud = CloudSource()
         self.import_lock = threading.Lock()
 
     def capabilities(self):
@@ -154,6 +157,8 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/api/page":
                 info, _ = page_info(self.app.library, query["document"][0], query["page"][0])
                 self._json(info)
+            elif url.path == "/api/cloud-status":
+                self._json(self.app.cloud.status())
             elif url.path == "/api/usb":
                 self._json(self.app.usb.documents(query.get("folder", [""])[0]))
             elif url.path.startswith("/media/"):
@@ -201,7 +206,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get_content_type() != expected:
                 self._json({"error": f"Expected {expected}"}, 415)
                 return
-            if upload or url.path == "/api/usb-import":
+            if upload or url.path in ("/api/usb-import", "/api/cloud-import"):
                 importing = self.app.import_lock.acquire(blocking=False)
                 if not importing:
                     self._json({"error": "Another import is already in progress"}, 409)
@@ -238,6 +243,19 @@ class Handler(BaseHTTPRequestHandler):
                         attempt_directory=self.app.root / "import-attempts" / uuid4().hex,
                     )
                     result = self.app.library.add(raw, provenance=provenance, pdf=pdf)
+                elif url.path == "/api/cloud-list":
+                    result = [asdict(item) for item in self.app.cloud.list_documents()]
+                elif url.path == "/api/cloud-import":
+                    raw = self.app.cloud.download_archive(data["id"])
+                    result = self.app.library.add(
+                        raw,
+                        provenance={
+                            "provider": "rmctl-cloud",
+                            "source_document_id": data["id"],
+                            "pairing": "user-managed local rmctl profile; unofficial cloud API",
+                            "reference": "raw-only cloud archive; no paired native PDF",
+                        },
+                    )
                 elif url.path == "/api/jobs":
                     result = self.app.jobs.submit(data["document"], data["page"], data["settings"])
                 elif url.path == "/api/export":

@@ -1,0 +1,16 @@
+[package]
+name = "rm-pencil-wasm-prototype"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rm-pencil-kernel = { path = "../pencil-kernel" }
+
+[profile.release]
+lto = true
+codegen-units = 1

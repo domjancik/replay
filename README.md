@@ -59,4 +59,8 @@ FFmpeg is required for video tests; Poppler (`pdftoppm`) is required for PDF com
 
 ## Distribution status
 
+The checkout also includes an experimental **Browse cloud** flow using a separately installed, locally paired `rmctl 1.2.0`. It imports one notebook into the existing animation pipeline. Live account validation and in-app pairing remain pending; no cloud credentials are entered into this UI. See the [cloud connector](docs/cloud-connector.md) and [cloud app plan](docs/cloud-app-feasibility.md).
+
+A [WASM pencil prototype](docs/wasm-feasibility.md) matches six synthetic Python/native masks byte for byte in Node. This is a kernel feasibility result, not a complete browser renderer. Full-frame worker parity, browser video export, mobile limits and cloud acquisition are separate acceptance gates.
+
 MIT-licensed code, prepared for a local preview release. Public publication and selected artwork approval remain pending. Do not redistribute the development history or private visual annex as part of a release. See [publication readiness](docs/publication-readiness.md) and [third-party notices](THIRD_PARTY_NOTICES.md). No third-party native binaries or private reference drawings are bundled.

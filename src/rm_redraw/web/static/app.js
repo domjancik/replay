@@ -171,6 +171,34 @@ async function browse(folder='', label='Tablet') {
     }
   }catch(error){$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
 }
+let cloudBusy=false;
+async function browseCloud(){
+  if(cloudBusy)return;
+  cloudBusy=true;$('cloud-refresh').disabled=true;$('cloud-items').replaceChildren();
+  $('cloud-status').textContent='Checking the local cloud client…';
+  try{
+    const status=await api('/api/cloud-status');
+    if(status.state!=='available'){$('cloud-status').textContent=status.message;return;}
+    $('cloud-status').textContent='Reading cloud notebook list…';
+    const entries=await api('/api/cloud-list',{});
+    $('cloud-status').textContent=entries.length?'Choose a notebook to save locally.':'No supported notebooks found.';
+    for(const entry of entries){
+      const row=document.createElement('div');row.className='usb-item';
+      const label=document.createElement('span');label.textContent=entry.path||entry.name;
+      const button=document.createElement('button');button.textContent='Import ink';
+      button.onclick=async()=>{
+        if(cloudBusy)return;
+        cloudBusy=true;$('cloud-refresh').disabled=true;document.querySelectorAll('#cloud-items button').forEach(b=>b.disabled=true);
+        $('cloud-status').textContent='Downloading a verified notebook archive…';
+        try{const result=await api('/api/cloud-import',{id:entry.id});await loadLibrary(result.id);$('cloud-dialog').close();notice('Cloud notebook saved locally. Choose a page to animate.');}
+        catch(error){$('cloud-status').textContent=error.message;}
+        finally{cloudBusy=false;$('cloud-refresh').disabled=false;document.querySelectorAll('#cloud-items button').forEach(b=>b.disabled=false);}
+      };
+      row.append(label,button);$('cloud-items').append(row);
+    }
+  }catch(error){$('cloud-status').textContent=error.message;}
+  finally{cloudBusy=false;$('cloud-refresh').disabled=false;}
+}
 let cropImage=null, cropRect=null, cropStart=null, exportSource=null;
 function drawCrop(){
   if(!cropImage)return;
@@ -209,6 +237,9 @@ function setupExport(){
 }
 async function start(){
   setupExport();
+  $('cloud-open').onclick=()=>{$('cloud-dialog').showModal();browseCloud();};
+  $('cloud-close').onclick=()=>$('cloud-dialog').close();
+  $('cloud-refresh').onclick=browseCloud;
   capabilities=await api('/api/session');token=capabilities.token;
   $('backend').querySelector('[value=rust]').disabled=!capabilities.rust;
   $('backend').value=capabilities.rust?'rust':'python';

@@ -126,3 +126,56 @@ def test_video_range_serving_and_output_allowlist(server):
     assert request(server, "GET", f"/media/{job_id}/render.log", headers=headers)[0] == 400
     headers["Range"] = "bytes=999-"
     assert request(server, "GET", f"/media/{job_id}/replay.mp4", headers=headers)[0] == 416
+
+
+def test_cloud_requires_session_and_import_token(server):
+    from types import SimpleNamespace
+
+    server.app.cloud = SimpleNamespace(
+        status=lambda: {"state": "missing", "message": "Install rmctl"}
+    )
+    assert request(server, "GET", "/api/cloud-status")[0] == 403
+    status, _, body = request(server, "GET", "/api/cloud-status", headers=session(server))
+    assert status == 200
+    assert json.loads(body)["state"] == "missing"
+    assert request(server, "POST", "/api/cloud-list", b"{}", {})[0] == 403
+
+
+def test_cloud_import_reuses_validated_local_library(server):
+    from types import SimpleNamespace
+
+    from test_library import notebook
+
+    raw = notebook([], pages=["a"])
+    calls = []
+    identifier = "11111111-1111-4111-8111-111111111111"
+
+    def download(document_id):
+        calls.append(document_id)
+        return raw
+
+    server.app.cloud = SimpleNamespace(download_archive=download)
+    status, _, body = request(
+        server, "POST", "/api/cloud-import", json.dumps({"id": identifier}), session(server)
+    )
+    assert status == 200, body
+    result = json.loads(body)
+    assert calls == [identifier]
+    assert result["provenance"]["provider"] == "rmctl-cloud"
+    assert server.app.library.source(result["id"]).read_bytes() == raw
+
+
+def test_cloud_import_obeys_shared_import_lock(server):
+    from types import SimpleNamespace
+
+    def forbidden(_):
+        raise AssertionError("Cloud helper must not run while another import is active")
+
+    server.app.cloud = SimpleNamespace(download_archive=forbidden)
+    headers = session(server)
+    server.app.import_lock.acquire()
+    try:
+        status, _, _ = request(server, "POST", "/api/cloud-import", b'{"id":"any"}', headers)
+    finally:
+        server.app.import_lock.release()
+    assert status == 409
