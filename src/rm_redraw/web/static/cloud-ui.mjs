@@ -5,7 +5,16 @@ export function setupCloud({ sessionToken, importArchive }) {
   const $ = (id) => document.getElementById(id);
   const vault = createVault();
   const previewUrls = new Set();
+  let previewObserver=null;
+  const visiblePreviews=new Map(), attemptedPreviews=new Set();
+  function pumpPreviews(){
+    if(busy || !data)return;
+    const next=[...visiblePreviews.entries()].find(([row])=>!attemptedPreviews.has(row.dataset.cloudId));
+    if(!next)return;
+    attemptedPreviews.add(next[0].dataset.cloudId);next[1]();
+  }
   function clearPreviews() {
+    previewObserver?.disconnect();visiblePreviews.clear();attemptedPreviews.clear();
     for (const url of previewUrls) URL.revokeObjectURL(url);
     previewUrls.clear();
   }
@@ -59,7 +68,7 @@ export function setupCloud({ sessionToken, importArchive }) {
     if (busy) return;
     busy = true; accountBusy = account; if (account) clearTimeout(idle); controls();
     try { await fn(epoch); } catch (error) { status(error.message); }
-    finally { busy = false; accountBusy = false; controls(); touch(); }
+    finally { busy = false; accountBusy = false; controls(); touch(); queueMicrotask(pumpPreviews); }
   }
   async function showList(current) {
     status('Refreshing cloud notebooks…');
@@ -85,6 +94,13 @@ export function setupCloud({ sessionToken, importArchive }) {
     clearPreviews();
     $('cloud-items').replaceChildren();
     $('cloud-gallery')?.replaceChildren();
+    if(typeof IntersectionObserver!=='undefined')previewObserver=new IntersectionObserver(entries=>{
+      for(const entry of entries){
+        if(entry.isIntersecting)visiblePreviews.set(entry.target,entry.target.loadPreview);
+        else visiblePreviews.delete(entry.target);
+      }
+      queueMicrotask(pumpPreviews);
+    },{root:null,rootMargin:'0px',threshold:0});
     for (const target of [$('cloud-items'),$('cloud-gallery')].filter(Boolean)) {
     for (const entry of entries.filter((item) => item.kind !== 'folder')) {
       const row = document.createElement('div'); row.className = target===$('cloud-gallery')?'cloud-notebook-card':'usb-item';
@@ -117,6 +133,7 @@ export function setupCloud({ sessionToken, importArchive }) {
         $('cloud-dialog').close();
       });
       row.append(image, label, preview, button); target.append(row);
+      if(previewObserver){row.dataset.cloudId=entry.id;row.loadPreview=()=>preview.onclick();previewObserver.observe(row);}
     }
   }
   }

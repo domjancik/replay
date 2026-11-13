@@ -68,3 +68,33 @@ test('switching to companion ignores a stale direct USB listing',async()=>{
  context.resolveUsb([]);await pending;
  assert.equal(el('usb-status').textContent,'Connect companion');
 });
+test('only visible thumbnail slots request renders, including covers of unopened notebooks',async()=>{
+ const {context}=fixture();const observers=[],requests=[];
+ context.IntersectionObserver=class {constructor(callback){this.callback=callback;observers.push(this);}observe(){}disconnect(){}};
+ context.queueMicrotask=queueMicrotask;
+ context.document.querySelectorAll=()=>context.slots;
+ context.slots=vm.runInContext("[galleryImage('0','0'),galleryImage('1','15')]",context);
+ context.apiMock=async(path,body)=>{requests.push({path,body});return body?{state:'complete',url:'/preview.png'}:{paper_size:[64,64]};};
+ vm.runInContext('api=apiMock;observeGalleryThumbnails()',context);
+ assert.equal(requests.length,0);
+ observers.at(-1).callback([{target:context.slots[0],isIntersecting:true}]);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(requests.filter(r=>r.body).length,1);
+ assert.equal(requests.find(r=>r.body).body.document,'0');
+ assert.equal(vm.runInContext("thumbnailStatus('1','15').state",context),'waiting');
+ observers.at(-1).callback([{target:context.slots[0],isIntersecting:false},{target:context.slots[1],isIntersecting:true}]);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(requests.filter(r=>r.body).length,2);
+ assert.equal(requests.at(-1).body.page,'15');
+});
+test('scrolling away before metadata resolves prevents an offscreen render',async()=>{
+ const {context}=fixture();let observer,resolveInfo;const calls=[];
+ context.IntersectionObserver=class {constructor(callback){observer=callback;}observe(){}disconnect(){}};
+ context.queueMicrotask=queueMicrotask;context.document.querySelectorAll=()=>context.slots;
+ context.slots=vm.runInContext("[galleryImage('0','0')]",context);
+ context.apiMock=path=>{calls.push(path);return new Promise(resolve=>{resolveInfo=resolve;});};
+ vm.runInContext('api=apiMock;observeGalleryThumbnails()',context);
+ observer([{target:context.slots[0],isIntersecting:true}]);await new Promise(resolve=>setImmediate(resolve));
+ observer([{target:context.slots[0],isIntersecting:false}]);resolveInfo({paper_size:[64,64]});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls.length,1);assert.equal(vm.runInContext("thumbnailStatus('0','0').state",context),'waiting');
+});

@@ -3,8 +3,10 @@ let token = '', library = [], jobs = [], selectedJob = null, pageReady = false, 
 let previewKey = '', pageRequest = 0, usbBusy = false;
 let usbCompanion=null;
 let selectionPreview = null, previewRefreshTimer;
-let expandedNotebook=null, galleryEpoch=0, galleryList=false, galleryFocused=false;
+let expandedNotebook=null, galleryList=false, galleryFocused=false;
 const pageThumbnails=new Map(), thumbnailStates=new Map();
+let thumbnailObserver=null, activeThumbnail=null;
+const visibleThumbnailSlots=new Set(), thumbnailQueue=new Map();
 const notice = message => { $('notice').textContent = message; $('notice').hidden = !message; };
 async function api(path, body, raw = false) {
   const response = await fetch(path, body === undefined ? {} : {method:'POST',
@@ -29,7 +31,6 @@ async function loadLibrary(selected) {
   expandedNotebook=$('notebook').value || null;
   await selectNotebook();
   renderGallery();
-  warmGallery();
 }
 async function selectNotebook() {
   clearTimeout(previewRefreshTimer);
@@ -374,7 +375,7 @@ function updateGalleryProgress(){
   if(c.running)parts.push(`${c.running} generating`);
   if(c.queued)parts.push(`${c.queued} queued`);
   if(c.failed)parts.push(`${c.failed} failed`);
-  if(c.waiting)parts.push(`${c.waiting} not generated`);
+  if(c.waiting)parts.push(`${c.waiting} deferred until visible`);
   $('thumbnail-progress-label').textContent=parts.join(' · ');
 }
 function updateGalleryImages(){
@@ -401,7 +402,7 @@ function renderGallery(){
     const count=document.createElement('small');count.textContent=notebook.pages.length+' pages';
     const arrow=document.createElement('span');arrow.className='cover-arrow';arrow.textContent=expandedNotebook===notebook.id?'⌄':'›';arrow.setAttribute('aria-hidden','true');
     card.append(cover,title,count,arrow);
-    card.onclick=safely(async()=>{galleryEpoch++;if(expandedNotebook===notebook.id){expandedNotebook=null;renderGallery();return;}expandedNotebook=notebook.id;$('notebook').value=notebook.id;await selectNotebook();renderGallery();warmGallery();});
+    card.onclick=safely(async()=>{if(expandedNotebook===notebook.id){expandedNotebook=null;renderGallery();return;}expandedNotebook=notebook.id;$('notebook').value=notebook.id;await selectNotebook();renderGallery();});
     grid.append(card);
   }
   if(!matches.length){const text=document.createElement('p');text.className='hint';text.textContent=library.length?'No notebooks match your search.':'Connect your reMarkable or import a notebook to begin.';grid.append(text);}
@@ -411,7 +412,7 @@ function renderGallery(){
     const index=matches.findIndex(n=>n.id===notebook.id);const after=Math.min(matches.length-1,Math.floor(index/columns)*columns+columns-1);
     grid.children[after]?.after(drawer);
   }
-  pages.dataset.notebook=notebook?.id || '';pages.replaceChildren();if(!notebook)return;
+  pages.dataset.notebook=notebook?.id || '';pages.replaceChildren();if(!notebook){observeGalleryThumbnails();return;}
   $('drawer-title').textContent=notebook.name+' · '+notebook.pages.length+' pages';
   for(const page of notebook.pages){
     const card=document.createElement('button');card.className='page-card';card.disabled=!page.available;
@@ -421,29 +422,63 @@ function renderGallery(){
     const number=document.createElement('span');number.textContent=String(page.number);card.append(paper,number);
     card.onclick=safely(async()=>{$('page').value=page.id;await selectPage();});pages.append(card);
   }
-  pages.scrollTop=scrollTop;updateGalleryProgress();
+  pages.scrollTop=scrollTop;updateGalleryProgress();observeGalleryThumbnails();
 }
-async function warmGallery(){
-  const epoch=++galleryEpoch,notebook=library.find(n=>n.id===expandedNotebook);if(!notebook)return;
-  for(const page of notebook.pages)if(page.available && !thumbnailFor(notebook.id,page.id))thumbnailStates.set(notebook.id+'/'+page.id,{state:'queued'});
-  updateGalleryImages();
-  for(const page of notebook.pages){
-    if(epoch!==galleryEpoch || expandedNotebook!==notebook.id)return;
-    if(!page.available || thumbnailFor(notebook.id,page.id))continue;
+function observeGalleryThumbnails(){
+  if(typeof IntersectionObserver==='undefined')return;
+  thumbnailObserver?.disconnect();visibleThumbnailSlots.clear();
+  reconcileThumbnailQueue();
+  thumbnailObserver=new IntersectionObserver(entries=>{
+    for(const entry of entries){
+      if(entry.isIntersecting)visibleThumbnailSlots.add(entry.target);
+      else visibleThumbnailSlots.delete(entry.target);
+    }
+    reconcileThumbnailQueue();
+  },{root:null,rootMargin:'0px',threshold:0});
+  document.querySelectorAll('.thumbnail-slot').forEach(slot=>thumbnailObserver.observe(slot));
+}
+function reconcileThumbnailQueue(){
+  const visible=new Map();
+  for(const slot of visibleThumbnailSlots){
+    const {document:documentId,page:pageId}=slot.dataset;
+    visible.set(documentId+'/'+pageId,{document:documentId,page:pageId});
+  }
+  for(const key of thumbnailQueue.keys())if(!visible.has(key)){
+    thumbnailQueue.delete(key);if(key!==activeThumbnail)thumbnailStates.delete(key);
+  }
+  for(const [key,item] of visible){
+    const state=thumbnailStatus(item.document,item.page).state;
+    if(key!==activeThumbnail && ['waiting','queued'].includes(state)){
+      thumbnailQueue.set(key,item);thumbnailStates.set(key,{state:'queued'});
+    }
+  }
+  updateGalleryImages();queueMicrotask(processThumbnailQueue);
+}
+function thumbnailStillVisible(key){
+  return [...visibleThumbnailSlots].some(slot=>slot.dataset.document+'/'+slot.dataset.page===key);
+}
+async function processThumbnailQueue(){
+  if(activeThumbnail)return;
+  while(thumbnailQueue.size){
+    const [key,item]=thumbnailQueue.entries().next().value;thumbnailQueue.delete(key);
+    if(thumbnailFor(item.document,item.page))continue;
+    activeThumbnail=key;
     try{
-      const info=await api(`/api/page?document=${notebook.id}&page=${encodeURIComponent(page.id)}`);
-      if(epoch!==galleryEpoch)return;
+      const info=await api(`/api/page?document=${encodeURIComponent(item.document)}&page=${encodeURIComponent(item.page)}`);
+      // A scroll while reading metadata must not submit an offscreen render.
+      if(!thumbnailStillVisible(key)){thumbnailStates.delete(key);continue;}
       const [width,height]=info.paper_size || [1404,1872];
       const settings={width,height,offset_x:width/2,offset_y:0,seconds:6,fps:6,output_width:234,backend:$('backend').value};
-      let result=await api('/api/page-preview',{document:notebook.id,page:page.id,settings});
-      thumbnailStates.set(notebook.id+'/'+page.id,result);updateGalleryImages();
+      let result=await api('/api/page-preview',{...item,settings});
+      thumbnailStates.set(key,result);updateGalleryImages();
       while(['queued','running'].includes(result.state)){
-        await new Promise(resolve=>setTimeout(resolve,1500));if(epoch!==galleryEpoch)return;
+        await new Promise(resolve=>setTimeout(resolve,1500));
         result=await api('/api/page-preview?id='+result.id);
-        thumbnailStates.set(notebook.id+'/'+page.id,result);updateGalleryImages();
+        thumbnailStates.set(key,result);updateGalleryImages();
       }
-      if(result.state==='complete'){pageThumbnails.set(notebook.id+'/'+page.id,result.url);updateGalleryImages();}
-    }catch(error){thumbnailStates.set(notebook.id+'/'+page.id,{state:'failed',error:error.message});updateGalleryImages();}
+      if(result.state==='complete')pageThumbnails.set(key,result.url);
+    }catch(error){thumbnailStates.set(key,{state:'failed',error:error.message});}
+    finally{activeThumbnail=null;updateGalleryImages();}
   }
 }
 function setLibrarySource(source){
@@ -459,7 +494,7 @@ function setupGallery(){
   $('cloud-gallery-connect').onclick=()=>$('cloud-open').onclick();
   $('cloud-gallery-refresh').onclick=()=>$('cloud-refresh').onclick();
   $('notebook-search').oninput=renderGallery;
-  $('drawer-close').onclick=()=>{if(galleryFocused){galleryFocused=false;renderGallery();return;}galleryEpoch++;expandedNotebook=null;renderGallery();};
+  $('drawer-close').onclick=()=>{if(galleryFocused){galleryFocused=false;renderGallery();return;}expandedNotebook=null;renderGallery();};
   $('drawer-open').onclick=()=>{galleryFocused=true;renderGallery();};
   window.addEventListener('resize',()=>renderGallery());
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
