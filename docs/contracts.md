@@ -137,3 +137,9 @@ The Python/Pillow orchestration path (including its Rust pencil backend) retains
 ## Optional USB desktop bridge
 
 The companion is independent of cloud pairing, rendering and file import. It binds only loopback port 8786, requires an exact configured origin and an ephemeral connection key on every GET, and exposes only status, folder listing and stable raw notebook download. It reuses the fixed-host read-only USB reader. The browser adapter returns bounded archive bytes to the existing import consumer; it must not forward them to a hosted service implicitly. No cloud tokens or raw notebook files are persisted by the companion. Preflight allows the one origin, GET and the key header only. See `docs/usb-companion.md` for the desktop lifecycle and validation limits.
+
+## Legacy v5 notebook pages
+
+The parser dispatches the 43-byte version-5 header to a bounded layer/stroke adapter instead of the v6 CRDT reader. The [documented binary layout](https://github.com/akeil/rmtool#rm-lines-format) supplies layers, strokes and six float point channels. Original float channels, unknown stroke words and trailing bytes are preserved in diagnostics. IDs are synthetic and replay order is explicitly stored layer/stroke order, not recovered chronology. Missing layer visibility defaults to visible and is labeled; paper dimensions still require external/caller evidence.
+
+V5 source coordinates are top-left based, so their parsed source transform is identity. Browser selection and lazy preview requests use the returned source translation instead of adding the v6 centered-X offset. The renderer projection converts the legacy float channels into the units already used by the renderer: pressure x255, speed x4, width x4 and direction x255/(2*pi), matching rmscene's float-point conversion convention. Raw diagnostic points remain unchanged. This enables legacy files; it does not establish new native-fidelity calibration for v5 tools.

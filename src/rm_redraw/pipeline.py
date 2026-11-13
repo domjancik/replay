@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
 from rm_redraw.parsing.geometry import resolve_page_geometry
@@ -59,13 +60,14 @@ def _project_point(
 ) -> NormalizedPoint:
     group_x, group_y = _transform_xy(group_transform, point.x, point.y)
     page_x, page_y = _transform_xy(page_transform, group_x, group_y)
+    legacy = point.extra.get("file_format") == 5
     return NormalizedPoint(
         page_x,
         page_y,
-        float(point.pressure),
-        float(point.speed),
-        float(point.direction),
-        float(point.width),
+        float(point.pressure) * (255 if legacy else 1),
+        float(point.speed) * (4 if legacy else 1),
+        float(point.direction) * (255 / (2 * math.pi) if legacy else 1),
+        float(point.width) * (4 if legacy else 1),
         point.extra,
     )
 

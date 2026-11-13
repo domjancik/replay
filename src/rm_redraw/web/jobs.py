@@ -92,6 +92,7 @@ def page_info(library: Library, document_id: str, page_id: str) -> tuple[dict, o
         "number": entry["number"],
         "strokes": len(parsed.strokes),
         "paper_size": parsed.paper_size,
+        "source_to_page_transform": parsed.source_to_page_transform,
         "unresolved_anchors": sum(not s.effective_transform.resolved for s in parsed.strokes),
         "warnings": list(parsed.diagnostics.warnings),
     }, parsed

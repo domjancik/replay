@@ -88,6 +88,7 @@ async function selectPage() {
     $('page-info').textContent=`${info.strokes.toLocaleString()} strokes${info.paper_size?' · Source canvas '+info.paper_size.join(' × '):''}. `+
       (needsPdf?'Attach a matching notebook PDF to resolve text anchors.':needsPoppler?'Install Poppler and restart the utility to resolve text anchors.':notebook.has_pdf?'Paired PDF saved locally.':'Saved locally.');
     if(info.paper_size){$('width').value=info.paper_size[0];$('height').value=info.paper_size[1];$('offset-x').value=info.paper_size[0]/2;}
+    if(info.source_to_page_transform){$('offset-x').value=info.source_to_page_transform[4];$('offset-y').value=info.source_to_page_transform[5];}
     canvasSummary();
     pageReady=!!info.strokes && !needsPdf && !needsPoppler;
     updateGenerateButton();
@@ -468,7 +469,7 @@ async function processThumbnailQueue(){
       // A scroll while reading metadata must not submit an offscreen render.
       if(!thumbnailStillVisible(key)){thumbnailStates.delete(key);continue;}
       const [width,height]=info.paper_size || [1404,1872];
-      const settings={width,height,offset_x:width/2,offset_y:0,seconds:6,fps:6,output_width:234,backend:$('backend').value};
+      const settings={width,height,offset_x:info.source_to_page_transform?.[4] ?? width/2,offset_y:info.source_to_page_transform?.[5] ?? 0,seconds:6,fps:6,output_width:234,backend:$('backend').value};
       let result=await api('/api/page-preview',{...item,settings});
       thumbnailStates.set(key,result);updateGalleryImages();
       while(['queued','running'].includes(result.state)){

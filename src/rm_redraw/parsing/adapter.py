@@ -309,6 +309,13 @@ def _parse_stream(
     replay_strategy: ReplayStrategy,
     text_anchor_layout: TextAnchorLayout | None,
 ) -> NormalizedPage:
+    from .legacy import HEADER, parse_v5
+
+    position = stream.tell()
+    header = stream.read(43)
+    stream.seek(position)
+    if header == HEADER:
+        return parse_v5(stream, page_id)
     blocks = list(read_blocks(stream))
     scene_info = next((block for block in blocks if isinstance(block, SceneInfo)), None)
     author_ids: dict[int, str] = {}
