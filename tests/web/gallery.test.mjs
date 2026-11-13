@@ -5,6 +5,7 @@ import vm from 'node:vm';
 class Element {
   constructor(){this.children=[];this.value='';this.dataset={};this.attrs={};this.scrollTop=0;this.classList={toggle(){}};}
   setAttribute(k,v){this.attrs[k]=v;}
+  getAttribute(k){return this.attrs[k];}
   append(...children){for(const child of children){child.detach();child.parentElement=this;this.children.push(child);}}
   detach(){if(this.parentElement){const siblings=this.parentElement.children;siblings.splice(siblings.indexOf(this),1);this.parentElement=null;}}
   after(child){child.detach();const siblings=this.parentElement.children;siblings.splice(siblings.indexOf(this)+1,0,child);child.parentElement=this.parentElement;}
@@ -30,4 +31,23 @@ test('selecting pages preserves internal scroll, switching notebook resets it',(
  assert.equal(el('page-gallery').scrollTop,210);
  assert.equal(el('page-gallery').children[18].attrs['aria-pressed'],'true');
  vm.runInContext("expandedNotebook='2';renderGallery();",context);assert.equal(el('page-gallery').scrollTop,0);
+});
+test('thumbnail states and notebook counts distinguish queued, running, failed and ready',()=>{
+ const {context}=fixture();
+ vm.runInContext(`
+ pageThumbnails.set('1/0','/ready.png');
+ thumbnailStates.set('1/1',{state:'running'});
+ thumbnailStates.set('1/2',{state:'failed',error:'Unsupported anchors'});
+ thumbnailStates.set('1/3',{state:'queued'});
+ `,context);
+ const counts=JSON.parse(vm.runInContext("JSON.stringify(thumbnailProgress(library[1]))",context));
+ assert.deepEqual(counts,{total:21,ready:1,running:1,queued:1,failed:1,waiting:17});
+ assert.equal(vm.runInContext("thumbnailStatus('1','0').state",context),'complete');
+ assert.equal(vm.runInContext("thumbnailStatus('1','2').error",context),'Unsupported anchors');
+});
+test('missing thumbnails display status instead of looking like blank paper',()=>{
+ const {context}=fixture();
+ assert.equal(vm.runInContext("galleryImage('1','0').children[1].textContent",context),'Not generated');
+ vm.runInContext("thumbnailStates.set('1/0',{state:'running'})",context);
+ assert.equal(vm.runInContext("galleryImage('1','0').children[1].textContent",context),'Generating…');
 });

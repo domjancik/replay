@@ -3,7 +3,7 @@ let token = '', library = [], jobs = [], selectedJob = null, pageReady = false, 
 let previewKey = '', pageRequest = 0, usbBusy = false;
 let selectionPreview = null, previewRefreshTimer;
 let expandedNotebook=null, galleryEpoch=0, galleryList=false, galleryFocused=false;
-const pageThumbnails=new Map();
+const pageThumbnails=new Map(), thumbnailStates=new Map();
 const notice = message => { $('notice').textContent = message; $('notice').hidden = !message; };
 async function api(path, body, raw = false) {
   const response = await fetch(path, body === undefined ? {} : {method:'POST',
@@ -102,6 +102,7 @@ async function requestSelectionPreview(version) {
     let result=await api('/api/page-preview',{document:pending.document,page:pending.page,settings});
     while(version===pageRequest && selectionPreview===pending){
       Object.assign(pending,result);
+      thumbnailStates.set(pending.document+'/'+pending.page,result);updateGalleryImages();
       if(result.state==='complete'){pageThumbnails.set(pending.document+'/'+pending.page,result.url);updateGalleryImages();}
       showNotebookPreview();
       if(!['queued','running'].includes(result.state))return;
@@ -322,18 +323,55 @@ function thumbnailFor(documentId,pageId){
   const job=jobs.find(j=>j.document_id===documentId && (!pageId || j.page_id===pageId) && j.state==='complete' && j.kind!=='export');
   return job?`/media/${job.id}/static.png`:null;
 }
+function thumbnailStatus(documentId,pageId){
+  if(thumbnailFor(documentId,pageId))return {state:'complete'};
+  const page=library.find(n=>n.id===documentId)?.pages.find(p=>p.id===pageId);
+  if(page && !page.available)return {state:'unavailable'};
+  return thumbnailStates.get(documentId+'/'+pageId) || {state:'waiting'};
+}
+function thumbnailProgress(notebook){
+  const counts={total:0,ready:0,running:0,queued:0,failed:0,waiting:0};
+  for(const page of notebook.pages){
+    if(!page.available)continue;
+    counts.total++;
+    const state=thumbnailStatus(notebook.id,page.id).state;
+    counts[state==='complete'?'ready':state]++;
+  }
+  return counts;
+}
+function paintThumbnail(slot){
+  const {document:documentId,page:pageId}=slot.dataset;
+  const status=thumbnailStatus(documentId,pageId),source=thumbnailFor(documentId,pageId);
+  const [image,label]=slot.children;
+  slot.dataset.state=status.state;
+  slot.setAttribute('aria-busy',String(['running','queued'].includes(status.state)));
+  label.textContent={complete:'Ready',queued:'Queued',running:'Generating…',failed:'Preview failed',waiting:'Not generated',unavailable:'No saved ink'}[status.state];
+  label.hidden=status.state==='complete';slot.title=status.error || label.textContent;
+  image.hidden=!source;
+  if(source && image.getAttribute('src')!==source)image.src=source;
+}
 function galleryImage(documentId,pageId){
+  const slot=document.createElement('span');slot.className='thumbnail-slot';
+  slot.dataset.document=documentId;slot.dataset.page=pageId || '';
   const image=document.createElement('img');image.alt='';image.loading='lazy';image.decoding='async';
-  image.dataset.document=documentId;image.dataset.page=pageId || '';
-  image.onerror=()=>{image.hidden=true;};
-  const source=thumbnailFor(documentId,pageId);image.hidden=!source;if(source)image.src=source;
-  return image;
+  const label=document.createElement('span');label.className='thumbnail-status';
+  image.onerror=()=>{image.hidden=true;label.hidden=false;label.textContent='Image unavailable';slot.dataset.state='failed';};
+  slot.append(image,label);paintThumbnail(slot);return slot;
+}
+function updateGalleryProgress(){
+  const notebook=library.find(n=>n.id===expandedNotebook);if(!notebook)return;
+  const c=thumbnailProgress(notebook);
+  $('thumbnail-progress').max=Math.max(1,c.total);$('thumbnail-progress').value=c.ready+c.failed;
+  const parts=[`${c.ready} of ${c.total} previews ready`];
+  if(c.running)parts.push(`${c.running} generating`);
+  if(c.queued)parts.push(`${c.queued} queued`);
+  if(c.failed)parts.push(`${c.failed} failed`);
+  if(c.waiting)parts.push(`${c.waiting} not generated`);
+  $('thumbnail-progress-label').textContent=parts.join(' · ');
 }
 function updateGalleryImages(){
-  document.querySelectorAll('#notebook-gallery img,#page-gallery img').forEach(image=>{
-    const source=thumbnailFor(image.dataset.document,image.dataset.page);
-    if(source && image.getAttribute('src')!==source){image.src=source;image.hidden=false;}
-  });
+  document.querySelectorAll('.thumbnail-slot').forEach(paintThumbnail);
+  updateGalleryProgress();
 }
 function renderGallery(){
   if(!$('notebook-gallery'))return;
@@ -375,10 +413,12 @@ function renderGallery(){
     const number=document.createElement('span');number.textContent=String(page.number);card.append(paper,number);
     card.onclick=safely(async()=>{$('page').value=page.id;await selectPage();});pages.append(card);
   }
-  pages.scrollTop=scrollTop;
+  pages.scrollTop=scrollTop;updateGalleryProgress();
 }
 async function warmGallery(){
   const epoch=++galleryEpoch,notebook=library.find(n=>n.id===expandedNotebook);if(!notebook)return;
+  for(const page of notebook.pages)if(page.available && !thumbnailFor(notebook.id,page.id))thumbnailStates.set(notebook.id+'/'+page.id,{state:'queued'});
+  updateGalleryImages();
   for(const page of notebook.pages){
     if(epoch!==galleryEpoch || expandedNotebook!==notebook.id)return;
     if(!page.available || thumbnailFor(notebook.id,page.id))continue;
@@ -388,12 +428,14 @@ async function warmGallery(){
       const [width,height]=info.paper_size || [1404,1872];
       const settings={width,height,offset_x:width/2,offset_y:0,seconds:6,fps:6,output_width:234,backend:$('backend').value};
       let result=await api('/api/page-preview',{document:notebook.id,page:page.id,settings});
+      thumbnailStates.set(notebook.id+'/'+page.id,result);updateGalleryImages();
       while(['queued','running'].includes(result.state)){
         await new Promise(resolve=>setTimeout(resolve,1500));if(epoch!==galleryEpoch)return;
         result=await api('/api/page-preview?id='+result.id);
+        thumbnailStates.set(notebook.id+'/'+page.id,result);updateGalleryImages();
       }
       if(result.state==='complete'){pageThumbnails.set(notebook.id+'/'+page.id,result.url);updateGalleryImages();}
-    }catch{ /* An unavailable page must not block the rest of the notebook. */ }
+    }catch(error){thumbnailStates.set(notebook.id+'/'+page.id,{state:'failed',error:error.message});updateGalleryImages();}
   }
 }
 function setupGallery(){
