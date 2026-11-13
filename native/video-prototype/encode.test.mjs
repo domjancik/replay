@@ -87,3 +87,9 @@ test('bounds the muxed bytes before copying and supports seekable writes', async
   assert.throws(() => sink.write(new Uint8Array([5]), 4), /byte limit/);
   assert.deepEqual([...new Uint8Array(sink.finish())], [1, 2, 3, 4]);
 });
+
+ test('supports full and double resolution with longer loop exports',async()=>{
+ const {createReplayEncoder}=await importEncoder();const mocked=runtime('avc');
+ await assert.rejects(createReplayEncoder(mocked)({width:2808,height:3744,fps:6,frameCount:400,frames:[]}),/400 frames/);
+ assert.ok(mocked.events.includes('start'));
+ });

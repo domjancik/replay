@@ -46,13 +46,13 @@ export function createReplayEncoder(runtime) {
     frames, width, height, fps, frameCount, signal, onProgress,
     container = 'auto', maxBytes = MAX_VIDEO_BYTES,
   }) {
-    if (![width, height].every((n) => Number.isInteger(n) && n >= 2 && n <= 1280 && n % 2 === 0)
-        || width * height > 1280 * 720) {
-      throw new RangeError('Use even video dimensions within a 1280×720 pixel budget.');
+    if (![width, height].every((n) => Number.isInteger(n) && n >= 2 && n <= 8192 && n % 2 === 0)
+        || width * height > 12_000_000) {
+      throw new RangeError('Use even video dimensions within a 12-megapixel budget.');
     }
     if (!Number.isInteger(fps) || fps < 1 || fps > 30
-        || !Number.isInteger(frameCount) || frameCount < 1 || frameCount > 60 * fps) {
-      throw new RangeError('Use 1–30 fps and a video duration of at most 60 seconds.');
+        || !Number.isInteger(frameCount) || frameCount < 1 || frameCount > 120 * fps) {
+      throw new RangeError('Use 1–30 fps and a video duration of at most 120 seconds.');
     }
     if (!['auto', 'mp4', 'webm'].includes(container)) {
       throw new RangeError('Choose automatic, MP4 or WebM output.');
@@ -61,7 +61,7 @@ export function createReplayEncoder(runtime) {
       throw new RangeError('Invalid video byte limit.');
     }
 
-    const config = { width, height, fps, bitrate: 2_000_000, maxBytes };
+    const config = { width, height, fps, bitrate: Math.min(24_000_000, Math.max(2_000_000, width * height * fps * 0.12)), maxBytes };
     let selection;
     for (const candidate of candidates) {
       signal?.throwIfAborted();

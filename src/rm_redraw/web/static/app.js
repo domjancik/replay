@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+const mediaUrl=(id,file)=>globalThis.replayBrowser?globalThis.replayBrowser.media(id,file):`/media/${id}/${file}`;
 let token = '', library = [], jobs = [], selectedJob = null, pageReady = false, capabilities;
 let previewKey = '', pageRequest = 0, usbBusy = false;
 let usbCompanion=null;
@@ -9,6 +10,7 @@ let thumbnailObserver=null, activeThumbnail=null;
 const visibleThumbnailSlots=new Set(), thumbnailQueue=new Map();
 const notice = message => { $('notice').textContent = message; $('notice').hidden = !message; };
 async function api(path, body, raw = false) {
+  if(globalThis.replayBrowser)return globalThis.replayBrowser.api(path,body);
   const response = await fetch(path, body === undefined ? {} : {method:'POST',
     headers:{'Content-Type':raw?'application/octet-stream':'application/json','X-Replay-Token':token},
     body:raw?body:JSON.stringify(body)});
@@ -87,7 +89,7 @@ async function selectPage() {
     const needsPdf=info.unresolved_anchors && !notebook.has_pdf;
     const needsPoppler=info.unresolved_anchors && notebook.has_pdf && !capabilities.poppler;
     $('page-info').textContent=`${info.strokes.toLocaleString()} strokes${info.paper_size?' · Source canvas '+info.paper_size.join(' × '):''}. `+
-      (needsPdf?'Attach a matching notebook PDF to resolve text anchors.':needsPoppler?'Install Poppler and restart the utility to resolve text anchors.':notebook.has_pdf?'Paired PDF saved locally.':'Saved locally.');
+      (needsPdf?(capabilities.hosted?'This page needs native PDF text-anchor matching, which is not yet supported in the browser edition.':'Attach a matching notebook PDF to resolve text anchors.'):needsPoppler?'Install Poppler and restart the utility to resolve text anchors.':notebook.has_pdf?'Paired PDF saved locally.':'Saved locally.');
     if(info.paper_size){$('width').value=info.paper_size[0];$('height').value=info.paper_size[1];$('offset-x').value=info.paper_size[0]/2;}
     if(info.source_to_page_transform){$('offset-x').value=info.source_to_page_transform[4];$('offset-y').value=info.source_to_page_transform[5];}
     canvasSummary();
@@ -160,7 +162,7 @@ function renderPageReplays(){
   for(const job of matching){
     const button=document.createElement('button');button.className='page-replay';
     button.setAttribute('aria-pressed',String(selectedJob===job.id));
-    const image=document.createElement('img');image.alt='';image.loading='lazy';image.src=`/media/${job.id}/static.png`;image.onerror=()=>{image.hidden=true;};
+    const image=document.createElement('img');image.alt='';image.loading='lazy';image.src=mediaUrl(job.id,'static.png');image.onerror=()=>{image.hidden=true;};
     const label=document.createElement('span');
     label.textContent=`${job.kind==='export'?'Export':'Replay'} · ${(job.frames/job.settings.fps).toFixed(1)}s · ${job.settings.fps} fps`;
     const detail=document.createElement('small');detail.textContent=`${job.settings.viewport.join(' × ')} · ${job.settings.ordering==='entry'?'entry order':'by layer'}`;
@@ -180,16 +182,16 @@ function showJob(job) {
   $('view-progress').hidden=complete;
   $('progress').value=Math.min(.99,job.frames/Math.max(1,job.expected_frames));
   $('progress-text').textContent=job.error || (job.state==='queued'?'Queued — another replay will finish first.':`${job.frames} / ~${job.expected_frames} frames · ${job.state}${job.state==='running'?' · final verification and video encoding follow':''}`);
-  const base=`/media/${job.id}/`;
+  const media=file=>mediaUrl(job.id,file);
   if(complete){
-    if($('video').dataset.job!==job.id){$('video').poster=base+'static.png';$('video').src=base+'replay.mp4';$('video').dataset.job=job.id;}
+    if($('video').dataset.job!==job.id){$('video').poster=media('static.png');$('video').src=media('replay.mp4');$('video').dataset.job=job.id;}
     $('preview').hidden=true;
-    $('download-video').href=base+'replay.mp4';$('download-image').href=base+'static.png';$('download-manifest').href=base+'manifest.json';
+    $('download-video').href=media('replay.mp4');$('download-video').download='replay'+(job.extension||'.mp4');$('download-image').href=media('static.png');$('download-manifest').href=media('manifest.json');
   }else{
     $('video').pause();
     const key=job.id+':'+job.frames;
     $('preview').hidden=job.frames<2;
-    if(job.frames>=2 && key!==previewKey){$('preview').src=base+'latest.png?frame='+job.frames;previewKey=key;}
+    if(job.frames>=2 && key!==previewKey){$('preview').src=media('latest.png')+(capabilities.hosted?'':'?frame='+job.frames);previewKey=key;}
   }
 }
 function showNotebookPreview() {
@@ -210,7 +212,7 @@ function showNotebookPreview() {
   image.hidden=!job;$('empty').hidden=!!job;
   $('notebook-preview-label').textContent=job?'Saved render · selected page':'No saved preview for this page yet.';
   if(!job){image.removeAttribute('src');return;}
-  const source=`/media/${job.id}/static.png`;
+  const source=mediaUrl(job.id,'static.png');
   if(image.getAttribute('src')!==source){
     image.alt=`${job.name} · page ${job.page}`;
     image.onerror=()=>{image.hidden=true;$('notebook-preview-label').textContent='Preview unavailable.';};
@@ -224,7 +226,7 @@ function recentPreview(job) {
   const tile=document.createElement('span');tile.className='recent-preview';tile.textContent='—';
   if(job.state==='complete'){
     const image=document.createElement('img');image.alt='';image.loading='lazy';image.decoding='async';
-    image.src=`/media/${job.id}/static.png`;
+    image.src=mediaUrl(job.id,'static.png');
     image.onerror=()=>{tile.replaceChildren();tile.textContent='—';};
     tile.textContent='';tile.append(image);
   }
@@ -315,7 +317,7 @@ async function openExport(){
   const image=new Image();
   image.onload=()=>{cropImage=image;const canvas=$('crop-canvas');canvas.width=image.width;canvas.height=image.height;resetCrop();$('export-status').textContent='';$('export-save').disabled=false;};
   image.onerror=()=>{$('export-status').textContent='Could not load the final image.';};
-  image.src=`/media/${job.id}/static.png`;
+  image.src=mediaUrl(job.id,'static.png');
 }
 function cropPoint(event){const box=$('crop-canvas').getBoundingClientRect();return [Math.max(0,Math.min(cropImage.width,Math.round((event.clientX-box.left)*cropImage.width/box.width))),Math.max(0,Math.min(cropImage.height,Math.round((event.clientY-box.top)*cropImage.height/box.height)))];}
 function setupExport(){
@@ -335,6 +337,7 @@ function setupExport(){
 async function start(){
   setupExport();setupGallery();
   capabilities=await api('/api/session');token=capabilities.token;
+  if(capabilities.hosted){$('pair-open').hidden=true;$('backend').disabled=true;$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
   const {setupCloud}=await import('/cloud-ui.mjs');
   setupCloud({sessionToken:()=>token,importArchive:async(raw)=>{
     const result=await api('/api/upload',raw,true);
@@ -342,7 +345,7 @@ async function start(){
   }});
   $('backend').querySelector('[value=rust]').disabled=!capabilities.rust;
   $('backend').value=capabilities.rust?'rust':'python';
-  if(!capabilities.ffmpeg)notice('FFmpeg was not found. Install it and restart the utility before generating videos.');
+  if(!capabilities.ffmpeg)notice(capabilities.hosted?'This browser does not support video encoding. Try current Chrome or Edge.':'FFmpeg was not found. Install it and restart the utility before generating videos.');
   for(const id of ['width','height','offset-x','offset-y'])$(id).oninput=()=>{
     resetClipping();canvasSummary();updateGenerateButton();
     clearTimeout(previewRefreshTimer);
@@ -365,7 +368,7 @@ function thumbnailFor(documentId,pageId){
   const cached=pageThumbnails.get(documentId+'/'+pageId);
   if(cached)return cached;
   const job=jobs.find(j=>j.document_id===documentId && (!pageId || j.page_id===pageId) && j.state==='complete' && j.kind!=='export');
-  return job?`/media/${job.id}/static.png`:null;
+  return job?mediaUrl(job.id,'static.png'):null;
 }
 function thumbnailStatus(documentId,pageId){
   if(thumbnailFor(documentId,pageId))return {state:'complete'};

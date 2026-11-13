@@ -37,3 +37,7 @@ The calibration article discusses other open-source renderers and brush engines.
 ## Project and artwork terms
 
 The project code and documentation are MIT-licensed; see LICENSE. Selected artwork requires separate owner review before publication. Existing tablet documents, reference exports and visual comparison artifacts are not included in the package. They are not covered by any future code license merely because they were used for local testing. The private visual annex is excluded from release archives.
+
+## Hosted browser distribution
+
+The separately built hosted app bundles Pyodide 0.29.5 (including CPython 3.13), NumPy 2.2.5, Pillow 11.3.0, rmscene 0.8.0, packaging 23.2, and Mediabunny. The Python wheels retain their distribution license files. The deployed renderer retains `LICENSE-PILLOW`, and the encoder bundle includes `MEDIABUNNY-LICENSE`. See `docs/hosted-replay.md` for the hosted build boundary; these versions differ from the desktop environment above.
