@@ -509,8 +509,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     },
     async download(id) {
       const device = requireDevice();
-      if (listing) throw new Error('Wait for the cloud library refresh');
-      const selected = documents.get(id);
+      const selected = (listing ? previewDocuments : documents).get(id);
       if (!selected) throw new Error('Select a visible cloud document');
       if (downloading) throw new Error('Already downloading a cloud document');
       const {signal} = connection;

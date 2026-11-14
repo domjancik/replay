@@ -303,7 +303,7 @@ test('cloud loading is visible and renders partial notebooks while awaiting comp
     assert.equal(el('cloud-gallery-status').hidden,false);
     assert.match(el('cloud-gallery-status').textContent,/2 of 8/);
     assert.equal(el('cloud-gallery').children[0].children[1].textContent,'Available now');
-    assert.equal(el('cloud-gallery').children[0].children.at(-1).disabled,true);
+    assert.equal(el('cloud-gallery').children[0].children.at(-1).disabled,false);
   } finally {release();await pending;}
 });
 
@@ -339,4 +339,15 @@ test('visible cloud preview starts during scanning and its card survives later b
   progress({completed:4,total:6,entries:[...entries,{id:'two',name:'Two',kind:'document',parent:''}]});
   assert.equal(el('cloud-gallery').children[0],row);
  } finally {release();await pending;}
+});
+
+test('opening a partial cloud notebook does not wait for or restart the scan',async t=>{
+ const {el,client}=cloudHarness(t,{savedMode:'password'});let release,started,downloads=0,lists=0;
+ const gate=new Promise(r=>release=r),waiting=new Promise(r=>started=r);
+ const entries=[{id:'one',name:'One',kind:'document',parent:''}];
+ client.list=async({onProgress})=>{lists++;onProgress({completed:2,total:6,entries});started();await gate;return entries;};
+ client.download=async id=>{assert.equal(id,'one');downloads++;return new Uint8Array();};
+ await el('cloud-open').onclick();const pending=el('cloud-unlock').onclick();await waiting;
+ try {await el('cloud-gallery').children[0].children.at(-1).onclick();assert.equal(downloads,1);assert.equal(lists,1);}
+ finally {release();await pending;}
 });

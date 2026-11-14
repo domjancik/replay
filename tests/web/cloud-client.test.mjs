@@ -374,3 +374,15 @@ test('verified preview is available while later library metadata is pending', as
  try {assert.deepEqual(await client.preview(document),previewPng);}
  finally {release();await pending;}
 });
+
+test('downloads a verified notebook before the remaining scan completes',async()=>{
+ const f=fixture({documentParent:''});let release,started;
+ const gate=new Promise(r=>release=r),waiting=new Promise(r=>started=r);
+ const client=createCloudClient({relay:async payload=>{
+  if(payload.filename===`${folder}.docSchema`){started();await gate;}
+  return f.relay(payload);
+ }});
+ client.setDeviceToken('synthetic-device');const pending=client.list();await waiting;
+ try {assert.equal(localEntries(await client.download(document)).size,3);}
+ finally {release();await pending;}
+});
