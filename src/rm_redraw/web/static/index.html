@@ -59,8 +59,8 @@
 <section class="selection-heading"><div class="section-heading"><h2 id="selected-notebook-title">Choose a notebook</h2><button id="refresh" class="quiet" title="Refresh saved notebooks">↻</button></div>
 
 <label for="notebook" class="sr-only">Notebook</label><select id="notebook" class="sr-only"><option value="">Import a notebook to begin</option></select>
-<div class="page-row"><button id="page-prev" class="quiet" aria-label="Previous page">‹</button><div><label for="page">Page</label><select id="page" disabled></select></div><div><button id="pair-open" class="quiet" disabled>Attach matching PDF</button><input id="pair" type="file" accept=".pdf" hidden></div></div>
-<button id="page-next" class="quiet" aria-label="Next page">›</button><p id="page-info" class="hint">Your original files stay untouched.</p>
+<div class="page-row"><label for="page" class="sr-only">Page</label><select id="page" disabled></select><div class="page-navigation" role="group" aria-label="Page navigation"><button id="page-prev" class="secondary" aria-label="Previous page">‹</button><button id="page-next" class="secondary" aria-label="Next page">›</button></div></div>
+<div class="page-details"><p id="page-info" class="hint">Your original files stay untouched.</p><button id="pair-open" class="quiet" disabled>Attach matching PDF</button><input id="pair" type="file" accept=".pdf" hidden></div>
 
 </section>
 <section class="viewer"><div class="section-heading"><h2 id="view-title">Your drawing, in motion</h2><span id="view-state" class="badge">PREVIEW</span></div>

@@ -65,3 +65,14 @@ header{max-width:none;padding:12px 38px}.wordmark{font-family:Georgia,serif;font
 .resolution-picker .duration-buttons button small{display:block;margin-top:3px;font-size:10px;font-weight:400;opacity:.8}
 
 .duration-label{font-size:13px}.custom-duration{display:flex;align-items:center;gap:8px;margin-top:10px}.custom-duration label{margin:0;font-size:12px}.custom-duration #seconds{width:80px;min-height:32px;padding:6px 8px}.custom-duration span{font-size:11px;color:var(--muted)}
+
+.selection-heading .section-heading{align-items:flex-start;gap:12px;margin-bottom:12px!important}
+.selection-heading h2{min-width:0;overflow-wrap:anywhere;line-height:1.3}
+.selection-heading #refresh{flex:0 0 32px;min-height:32px}
+.selection-heading .page-row{display:flex;align-items:center;gap:12px;padding:0;margin:0}
+.selection-heading #page{flex:1;min-width:0;width:auto;min-height:36px;padding:7px 9px;border:1px solid var(--line);background:var(--paper);font-size:13px}
+.selection-heading .page-navigation{display:flex;flex:0 0 auto;gap:6px}
+.selection-heading #page-prev,.selection-heading #page-next{position:static;order:initial;margin:0;width:36px;min-height:36px;padding:0;text-align:center;font-size:24px;line-height:1;border:1px solid var(--line)}
+.selection-heading .page-details{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.selection-heading #page-info{flex:1 1 150px;margin:0;font-size:11px;line-height:1.5}
+.selection-heading #pair-open{flex:0 0 auto;white-space:nowrap;font-size:11px;min-height:28px;padding:4px 0}
