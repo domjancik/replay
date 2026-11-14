@@ -80,3 +80,12 @@ node --test tests/web/*.test.mjs tests/hosted/*.test.mjs
 The benchmark scripts require an existing `artifacts/mobile-performance` directory.
 Repeated measurements on the same device are preferable to comparing different
 browser/phone models or extrapolating from logical-core counts.
+
+## Deployed browser check
+
+The production benchmark completed in the desktop in-app browser (Chrome 157,
+Windows, 16 reported logical processors). Median wall times including fetch and
+worker startup were 340 / 363 ms (detailed), 590 / 562 ms (pencil), and 504 / 469 ms
+(many layers), single / two workers respectively. The first detailed single-worker
+sample included cold loading (1195 ms). These modest browser gains reinforce the
+single-worker production default; they do not constitute a phone benchmark.
