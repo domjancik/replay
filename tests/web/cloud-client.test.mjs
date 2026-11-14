@@ -11,7 +11,7 @@ const document = '11112233-4455-4677-8899-aabbccddeeff';
 const hidden = '22112233-4455-4677-8899-aabbccddeeff';
 const page = '33112233-4455-4677-8899-aabbccddeeff';
 
-function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash', documentParent = folder, thumbnail} = {}) {
+function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash', documentParent = folder, extraDocuments = 0, thumbnail} = {}) {
   const files = new Map();
   const requests = [];
   let generation = 0;
@@ -49,7 +49,12 @@ function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParen
     const docIndex = index(`${document}.docSchema`, members, document);
     const folderIndex = index(`${folder}.docSchema`, [folderMeta], folder, false);
     const hiddenIndex = index(`${hidden}.docSchema`, [hiddenMeta]);
-    root = index('root.docSchema', [docIndex, hiddenIndex, folderIndex].map(entry => ({
+    const extras = Array.from({length: extraDocuments}, (_, i) => {
+      const id = `${String(i + 100).padStart(8, '0')}-4455-4677-8899-aabbccddeeff`;
+      const meta = blob(`${id}.metadata`, {visibleName: `Extra ${i}`, parent: '', type: 'DocumentType'});
+      return index(`${id}.docSchema`, [meta], id);
+    });
+    root = index('root.docSchema', [docIndex, hiddenIndex, folderIndex, ...extras].map(entry => ({
       ...entry, filename: entry.filename.replace('.docSchema', ''),
     })), '.');
     return {ink, docMeta};
@@ -210,8 +215,8 @@ test('rechecks persisted metadata hashes before showing cached names', async () 
   assert.deepEqual(requests.filter(request => request.filename).map(request => request.filename), [row[1]]);
 });
 
-test('limits library reads to two simultaneous relay requests', async () => {
-  const f = fixture();
+test('runs available library reads concurrently within the six-worker limit', async () => {
+  const f = fixture({extraDocuments: 12});
   let active = 0;
   let peak = 0;
   const client = createCloudClient({relay: async payload => {
@@ -226,7 +231,8 @@ test('limits library reads to two simultaneous relay requests', async () => {
   }});
   client.setDeviceToken('synthetic-device');
   await client.list();
-  assert.equal(peak, 2);
+  assert.equal(peak, 6);
+  assert.ok(peak <= 6);
 });
 
 test('renews an expired user session once and retries only the same immutable file', async () => {
@@ -345,12 +351,12 @@ test('preview rejects excessive decoded dimensions and non-PNG content', async (
   const waiting = new Promise(resolve => {started = resolve;});
   const gate = new Promise(resolve => {release = resolve;});
   const client = createCloudClient({relay: async payload => {
-    if (payload.filename === `${folder}.docSchema`) {started(); await gate;}
+    if (payload.filename === `${folder}.docSchema`) {await gate;}
     return f.relay(payload);
   }});
   client.setDeviceToken('synthetic-device');
   const updates = [];
-  const pending = client.list({onProgress: update => updates.push(update)});
+  const pending = client.list({onProgress: update => {updates.push(update);if(update.completed===2)started();}});
   await waiting;
   try {
     assert.equal(updates.at(-1)?.completed, 2);
@@ -366,11 +372,11 @@ test('verified preview is available while later library metadata is pending', as
  const f=fixture({documentParent:'',thumbnail:previewPng});
  let release,started;const gate=new Promise(r=>release=r),waiting=new Promise(r=>started=r);
  const client=createCloudClient({relay:async payload=>{
-  if(payload.filename===`${folder}.docSchema`){started();await gate;}
+  if(payload.filename===`${folder}.docSchema`){await gate;}
   return f.relay(payload);
  }});
  client.setDeviceToken('synthetic-device');
- const pending=client.list();await waiting;
+ const pending=client.list({onProgress:update=>{if(update.completed===2)started();}});await waiting;
  try {assert.deepEqual(await client.preview(document),previewPng);}
  finally {release();await pending;}
 });
@@ -379,10 +385,10 @@ test('downloads a verified notebook before the remaining scan completes',async()
  const f=fixture({documentParent:''});let release,started;
  const gate=new Promise(r=>release=r),waiting=new Promise(r=>started=r);
  const client=createCloudClient({relay:async payload=>{
-  if(payload.filename===`${folder}.docSchema`){started();await gate;}
+  if(payload.filename===`${folder}.docSchema`){await gate;}
   return f.relay(payload);
  }});
- client.setDeviceToken('synthetic-device');const pending=client.list();await waiting;
+ client.setDeviceToken('synthetic-device');const pending=client.list({onProgress:update=>{if(update.completed===2)started();}});await waiting;
  try {assert.equal(localEntries(await client.download(document)).size,3);}
  finally {release();await pending;}
 });

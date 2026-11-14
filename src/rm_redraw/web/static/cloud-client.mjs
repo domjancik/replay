@@ -391,24 +391,32 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     const records = new Map();
     const ids = [...root.keys()].filter(id => uuid.test(id));
     onProgress?.({completed: 0, total: ids.length, entries: []});
-    for (let start = 0; start < ids.length; start += 2) {
-      const batch = ids.slice(start, start + 2);
-      const results = await Promise.allSettled(batch.map(async id => {
-        const index = await fetchIndex(`${id}.docSchema`, root.get(id).hash, id, blobs, session.read, signal);
-        const metadata = index.get(`${id}.metadata`);
-        if (!metadata) return;
-        const bytes = await verifiedText(metadata.name, metadata.hash, maxMetadataBytes,
-          data => verifyBlob(data, metadata), blobs, session.read, signal);
-        const record = readMetadata(bytes, id);
-        if (record) records.set(id, record);
-      }));
-      const failed = results.find(result => result.status === 'rejected');
-      if (failed) throw failed.reason;
-      check(signal);
-      previewDocuments = new Map(visibleTree(records).filter(entry => entry.kind === 'document').map(({id}) => [id, root.get(id)]));
-      sessionToken = session.token();
-      onProgress?.({completed: Math.min(start + 2, ids.length), total: ids.length, entries: visibleTree(records)});
+    // A rolling pool avoids waiting for the slowest request in each fixed batch.
+    let cursor = 0, completed = 0, failure;
+    async function worker() {
+      while (!failure && cursor < ids.length) {
+        const id = ids[cursor++];
+        try {
+          check(signal);
+          const index = await fetchIndex(`${id}.docSchema`, root.get(id).hash, id, blobs, session.read, signal);
+          const metadata = index.get(`${id}.metadata`);
+          if (metadata) {
+            const bytes = await verifiedText(metadata.name, metadata.hash, maxMetadataBytes,
+              data => verifyBlob(data, metadata), blobs, session.read, signal);
+            const record = readMetadata(bytes, id);
+            if (record) records.set(id, record);
+          }
+          check(signal);
+          if (failure) return;
+          const partial = visibleTree(records);
+          previewDocuments = new Map(partial.filter(entry => entry.kind === 'document').map(({id}) => [id, root.get(id)]));
+          sessionToken = session.token();
+          onProgress?.({completed: ++completed, total: ids.length, entries: partial});
+        } catch (error) { failure ??= error; }
+      }
     }
+    await Promise.all(Array.from({length: Math.min(6, ids.length)}, worker));
+    if (failure) throw failure;
     check(signal);
     const tree = visibleTree(records);
     const nextSnapshot = blobs.snapshot(scope);
