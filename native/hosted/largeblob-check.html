@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>rePlay - largeBlob compatibility test</title><link rel="stylesheet" href="/style.css"><script type="module" src="/largeblob-check.mjs"></script></head>
+<body><header><a class="wordmark" href="/">rePlay</a><span>Passkey compatibility test</span></header><main><div class="intro"><h1>Can this passkey store a key?</h1></div>
+<p>This isolated test uses <strong>largeBlob, not PRF</strong>. It creates a passkey named <strong>rePlay largeBlob TEST</strong>. It never accesses your reMarkable connection or drawings and sends no test results to our server.</p>
+<ol><li>Create the test passkey. Choose the provider you want to test (for example, Windows Hello).</li><li>Write a random test encryption key alongside it.</li><li>Read the key back and decrypt a synthetic test message.</li><li>Reload this page, then read again. For a stronger check, close and reopen the browser and repeat.</li></ol>
+<p>Each step has its own button and may ask for your device PIN or biometrics. The test only saves a credential identifier and encrypted test message in this browser. The encryption key is not saved in browser storage.</p>
+<section aria-label="Test steps"><button id="probe-register">1. Create test passkey</button> <button id="probe-write" disabled>2. Write test key</button> <button id="probe-read" disabled>3. Read and verify</button></section>
+<pre id="probe-status" role="status" aria-live="polite">Ready. No test has run.</pre>
+<p>A failed or unsupported step is not a pass. Creation alone does not establish that this can protect your saved pairing.</p>
+<button id="probe-clear" class="secondary">Clear local test data</button><p class="hint">Clearing local test data does not delete the passkey. Remove the TEST entry separately in your passkey manager or Windows Settings. Your real rePlay connection is untouched.</p>
+</main></body></html>

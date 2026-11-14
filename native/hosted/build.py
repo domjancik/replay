@@ -49,7 +49,15 @@ html = html.replace(
     "No new ink rendering.", "Frames are rendered again on this device for the export."
 )
 (public / "index.html").write_text(html, encoding="utf8")
-for name in ["bootstrap.mjs", "browser-api.mjs", "worker.mjs", "pdf-reference.mjs"]:
+for name in [
+    "bootstrap.mjs",
+    "browser-api.mjs",
+    "worker.mjs",
+    "pdf-reference.mjs",
+    "largeblob-check.html",
+    "largeblob-check.mjs",
+    "largeblob-probe.mjs",
+]:
     shutil.copyfile(root / "native/hosted" / name, public / name)
 shutil.copyfile(root / "native/renderer/renderer.mjs", public / "renderer.mjs")
 shutil.copyfile(
