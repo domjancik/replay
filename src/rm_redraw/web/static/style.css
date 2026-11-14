@@ -61,3 +61,5 @@ header{max-width:none;padding:12px 38px}.wordmark{font-family:Georgia,serif;font
 .cloud-folder-nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 18px}.cloud-folder-nav button+button::before{content:"/";margin-right:10px;color:var(--muted)}.cloud-folder-nav button:disabled{opacity:1;color:var(--ink);font-weight:600;border-color:transparent;background:transparent}.cloud-folder-card{text-align:left;min-height:110px;justify-content:center;font-size:16px}.cloud-folder-card:hover{background:#eeece5}
 
 .setting-picker{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}.setting-picker>label{margin:0;font-size:13px}.setting-picker label small{display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:3px}.setting-picker .duration-buttons{min-width:0}.resolution-picker .duration-buttons button{padding:7px 4px}.duration-buttons button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+.resolution-picker .duration-buttons button small{display:block;margin-top:3px;font-size:10px;font-weight:400;opacity:.8}
