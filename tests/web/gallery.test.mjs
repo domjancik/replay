@@ -242,3 +242,11 @@ test('duration warning appears only above two minutes',()=>{
  el('seconds').value='120';el('seconds').oninput();assert.equal(el('duration-warning').hidden,true);
  el('seconds').value='121';el('seconds').oninput();assert.equal(el('duration-warning').hidden,false);
 });
+
+test('auto canvas includes off-page ink without changing relative stroke positions',()=>{
+ const {context}=fixture();
+ const result=vm.runInContext('fitCanvas({width:1404,height:1872,offset_x:702,offset_y:0},[-100,-30,1500,2100])',context);
+ assert.equal(result.offset_x,802);assert.equal(result.offset_y,30);assert.equal(result.width,1600);assert.equal(result.height,2130);
+ const crop=vm.runInContext('canvasCrop({width:1600,height:2130,offset_x:802,offset_y:30},[100,50,800,1000])',context);
+ assert.equal(crop.width,800);assert.equal(crop.offset_x,702);assert.equal(crop.offset_y,-20);
+});

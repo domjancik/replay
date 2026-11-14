@@ -1,3 +1,13 @@
+export function pageInkBounds(page){
+ const visible=new Set(page.groups.filter(g=>g.visible).map(g=>g.group_id));
+   const order=new Set(page.replay_order);let bounds=null;
+   for(const stroke of page.strokes){if(!visible.has(stroke.group_id)||!order.has(stroke.stroke_id))continue;
+    for(const p of stroke.points){const pad=Math.max(8,Math.abs(p.width||0));
+     if(!bounds)bounds=[p.x-pad,p.y-pad,p.x+pad,p.y+pad];
+     else{bounds[0]=Math.min(bounds[0],p.x-pad);bounds[1]=Math.min(bounds[1],p.y-pad);bounds[2]=Math.max(bounds[2],p.x+pad);bounds[3]=Math.max(bounds[3],p.y+pad);}
+    }
+   }return bounds;
+}
 export async function deleteSavedNotebook(db,docs,jobs,id){
  if(!docs.some(doc=>doc.id===id))throw Error('Saved notebook not found');
  if(jobs.some(job=>job.document_id===id&&['queued','running'].includes(job.state)))throw Error('Cancel active replays for this notebook before deleting it.');
@@ -120,6 +130,10 @@ export async function createBrowserApi(){
    jobs.unshift(job);await saveJobs();pump().catch(error=>{console.error('Queue storage failure');});return job;
   }
   if(url.pathname==='/api/cancel'){const job=jobs.find(j=>j.id===body.id);if(job&&['queued','running'].includes(job.state)){const active=job.state==='running';job.state='cancelled';if(active)activeWorker?.stop();await saveJobs();}return {};}
+  if(url.pathname==='/api/canvas-bounds'){
+   const prepared=await prepare({...body,settings:{...body.settings,allow_clipping:true}});
+   return {bounds:pageInkBounds(prepared.request.page)};
+  }
   if(url.pathname==='/api/page-preview'){
    if(!body)return previews.get(url.searchParams.get('id'));
    const id=JSON.stringify(body);if(previews.has(id))return previews.get(id);
