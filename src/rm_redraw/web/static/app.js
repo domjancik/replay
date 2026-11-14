@@ -282,12 +282,14 @@ function observeUsbPreviews(){
   if(!usbCompanion || typeof IntersectionObserver==='undefined')return;
   const generation=usbBrowseGeneration,client=usbCompanion;
   usbPreviewObserver=new IntersectionObserver(entries=>{
-    for(const entry of entries)if(entry.isIntersecting){
-      usbPreviewObserver.unobserve(entry.target);usbPreviewQueue.push(entry.target);
+    if(generation!==usbBrowseGeneration)return;
+    for(const entry of entries){
+      if(entry.isIntersecting){if(!usbPreviewQueue.includes(entry.target))usbPreviewQueue.push(entry.target);}
+      else usbPreviewQueue=usbPreviewQueue.filter(slot=>slot!==entry.target);
     }
     usbPreviewTask=usbPreviewTask.then(async()=>{
       while(usbPreviewQueue.length && generation===usbBrowseGeneration && !usbBusy){
-        const slot=usbPreviewQueue.shift(),label=slot.children[0];label.textContent='Loading preview…';
+        const slot=usbPreviewQueue.shift(),label=slot.children[0];usbPreviewObserver.unobserve(slot);label.textContent='Loading preview…';
         try{
           const bytes=await client.thumbnail(slot.dataset.usbId);
           if(generation!==usbBrowseGeneration)return;
@@ -563,6 +565,7 @@ async function processThumbnailQueue(){
   }
 }
 function setLibrarySource(source){
+  if(source!=='tablet')clearUsbPreviews();
   const cloud=source==='cloud',tablet=source==='tablet';queueView=source==='queue';
   $('library-view-title').textContent=cloud?'Cloud notebooks':tablet?'Connected tablet':queueView?'Replay queue':'Saved notebooks';
   $('queue-controls').hidden=!queueView;

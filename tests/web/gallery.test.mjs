@@ -191,3 +191,19 @@ test('USB listings use gallery cards and collapse connection setup',async()=>{
  assert.equal(el('usb-items').children[1].children[2].textContent,'Import');
  assert.equal(el('usb-setup').hidden,true);
 });
+
+
+test('USB previews read only visible cards and skip queued cards scrolled away',async()=>{
+ const {context}=fixture();let observer,finish;const calls=[];
+ const slots=[new Element(),new Element()];
+ slots.forEach((slot,i)=>{slot.dataset.usbId=String(i);slot.append(new Element());});
+ context.IntersectionObserver=class{constructor(callback){observer=callback;}observe(){}unobserve(){}disconnect(){}};
+ context.document.querySelectorAll=()=>slots;
+ context.thumbnail=async id=>{calls.push(id);await new Promise(resolve=>{finish=resolve;});return null;};
+ vm.runInContext('usbCompanion={thumbnail};observeUsbPreviews()',context);
+ assert.equal(calls.length,0);
+ observer([{target:slots[0],isIntersecting:true},{target:slots[1],isIntersecting:true}]);
+ await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls,['0']);
+ observer([{target:slots[1],isIntersecting:false}]);finish();
+ await vm.runInContext('usbPreviewTask',context);assert.deepEqual(calls,['0']);
+});

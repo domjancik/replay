@@ -8,7 +8,7 @@ export function createUsbCompanion({fetchImpl=globalThis.fetch}={}){
   async function read(path,binary=false){
     if(!key)throw new Error('Connect the USB companion first.');
     const current=generation,controller=new AbortController();active.add(controller);
-    const timeout=setTimeout(()=>controller.abort(),140000);
+    const timeout=setTimeout(()=>controller.abort(),binary==='png'?10000:140000);
     try{
       const response=await fetchImpl(endpoint+path,{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',targetAddressSpace:'loopback',headers:{'X-Replay-USB-Token':key},signal:controller.signal});
       if(!response.ok){const data=await response.json();throw new Error(data.error || 'USB companion request failed.');}
@@ -21,7 +21,7 @@ export function createUsbCompanion({fetchImpl=globalThis.fetch}={}){
       if(!binary)return JSON.parse(new TextDecoder().decode(bytes));
       if(binary==='png'){
         const view=new DataView(bytes.buffer);
-        if(bytes.length<24 || bytes[0]!==137 || bytes[1]!==80 || bytes[2]!==78 || bytes[3]!==71 || view.getUint32(12)!==0x49484452)throw new Error('Invalid tablet thumbnail');
+        if(bytes.length<24 || ![137,80,78,71,13,10,26,10].every((n,i)=>bytes[i]===n) || view.getUint32(12)!==0x49484452)throw new Error('Invalid tablet thumbnail');
         const w=view.getUint32(16),h=view.getUint32(20);if(!w||!h||w>4096||h>4096||w*h>4194304)throw new Error('Oversized tablet thumbnail');
         return bytes;
       }

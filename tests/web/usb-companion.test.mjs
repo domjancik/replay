@@ -35,3 +35,11 @@ test('optional thumbnails support old companions and reject invalid images',asyn
  supports=true;await client.connect('a'.repeat(43));await assert.rejects(()=>client.thumbnail(id),/Invalid tablet thumbnail/);
  await assert.rejects(()=>client.thumbnail('../bad'),/Invalid notebook/);
 });
+
+
+test('valid PNG thumbnail is returned as bytes without notebook downloads',async()=>{
+ const png=new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64'));
+ const paths=[];const client=createUsbCompanion({fetchImpl:async url=>{paths.push(url);return url.endsWith('/status')?new Response('{"version":1,"read_only":true,"thumbnails":true}'):new Response(png);}});
+ await client.connect('a'.repeat(43));assert.deepEqual(await client.thumbnail('12345678-1234-1234-1234-123456789abc'),png);
+ assert.equal(paths.length,2);assert.ok(paths[1].includes('/thumbnail?id='));
+});

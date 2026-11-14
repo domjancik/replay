@@ -126,8 +126,9 @@ def test_thumbnail_route_is_authenticated_and_validates_id(bridge):
 
 
 def test_usb_thumbnail_is_bounded_png():
-    from rm_redraw.acquisition.usb import UsbReader
     import struct
+
+    from rm_redraw.acquisition.usb import UsbReader
 
     reader = UsbReader()
     png = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", 384, 512)
