@@ -147,7 +147,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
         return;
       }
     }
-    if (current === epoch && !importBusy) status(entries.length ? 'Choose a notebook to open.' : 'No notebooks found in this cloud account.');
+    if (current === epoch && !importBusy) status(entries.length ? 'Choose a notebook to save to this browser.' : 'No notebooks found in this cloud account.');
   }
   async function browse(current) {
     renderEntries(data.entries || []);
@@ -229,21 +229,21 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
           const url = URL.createObjectURL(new Blob([bytes], {type: bytes[0] === 255 && bytes[1] === 216 ? 'image/jpeg' : 'image/png'})); previewUrls.add(url);
           image.onerror = () => { image.hidden = true; previewStatus.textContent = 'Preview unavailable'; };
           row.previewReady = true; image.src = url; image.hidden = false; previewStatus.textContent = 'Notebook preview'; preview.hidden = true;
-        } catch { if (renderedEpoch === epoch) previewStatus.textContent = 'Preview unavailable. You can still open this notebook.'; }
+        } catch { if (renderedEpoch === epoch) previewStatus.textContent = 'Preview unavailable. You can still save this notebook.'; }
         finally { previewStatus.setAttribute?.('aria-busy','false'); previewBusy = false; preview.disabled = false; queueMicrotask(pumpPreviews); }
       };
-      const button = document.createElement('button'); button.textContent = 'Open notebook'; button.dataset.import = 'true'; button.disabled = importBusy || (busy && !libraryLoading);
+      const button = document.createElement('button'); button.textContent = 'Save notebook'; button.dataset.import = 'true'; button.disabled = importBusy || (busy && !libraryLoading);
       button.onclick = async () => {
         if (importBusy || (busy && !libraryLoading)) return;
         const generation = epoch; importBusy = true; controls();
-        status('Opening notebook…');
+        status('Saving notebook…');
         try {
         if (generation !== epoch) return;
         const archive = await client.download(entry.id);
         if (generation !== epoch) return;
         await importArchive(archive);
         $('cloud-dialog').hidden=true;
-        if (generation === epoch) status(libraryLoading ? 'Notebook imported. Cloud scan continues…' : 'Notebook imported.');
+        if (generation === epoch) status(libraryLoading ? 'Notebook saved. Cloud scan continues…' : 'Notebook saved.');
         } catch (error) { if (generation === epoch) status(error.message); }
         finally { importBusy = false; controls(); touch(); queueMicrotask(pumpPreviews); }
       };
