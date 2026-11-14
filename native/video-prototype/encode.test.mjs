@@ -108,3 +108,9 @@ test('fractional bitrate estimates become positive integers for capability check
   await createReplayEncoder(mocked)({...config,frames:[new Uint8Array(config.width*config.height*4)]});
   assert.equal(checks,2);
 });
+
+test('long videos have no fixed duration cap',async()=>{
+ const {createReplayEncoder}=await importEncoder();const mocked=runtime('avc');
+ await assert.rejects(createReplayEncoder(mocked)({...settings,frameCount:3600,frames:[]}),/3600 frames/);
+ assert.ok(mocked.events.includes('start'));
+});

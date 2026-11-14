@@ -143,7 +143,7 @@ async function upload(input, path) {
 }
 function readDuration(){
   const seconds=Number($('seconds').value);
-  if(!Number.isFinite(seconds)||seconds<2||seconds>60)throw new Error('Choose a duration from 2 to 60 seconds.');
+  if(!Number.isFinite(seconds)||seconds<2)throw new Error('Choose a duration of at least 2 seconds.');
   return seconds;
 }
 async function generate() {
@@ -190,6 +190,8 @@ function showJob(job) {
   if(!job)return;
   $('view-title').textContent=`${job.name} · page ${job.page}`;
   $('view-state').textContent=job.state.toUpperCase();
+  $('cancel-active').hidden=!['queued','running'].includes(job.state);
+  $('cancel-active').onclick=safely(async()=>{await api('/api/cancel',{id:job.id});await poll();});
   $('empty').hidden=true;$('notebook-preview').hidden=true;$('notebook-preview-label').hidden=true;
   const complete=job.state==='complete';
   $('video').hidden=!complete;$('downloads').hidden=!complete;
@@ -616,7 +618,10 @@ function setupGallery(){
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
   for(const [id,delta] of [['page-prev',-1],['page-next',1]])$(id).onclick=safely(async()=>{const pages=[...$('page').options].filter(p=>!p.disabled);const i=pages.findIndex(p=>p.value===$('page').value);const next=pages[i+delta];if(next){$('page').value=next.value;await selectPage();}});
   setupSettingPicker('ordering','ordering-buttons');setupSettingPicker('fps','fps-buttons');setupSettingPicker('output-width','output-width-buttons');
-  const syncDuration=()=>$('duration-buttons').querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.seconds)===Number($('seconds').value))));
+  const syncDuration=()=>{
+    $('duration-warning').hidden=!(Number($('seconds').value)>120);
+    $('duration-buttons').querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.seconds)===Number($('seconds').value))));
+  };
   $('seconds').oninput=syncDuration;
   $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('seconds').value=button.dataset.seconds;syncDuration();});
 }

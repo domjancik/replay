@@ -36,7 +36,6 @@ pub fn schedule(bytes: &[u8]) -> Result<Vec<u8>, String> {
         || r.fps > 30
         || !r.seconds.is_finite()
         || r.seconds <= 0.
-        || r.seconds > 60.
         || !matches!(r.ordering.as_str(), "entry" | "layer")
     {
         return Err("Invalid replay timing".into());
@@ -90,7 +89,11 @@ pub fn schedule(bytes: &[u8]) -> Result<Vec<u8>, String> {
     if order.iter().collect::<HashSet<_>>().len() != order.len() {
         return Err("Duplicate replay entry".into());
     }
-    let count = (r.fps as f64 * r.seconds).ceil() as usize;
+    let estimated = (r.fps as f64 * r.seconds).ceil();
+    if !estimated.is_finite() || estimated > (usize::MAX - r.fps) as f64 {
+        return Err("Replay schedule exceeds browser memory budget".into());
+    }
+    let count = estimated as usize;
     if order.len().saturating_mul(count + r.fps) > 4_000_000 {
         return Err("Replay schedule exceeds browser memory budget".into());
     }
@@ -118,4 +121,14 @@ pub fn schedule(bytes: &[u8]) -> Result<Vec<u8>, String> {
         return Err("Replay schedule exceeds output limit".into());
     }
     Ok(json)
+}
+
+#[cfg(test)]
+mod duration_tests {
+    #[test]
+    fn schedules_more_than_two_minutes() {
+        let input = br#"{"fps":6,"seconds":180,"ordering":"layer","page":{"groups":[{"group_id":"g","visible":true}],"strokes":[{"stroke_id":"s","group_id":"g"}],"replay_order":["s"],"compositing_order":["g"]}}"#;
+        let frames: serde_json::Value = serde_json::from_slice(&super::schedule(input).unwrap()).unwrap();
+        assert_eq!(frames.as_array().unwrap().len(), 1086);
+    }
 }

@@ -231,8 +231,14 @@ test('frame rate and resolution pickers update render settings and selected stat
 
 test('custom duration accepts fractional seconds and rejects values outside the supported range',()=>{
  const {el,context}=fixture();
- el('seconds').value='17.5';assert.equal(vm.runInContext('readDuration()',context),17.5);
- for(const value of ['', '0', '1.5', '-2', '61', 'abc']){
+ el('seconds').value='180.5';assert.equal(vm.runInContext('readDuration()',context),180.5);
+ for(const value of ['', '0', '1.5', '-2', 'abc']){
   el('seconds').value=value;assert.throws(()=>vm.runInContext('readDuration()',context),/duration/i);
  }
+});
+
+test('duration warning appears only above two minutes',()=>{
+ const {el}=fixture();
+ el('seconds').value='120';el('seconds').oninput();assert.equal(el('duration-warning').hidden,true);
+ el('seconds').value='121';el('seconds').oninput();assert.equal(el('duration-warning').hidden,false);
 });

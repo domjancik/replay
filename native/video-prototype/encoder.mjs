@@ -51,8 +51,8 @@ export function createReplayEncoder(runtime) {
       throw new RangeError('Use even video dimensions within a 12-megapixel budget.');
     }
     if (!Number.isInteger(fps) || fps < 1 || fps > 30
-        || !Number.isInteger(frameCount) || frameCount < 1 || frameCount > 120 * fps) {
-      throw new RangeError('Use 1–30 fps and a video duration of at most 120 seconds.');
+        || !Number.isSafeInteger(frameCount) || frameCount < 1) {
+      throw new RangeError('Use 1–30 fps and a positive safe integer frame count.');
     }
     if (!['auto', 'mp4', 'webm'].includes(container)) {
       throw new RangeError('Choose automatic, MP4 or WebM output.');

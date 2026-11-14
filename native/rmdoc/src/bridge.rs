@@ -25,7 +25,7 @@ pub fn settings(v: &Value) -> Result<Value, String> {
     if o * oh > 12_000_000. || oh > 8192. {
         return Err("Output exceeds browser dimensions; reduce output width".into());
     }
-    let seconds = number(v, "seconds", 2., 60., false)?;
+    let seconds = number(v, "seconds", 2., f64::MAX, false)?;
     let fps = number(v, "fps", 6., 30., true)?;
     let ordering = v.get("ordering").and_then(Value::as_str).unwrap_or("layer");
     if !matches!(ordering, "layer" | "entry") || v.get("ordering").is_some_and(|x| !x.is_string()) {
