@@ -22,3 +22,16 @@ test('errors and invalid archives are actionable without echoing secrets',async(
  await assert.rejects(()=>client.download('../../etc'),/Invalid notebook/);
  await assert.rejects(()=>client.download('12345678-1234-1234-1234-123456789abc'),/archive/);
 });
+
+
+test('optional thumbnails support old companions and reject invalid images',async()=>{
+ let supports=false,reads=0;
+ const client=createUsbCompanion({fetchImpl:async(url)=>{
+  if(url.endsWith('/status'))return new Response(JSON.stringify({version:1,read_only:true,thumbnails:supports}));
+  reads++;return new Response('not png');
+ }});
+ const id='12345678-1234-1234-1234-123456789abc';
+ await client.connect('a'.repeat(43));assert.equal(await client.thumbnail(id),null);assert.equal(reads,0);
+ supports=true;await client.connect('a'.repeat(43));await assert.rejects(()=>client.thumbnail(id),/Invalid tablet thumbnail/);
+ await assert.rejects(()=>client.thumbnail('../bad'),/Invalid notebook/);
+});

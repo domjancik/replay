@@ -104,13 +104,18 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if any(len(values) != 1 for values in query.values()):
                 raise ValueError("Duplicate query parameters")
             if url.path == "/status" and not query:
-                self.reply(200, b'{"version":1,"read_only":true}')
+                self.reply(200, b'{"version":1,"read_only":true,"thumbnails":true}')
             elif url.path == "/documents" and set(query).issubset({"folder"}):
                 folder = query.get("folder", [""])[0]
                 if folder and not UUID_RE.fullmatch(folder):
                     raise ValueError("Invalid folder ID")
                 self.server.report("Reading tablet folders…")
                 self.reply(200, json.dumps(self.server.reader.documents(folder)).encode())
+            elif url.path == "/thumbnail" and set(query) == {"id"}:
+                document = query["id"][0]
+                if not UUID_RE.fullmatch(document):
+                    raise ValueError("Invalid notebook ID")
+                self.reply(200, self.server.reader.thumbnail(document), "image/png")
             elif url.path == "/notebook" and set(query) == {"id"}:
                 document = query["id"][0]
                 if not UUID_RE.fullmatch(document):

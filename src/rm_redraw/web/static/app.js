@@ -269,35 +269,77 @@ async function poll() {
   updateGalleryImages();
   showJob(jobs.find(j=>j.id===selectedJob));
 }
+let usbBrowseGeneration=0,usbPreviewObserver=null,usbPreviewTask=Promise.resolve(),usbPreviewQueue=[];
+const usbPreviewUrls=new Set();
+function clearUsbPreviews(){
+  usbBrowseGeneration++;usbPreviewObserver?.disconnect();usbPreviewQueue=[];
+  for(const url of usbPreviewUrls)URL.revokeObjectURL(url);usbPreviewUrls.clear();
+}
+function setUsbConnected(connected){
+  $('usb-setup').hidden=connected;$('usb-connected').hidden=!connected;
+}
+function observeUsbPreviews(){
+  if(!usbCompanion || typeof IntersectionObserver==='undefined')return;
+  const generation=usbBrowseGeneration,client=usbCompanion;
+  usbPreviewObserver=new IntersectionObserver(entries=>{
+    for(const entry of entries)if(entry.isIntersecting){
+      usbPreviewObserver.unobserve(entry.target);usbPreviewQueue.push(entry.target);
+    }
+    usbPreviewTask=usbPreviewTask.then(async()=>{
+      while(usbPreviewQueue.length && generation===usbBrowseGeneration && !usbBusy){
+        const slot=usbPreviewQueue.shift(),label=slot.children[0];label.textContent='Loading preview…';
+        try{
+          const bytes=await client.thumbnail(slot.dataset.usbId);
+          if(generation!==usbBrowseGeneration)return;
+          if(!bytes){label.textContent='Preview requires companion v0.3.0';continue;}
+          const image=document.createElement('img');image.alt='Tablet preview · last opened page';
+          const url=URL.createObjectURL(new Blob([bytes],{type:'image/png'}));usbPreviewUrls.add(url);
+          image.src=url;image.onerror=()=>{image.hidden=true;label.hidden=false;label.textContent='Preview unavailable';};
+          label.hidden=true;slot.append(image);
+        }catch{if(generation===usbBrowseGeneration)label.textContent='Preview unavailable';}
+      }
+    });
+  },{rootMargin:'0px'});
+  document.querySelectorAll('[data-usb-id]').forEach(slot=>usbPreviewObserver.observe(slot));
+}
 async function browse(folder='', label='Tablet') {
   if(usbBusy)return;
+  clearUsbPreviews();const generation=usbBrowseGeneration;
   const companion=!!$('usb-companion-use').checked;
+  await usbPreviewTask;
+  if(generation!==usbBrowseGeneration || companion!==!!$('usb-companion-use').checked)return;
   $('usb-status').textContent='Connecting to USB web interface…';$('usb-items').replaceChildren();
   try{
     const entries=$('usb-companion-use').checked
       ? await (usbCompanion || {documents:async()=>{throw new Error('Connect the USB companion first');}}).documents(folder)
       : await api('/api/usb?folder='+encodeURIComponent(folder));
-    if(companion!==!!$('usb-companion-use').checked)return;
+    if(generation!==usbBrowseGeneration || companion!==!!$('usb-companion-use').checked)return;
+    setUsbConnected(true);
     $('usb-location').textContent=label;$('usb-status').textContent='Choose a folder or import a notebook.';
     for(const entry of entries.sort((a,b)=>Number(b.folder)-Number(a.folder)||a.name.localeCompare(b.name))){
-      const row=document.createElement('div');row.className='usb-item';
-      const name=document.createElement('span');name.textContent=(entry.folder?'▱ ':'')+entry.name;
+      const row=document.createElement('div');row.className='notebook-card usb-card';
+      const name=document.createElement('span');name.className='notebook-name';name.textContent=entry.name;
+      const cover=document.createElement('span');cover.className='notebook-cover usb-cover';
+      const placeholder=document.createElement('span');placeholder.className='thumbnail-status';placeholder.textContent=entry.folder?'▱ Folder':companion?'Preview not loaded':'Preview available after import';cover.append(placeholder);
+      if(!entry.folder && companion)cover.dataset.usbId=entry.id;
       const action=document.createElement('button');action.textContent=entry.folder?'Open':'Import';
       action.disabled=!!(!entry.folder && entry.file_type && entry.file_type!=='notebook');
       action.dataset.unsupported=String(action.disabled);
       action.onclick=async()=>{
         if(usbBusy)return;
         if(entry.folder){await browse(entry.id,entry.name);return;}
-        usbBusy=true;$('usb-companion-use').disabled=true;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=true);
+        usbBusy=true;usbPreviewQueue=[];await usbPreviewTask;$('usb-companion-use').disabled=true;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=true);
         $('usb-status').textContent='Saving notebook and verifying two raw reads… This can take a minute.';
         try{const result=$('usb-companion-use').checked
           ? await api('/api/upload',await usbCompanion.download(entry.id),true)
           : await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);setLibrarySource('local');notice('Notebook saved locally. Choose a page to animate.');}
         catch(error){$('usb-status').textContent=error.message+($('include-pdf').checked?' Try without the PDF for pages without text anchors. Any downloaded raw data is retained locally.':'');}
         finally{usbBusy=false;$('usb-companion-use').disabled=false;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=b.dataset.unsupported==='true');}
-      };row.append(name,action);$('usb-items').append(row);
+      };action.className='quiet usb-card-action';row.append(cover,name,action);$('usb-items').append(row);
     }
-  }catch(error){if(companion!==!!$('usb-companion-use').checked)return;$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
+    observeUsbPreviews();
+    if(!entries.length)$('usb-status').textContent='This folder is empty.';
+  }catch(error){if(generation!==usbBrowseGeneration || companion!==!!$('usb-companion-use').checked)return;setUsbConnected(false);$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
 }
 let cropImage=null, cropRect=null, cropStart=null, exportSource=null;
 function drawCrop(){
@@ -552,7 +594,9 @@ function setupGallery(){
 
 function setupUsbCompanion(){
   $('usb-companion-origin').textContent=location.origin;
+  $('usb-settings-toggle').onclick=()=>{$('usb-setup').hidden=!$('usb-setup').hidden;};
   $('usb-companion-use').onchange=()=>{
+    clearUsbPreviews();setUsbConnected(false);
     const enabled=$('usb-companion-use').checked;
     $('usb-companion-settings').hidden=!enabled;
     $('include-pdf').disabled=enabled;if(enabled)$('include-pdf').checked=false;
@@ -566,9 +610,9 @@ function setupUsbCompanion(){
       usbCompanion?.disconnect();usbCompanion=createUsbCompanion();
       const key=$('usb-companion-key').value.trim();$('usb-companion-key').value='';
       await usbCompanion.connect(key);await browse();
-    }catch(error){$('usb-status').textContent=error.message;}
+    }catch(error){usbCompanion?.disconnect();usbCompanion=null;setUsbConnected(false);$('usb-status').textContent=error.message;}
     finally{$('usb-companion-connect').disabled=false;}
   };
-  $('usb-companion-disconnect').onclick=()=>{usbCompanion?.disconnect();usbCompanion=null;$('usb-items').replaceChildren();$('usb-status').textContent='Companion disconnected from this tab.';};
+  $('usb-companion-disconnect').onclick=()=>{clearUsbPreviews();setUsbConnected(false);usbCompanion?.disconnect();usbCompanion=null;$('usb-items').replaceChildren();$('usb-status').textContent='Companion disconnected from this tab.';};
   window.addEventListener('pagehide',()=>usbCompanion?.disconnect());
 }

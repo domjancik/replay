@@ -20,11 +20,23 @@ class UsbReader:
         self.lock = threading.Lock()
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
-    def _get(self, route: str) -> bytes:
-        with self.opener.open("http://10.11.99.1" + route, timeout=60) as response:
-            data = response.read(MAX_BYTES + 1)
-        if len(data) > MAX_BYTES:
-            raise ValueError("USB response exceeds 128 MiB")
+    def _get(self, route: str, *, limit: int = MAX_BYTES, timeout: int = 60) -> bytes:
+        with self.opener.open("http://10.11.99.1" + route, timeout=timeout) as response:
+            data = response.read(limit + 1)
+        if len(data) > limit:
+            raise ValueError("USB response exceeds size limit")
+        return data
+
+    def thumbnail(self, document_id: str) -> bytes:
+        if not UUID_RE.fullmatch(document_id):
+            raise ValueError("Invalid document UUID")
+        with self.lock:
+            data = self._get(f"/thumbnail/{document_id}", limit=4 * 1024 * 1024, timeout=5)
+        if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+            raise ValueError("Tablet thumbnail is not PNG")
+        width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+        if not (0 < width <= 4096 and 0 < height <= 4096 and width * height <= 4_194_304):
+            raise ValueError("Tablet thumbnail dimensions exceed limit")
         return data
 
     def documents(self, folder: str = "") -> list[dict]:

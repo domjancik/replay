@@ -116,3 +116,28 @@ def test_busy_bridge_rejects_before_tablet_access(bridge):
         server.slot.release()
     assert request(bridge, "/documents", extra={"X-Replay-USB-Token": "wrong"})[0] == 403
     assert calls == []
+
+
+def test_thumbnail_route_is_authenticated_and_validates_id(bridge):
+    bridge[0].reader.thumbnail = lambda doc: b"png-test"
+    assert request(bridge, "/thumbnail?id=" + DOC)[2] == b"png-test"
+    assert request(bridge, "/thumbnail?id=" + DOC, token=False)[0] == 403
+    assert request(bridge, "/thumbnail?id=../bad")[0] == 400
+
+
+def test_usb_thumbnail_is_bounded_png():
+    from rm_redraw.acquisition.usb import UsbReader
+    import struct
+
+    reader = UsbReader()
+    png = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", 384, 512)
+    reader._get = lambda route, **kwargs: png
+    assert reader.thumbnail(DOC) == png
+    with pytest.raises(ValueError):
+        reader.thumbnail("../bad")
+    reader._get = lambda route, **kwargs: b"not an image"
+    with pytest.raises(ValueError):
+        reader.thumbnail(DOC)
+    reader._get = lambda route, **kwargs: png[:16] + struct.pack(">II", 100000, 100000)
+    with pytest.raises(ValueError):
+        reader.thumbnail(DOC)

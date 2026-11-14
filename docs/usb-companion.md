@@ -8,13 +8,13 @@ Unsigned preview bundles, built and startup-tested on native CI runners. No Pyth
 
 | Platform | Download | Minimum build baseline |
 | --- | --- | --- |
-| Windows x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-windows-x64.zip) | Windows 10/11 x64 |
-| Mac · Apple Silicon | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-macos-arm64.zip) | macOS 15, Apple Silicon |
-| Mac · Intel | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-macos-x64.zip) | macOS 15, Intel |
-| Linux x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-linux-x64.tar.gz) | Ubuntu 22.04 / glibc 2.35, X11/XWayland |
-| Linux ARM64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-linux-arm64.tar.gz) | Ubuntu 24.04 / glibc 2.39, X11/XWayland |
+| Windows x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-windows-x64.zip) | Windows 10/11 x64 |
+| Mac · Apple Silicon | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-macos-arm64.zip) | macOS 15, Apple Silicon |
+| Mac · Intel | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-macos-x64.zip) | macOS 15, Intel |
+| Linux x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-linux-x64.tar.gz) | Ubuntu 22.04 / glibc 2.35, X11/XWayland |
+| Linux ARM64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-linux-arm64.tar.gz) | Ubuntu 24.04 / glibc 2.39, X11/XWayland |
 
-[Release notes and per-download SHA-256 checksums](https://github.com/domjancik/replay/releases/tag/companion-v0.2.0).
+[Release notes and per-download SHA-256 checksums](https://github.com/domjancik/replay/releases/tag/companion-v0.3.0).
 
 ### Open the companion
 
@@ -36,6 +36,12 @@ The browser may ask for local-network/loopback permission. Browser support varie
 
 The current bridge imports raw ink only. Text-anchored pages may need a matching PDF attached separately. The local app's existing direct USB backend retains its paired PDF workflow. Imported bytes go through the existing file-import consumer: in the current local app that saves the notebook on this computer. The standalone client module returns bytes to its caller and does not upload them to a hosted server.
 
+## Tablet gallery previews
+
+Companion v0.3.0 adds native PNG previews, requested serially only for visible notebook cards. The tablet may return the last-opened page rather than page 1, or no usable thumbnail. The UI shows a placeholder on failure; imports still work. Older companions remain compatible but do not provide previews. Requests are bounded to 4 MiB, five seconds of upstream socket timeout, and limited PNG dimensions. No whole notebook download is performed for a preview.
+
+Connection setup collapses after a successful listing; use Connection settings to reopen it, or Disconnect to clear the session and previews.
+
 ## Troubleshooting
 
 - Keep the companion running; check the allowed origin matches the website exactly (`https://replay.domj.net` for the public app).
@@ -49,7 +55,7 @@ The current bridge imports raw ink only. Text-anchored pages may need a matching
 - Binds only `127.0.0.1:8786`; validates Host against that exact address/port to reject DNS rebinding.
 - Allows one explicitly entered origin, echoed exactly in CORS. No wildcard, cookies or credentials-in-URLs.
 - Every read requires a fresh 256-bit random connection key. Keys exist only in companion/browser memory and are regenerated on Start. The Copy button uses the clipboard; avoid pasting the key elsewhere.
-- Only authenticated `GET /status`, `/documents?folder=UUID` and `/notebook?id=UUID` exist. Preflight advertises only GET and the key header. No filesystem, arbitrary URL, device-write, SSH or remote command endpoints.
+- Only authenticated `GET /status`, `/documents?folder=UUID` , `/notebook?id=UUID` and optional `/thumbnail?id=UUID` exist. Preflight advertises only GET and the key header. No filesystem, arbitrary URL, device-write, SSH or remote command endpoints.
 - Reuses the fixed `10.11.99.1` reader, rejects redirects, bypasses system proxies, bounds response/archive size and serializes USB work. A raw import compares member hashes from two reads. No raw files, cloud credentials or pairing data are persisted by the bridge.
 - Closing/disconnecting the browser aborts client requests. Stop closes the listener; active tablet reads have bounded transport timeouts. Requests do not extend the listener beyond the visible desktop app lifetime.
 - This is an unsigned development build, not a signed installer or a background service. macOS builds are not Developer ID signed or notarized.

@@ -64,6 +64,7 @@ test('cloud gallery view hides local notebooks and keeps a visible unlock action
 test('switching to companion ignores a stale direct USB listing',async()=>{
  const {context,el}=fixture();
  const pending=vm.runInContext("api=()=>new Promise(resolve=>{globalThis.resolveUsb=resolve});browse();",context);
+ await new Promise(resolve=>setImmediate(resolve));
  el('usb-companion-use').checked=true;el('usb-status').textContent='Connect companion';
  context.resolveUsb([]);await pending;
  assert.equal(el('usb-status').textContent,'Connect companion');
@@ -166,4 +167,27 @@ test('file import returns from a remote source to saved notebooks',async()=>{
  await vm.runInContext("upload({files:[{size:10}],value:'file'},'/api/upload')",context);
  assert.equal(el('local-library').hidden,false);
  assert.equal(el('cloud-library').hidden,true);
+});
+
+
+test('connected USB collapses setup and can restore it on disconnect',()=>{
+ const {el,context}=fixture();
+ vm.runInContext('setUsbConnected(true)',context);
+ assert.equal(el('usb-setup').hidden,true);
+ assert.equal(el('usb-connected').hidden,false);
+ vm.runInContext('setUsbConnected(false)',context);
+ assert.equal(el('usb-setup').hidden,false);
+ assert.equal(el('usb-connected').hidden,true);
+});
+
+
+test('USB listings use gallery cards and collapse connection setup',async()=>{
+ const {el,context}=fixture();
+ vm.runInContext("api=async()=>[{id:'folder',name:'Drawings',folder:true},{id:'doc',name:'Sketch',folder:false,file_type:'notebook'}]",context);
+ await vm.runInContext('browse()',context);
+ assert.equal(el('usb-items').children.length,2);
+ assert.equal(el('usb-items').children[0].className,'notebook-card usb-card');
+ assert.equal(el('usb-items').children[0].children[2].textContent,'Open');
+ assert.equal(el('usb-items').children[1].children[2].textContent,'Import');
+ assert.equal(el('usb-setup').hidden,true);
 });
