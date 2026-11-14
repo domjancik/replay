@@ -270,3 +270,19 @@ test('final image works without video encoding support and restores its mode',()
  assert.equal(el('generate').disabled,true);
  assert.equal(el('fps').disabled,false);
 });
+
+test('image mode hides timing selectors and output toggle restores them',()=>{
+ const {el,context}=fixture();
+ vm.runInContext(`capabilities={ffmpeg:true};$('output-kind').value='image';syncOutputKind();`,context);
+ for(const id of ['duration-row','ordering-picker','fps-picker'])assert.equal(el(id).hidden,true);
+ vm.runInContext(`$('output-kind').value='video';syncOutputKind();`,context);
+ for(const id of ['duration-row','ordering-picker','fps-picker'])assert.equal(el(id).hidden,false);
+});
+test('custom duration input is visible only when Custom is selected',()=>{
+ const {el,context}=fixture();
+ vm.runInContext(`chooseDuration('12')`,context);assert.equal(el('custom-duration').hidden,true);
+ vm.runInContext(`chooseDuration('custom')`,context);assert.equal(el('custom-duration').hidden,false);
+ el('seconds').value='12';el('seconds').oninput();assert.equal(el('custom-duration').hidden,false);
+ vm.runInContext(`chooseDuration('24')`,context);assert.equal(el('custom-duration').hidden,true);assert.equal(el('seconds').value,'24');
+ vm.runInContext(`restoreReplaySettings({seconds:75})`,context);assert.equal(el('custom-duration').hidden,false);
+});

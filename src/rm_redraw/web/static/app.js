@@ -257,7 +257,7 @@ function restoreReplaySettings(settings){
   $('rotation').value=String(settings.rotation||0);
   $('ordering').value=settings.ordering||'layer';
   resetClipping();$('allow-clipping').checked=settings.allow_clipping===true;
-  $('seconds').oninput?.();
+  customDuration=![6,12,24,45].includes(Number($('seconds').value));syncDuration();
   for(const id of ['fps','ordering','output-width','rotation'])$(id).onchange?.();
   canvasSummary();
 }
@@ -727,8 +727,23 @@ function setLibrarySource(source){
   $('notebook-search').hidden=cloud||tablet||queueView;$('gallery-grid').hidden=cloud||tablet||queueView;$('gallery-list').hidden=cloud||tablet||queueView;
   renderJobs();
 }
+let customDuration=false;
+function syncDuration(){
+  $('custom-duration').hidden=!customDuration;
+  $('duration-warning').hidden=$('output-kind').value==='image'||!(Number($('seconds').value)>120);
+  $('duration-buttons').querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(customDuration?button.dataset.seconds==='custom':Number(button.dataset.seconds)===Number($('seconds').value))));
+}
+function chooseDuration(value){
+  customDuration=value==='custom';
+  if(!customDuration)$('seconds').value=value;
+  syncDuration();
+  if(customDuration)$('seconds').focus?.();
+}
 function syncOutputKind(){
   const still=$('output-kind').value==='image';
+  for(const id of ['duration-row','ordering-picker','fps-picker'])$(id).hidden=still;
+  $('output-kind-buttons').querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.value===$('output-kind').value)));
+  syncDuration();
   for(const id of ['seconds','fps','ordering'])$(id).disabled=still;
   for(const id of ['duration-buttons','fps-buttons','ordering-buttons'])$(id).querySelectorAll('button').forEach(b=>b.disabled=still);
   $('generate').textContent=still?'Create image':'Create replay';updateGenerateButton();
@@ -736,7 +751,7 @@ function syncOutputKind(){
 function setupSettingPicker(id, buttonsId){
   const select=$(id),buttons=$(buttonsId).querySelectorAll('button');
   const sync=()=>buttons.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.value===select.value)));
-  buttons.forEach(button=>button.onclick=()=>{select.value=button.dataset.value;sync();if(id==='rotation'&&pageReady)requestSelectionPreview(pageRequest);});
+  buttons.forEach(button=>button.onclick=()=>{select.value=button.dataset.value;sync();if(id==='output-kind')syncOutputKind();if(id==='rotation'&&pageReady)requestSelectionPreview(pageRequest);});
   select.onchange=sync;sync();
 }
 function setupGallery(){
@@ -759,15 +774,12 @@ function setupGallery(){
   window.addEventListener('resize',()=>renderGallery());
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
   for(const [id,delta] of [['page-prev',-1],['page-next',1]])$(id).onclick=safely(async()=>{const pages=[...$('page').options].filter(p=>!p.disabled);const i=pages.findIndex(p=>p.value===$('page').value);const next=pages[i+delta];if(next){$('page').value=next.value;await selectPage();}});
-  $('output-kind').onchange=syncOutputKind;
+  setupSettingPicker('output-kind','output-kind-buttons');$('output-kind').onchange=syncOutputKind;
   setupSettingPicker('rotation','rotation-buttons');
   setupSettingPicker('ordering','ordering-buttons');setupSettingPicker('fps','fps-buttons');setupSettingPicker('output-width','output-width-buttons');
-  const syncDuration=()=>{
-    $('duration-warning').hidden=!(Number($('seconds').value)>120);
-    $('duration-buttons').querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.seconds)===Number($('seconds').value))));
-  };
   $('seconds').oninput=syncDuration;
-  $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('seconds').value=button.dataset.seconds;syncDuration();});
+  $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>chooseDuration(button.dataset.seconds));
+  syncDuration();
 }
 
 function setupUsbCompanion(){
