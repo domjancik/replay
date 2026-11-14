@@ -70,13 +70,14 @@ export async function createBrowserApi(){
    const rotation=body.settings.rotation??0;
    if(![0,90,180,270].includes(rotation))throw Error('Invalid page rotation');
    result.config.rotation=rotation;
+   result.config.output_kind=body.settings.output_kind||'video';
    if(rotation%180)result.config.viewport=[result.config.viewport[1],result.config.viewport[0]];
    if(anchor_result)result.anchor_evidence=anchor_result.evidence;
    return result;
   }catch(error){if(error.message.includes('outside the selected canvas'))error.code='canvas_clipping';throw error;}
  }
  async function storeResult(job,result){
-  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,input:job.input,source_reference:job.source_reference,crop:job.crop,reverse_speed:job.reverse_speed,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,parser:job.parser,finalEqualsStatic:true})],{type:'application/json'})]]){await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
+  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,input:job.input,source_reference:job.source_reference,crop:job.crop,reverse_speed:job.reverse_speed,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,parser:job.parser,finalEqualsStatic:true})],{type:'application/json'})]]){if(!blob)continue;await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
   job.extension=result.extension;job.frames=job.expected_frames=result.frames;job.state='complete';job.finished=Date.now()/1000;
  }
  async function pump(){
@@ -85,7 +86,7 @@ export async function createBrowserApi(){
    job.state='running';job.started=Date.now()/1000;await saveJobs();
    try{const prepared=await prepare(job.input);if(job.state==='cancelled')continue;
     job.parser=prepared.parser;job.anchor_evidence=prepared.anchor_evidence;job.settings={...prepared.config,viewport:job.crop?job.crop.slice(2):prepared.config.viewport};activeWorker=rpcWorker();
-    const result=await activeWorker.call({op:'render',prepared,crop:job.crop,reverse_speed:job.reverse_speed},p=>{job.frames=p.progress;job.expected_frames=p.total;if(p.image){const key=job.id+'/latest.png';if(urls.has(key))URL.revokeObjectURL(urls.get(key));urls.set(key,URL.createObjectURL(p.image));}});
+    const result=await activeWorker.call({op:'render',still:job.kind==='image',prepared,crop:job.crop,reverse_speed:job.reverse_speed},p=>{job.frames=p.progress;job.expected_frames=p.total;if(p.image){const key=job.id+'/latest.png';if(urls.has(key))URL.revokeObjectURL(urls.get(key));urls.set(key,URL.createObjectURL(p.image));}});
     if(job.state!=='cancelled')await storeResult(job,result);
    }catch(error){if(job.state!=='cancelled'){job.state='failed';job.error=error.message;}}
    finally{activeWorker?.stop();activeWorker=null;await saveJobs();}
@@ -121,16 +122,16 @@ export async function createBrowserApi(){
   if(url.pathname==='/api/jobs'&&!body)return jobs.slice().sort((a,b)=>b.created-a.created);
   if(url.pathname==='/api/jobs'||url.pathname==='/api/export'){
    if(jobs.filter(j=>['queued','running'].includes(j.state)).length>=8)throw Error('Queue is full (8 jobs)');
-   let input=body,crop,reverse_speed=0,kind='replay';
+   let input=body,crop,reverse_speed=0,kind=body.settings?.output_kind==='image'?'image':'replay';
    if(url.pathname==='/api/export'){
-    const original=jobs.find(j=>j.id===body.job&&j.state==='complete'&&j.kind!=='export');if(!original)throw Error('Choose a completed original replay');
+    const original=jobs.find(j=>j.id===body.job&&j.state==='complete'&&j.kind!=='export'&&j.kind!=='image');if(!original)throw Error('Choose a completed original replay');
     input=original.input;crop=body.crop;reverse_speed=body.reverse_speed;kind='export';
     if(!Array.isArray(crop)||crop.length!==4||!crop.every(Number.isInteger)||crop[0]<0||crop[1]<0||crop[2]<2||crop[3]<2||crop[0]+crop[2]>original.settings.viewport[0]||crop[1]+crop[3]>original.settings.viewport[1])throw Error('Crop must lie inside the image');
     crop=crop.map(v=>Math.floor(v/2)*2);
     if(![0,2,4,8].includes(reverse_speed))throw Error('Invalid reverse speed');
    }
    const prepared=await prepare(input),doc=docs.find(d=>d.id===input.document);
-   const job={id:crypto.randomUUID().replaceAll('-',''),document_id:doc.id,page_id:input.page,page:doc.pages.find(p=>p.id===input.page).number,name:doc.name+(kind==='export'?(reverse_speed?' · loop':' · crop'):''),kind,state:'queued',created:Date.now()/1000,frames:0,expected_frames:prepared.frames.length,settings:prepared.config,input:structuredClone(input),source_reference:{document_id:doc.id,page_id:input.page,archive_sha256:doc.sha256,paired_pdf_sha256:doc.pdf_sha256||null,cloud_source:doc.cloud_source||null},crop,reverse_speed};
+   const job={id:crypto.randomUUID().replaceAll('-',''),document_id:doc.id,page_id:input.page,page:doc.pages.find(p=>p.id===input.page).number,name:doc.name+(kind==='export'?(reverse_speed?' · loop':' · crop'):''),kind,state:'queued',created:Date.now()/1000,frames:0,expected_frames:kind==='image'?1:prepared.frames.length,settings:prepared.config,input:structuredClone(input),source_reference:{document_id:doc.id,page_id:input.page,archive_sha256:doc.sha256,paired_pdf_sha256:doc.pdf_sha256||null,cloud_source:doc.cloud_source||null},crop,reverse_speed};
    jobs.unshift(job);await saveJobs();pump().catch(error=>{console.error('Queue storage failure');});return job;
   }
   if(url.pathname==='/api/cancel'){const job=jobs.find(j=>j.id===body.id);if(job&&['queued','running'].includes(job.state)){const active=job.state==='running';job.state='cancelled';if(active)activeWorker?.stop();await saveJobs();}return {};}

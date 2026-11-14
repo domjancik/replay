@@ -257,3 +257,16 @@ test('replay settings restore custom duration, output width, crop offsets and or
  assert.equal(Number(el('seconds').value),180.5);assert.equal(Number(el('output-width').value),2106);
  assert.equal(Number(el('offset-y').value),-45);assert.equal(el('ordering').value,'entry');assert.equal(el('allow-clipping').checked,true);
 });
+
+test('final image works without video encoding support and restores its mode',()=>{
+ const {el,context}=fixture();
+ vm.runInContext(`capabilities={hosted:true,ffmpeg:false};pageReady=true;$('canvas-clipping').hidden=true;$('output-kind').value='image';syncOutputKind();`,context);
+ assert.equal(el('generate').disabled,false);
+ assert.equal(el('generate').textContent,'Create image');
+ assert.equal(el('fps').disabled,true);
+ vm.runInContext(`restoreReplaySettings({output_kind:'image',rotation:90});`,context);
+ assert.equal(el('output-kind').value,'image');
+ vm.runInContext(`$('output-kind').value='video';syncOutputKind();`,context);
+ assert.equal(el('generate').disabled,true);
+ assert.equal(el('fps').disabled,false);
+});

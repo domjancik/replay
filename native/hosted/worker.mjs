@@ -12,6 +12,7 @@ async function execute(data,id){
   const final=rotateFrame(nativeFinal,config.rotation||0);
   const image=await png(final);
   if(data.preview)return {image};
+  if(data.still)return {image,frames:1,extension:'.png'};
   const {encodeReplay}=await import('/encoder.mjs');
   const indices=frames.map((_,i)=>i);
   if(data.reverse_speed){for(let i=Math.max(0,frames.length-config.fps-2);i>=0;i-=data.reverse_speed)indices.push(i);if(indices.at(-1)!==0)indices.push(0);}
@@ -28,7 +29,8 @@ async function execute(data,id){
  }
  const {instantiateReader}=await import('./reader.mjs');reader??=await instantiateReader(await bytes('/rmdoc.wasm'));
  const {raw,...args}=data;const result=reader.execute(raw,args);
- if(data.op==='prepare'){const {instantiateCore}=await import('/core.mjs');anchorCore??=await instantiateCore(await bytes('/replay-core.wasm'));result.frames=anchorCore.match({op:'schedule',page:result.request.page,fps:result.config.fps,seconds:result.config.seconds,ordering:result.config.ordering});}
+ if(data.op==='prepare' && data.settings?.output_kind==='image'){result.frames=[];}
+ else if(data.op==='prepare'){const {instantiateCore}=await import('/core.mjs');anchorCore??=await instantiateCore(await bytes('/replay-core.wasm'));result.frames=anchorCore.match({op:'schedule',page:result.request.page,fps:result.config.fps,seconds:result.config.seconds,ordering:result.config.ordering});}
  return result;
 }
 let queue=Promise.resolve();
