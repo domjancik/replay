@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 #[derive(Clone, Debug, Serialize)]

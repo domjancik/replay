@@ -1,14 +1,14 @@
-# redraw
+# rm-redraw
 
 Deterministic reMarkable ink rendering for native Rust and WebAssembly: normalized pages to RGBA, with textured pens, compositing, erasure and progressive stroke reveal. Part of [rePlay](https://github.com/domjancik/replay).
 
 ## Rust API
 
-Before registry publication, use a checkout path dependency:
+Install the renderer (the Rust library name remains `redraw`):
 
 ```toml
 [dependencies]
-redraw = { path = "../replay/native/redraw" }
+redraw = { package = "rm-redraw", version = "0.1" }
 ```
 
 ```rust

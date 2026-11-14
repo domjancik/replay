@@ -2,11 +2,11 @@
 
 Independent Rust reader for reMarkable `.rmdoc` archives and v5/v6 `.rm` pages. It preserves source channels, IDs, group transforms, metadata and unknown records, and projects normalized data for a renderer without depending on one. Native and standalone WASM use the same implementation. No Python, filesystem extraction, tablet connection or cloud client is required by the library.
 
-This is an experimental, unpublished crate (`publish = false`). Use a path dependency during integration. Package verification is separate from a crates.io release.
+This is an experimental 0.1 API. Unknown future formats are rejected explicitly; see the format-update policy below.
 
 ```toml
 [dependencies]
-rm-rmdoc = { path = "../rm-redraw/native/rmdoc" }
+rm-rmdoc = "0.1"
 ```
 
 ```rust,no_run
@@ -51,3 +51,5 @@ Python is a development oracle only. `generate_corpus.py --archive PATH --out ar
 See [FORMAT_UPDATES.md](FORMAT_UPDATES.md) for the version-update and release process. The v6 format translation retains upstream rmscene's MIT notice in `LICENSE-RMSCENE`. Tool calibration and pixel fidelity are properties of the separate renderer, not claims of this parser crate.
 
 `NORMALIZATION_SCHEMA_VERSION` identifies the normalized JSON contract; `rm_doc_abi_version` independently identifies the buffer ABI. Neither is the input file-format version.
+
+[Try rePlay](https://replay.domj.net) · [Support development](https://ko-fi.com/domjancik)

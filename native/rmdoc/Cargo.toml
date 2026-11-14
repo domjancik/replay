@@ -5,7 +5,10 @@ edition = "2021"
 rust-version = "1.88"
 license = "MIT"
 description = "Bounded reMarkable notebook archive, page decoding and normalization"
-publish = false
+repository = "https://github.com/domjancik/replay"
+homepage = "https://replay.domj.net"
+keywords = ["remarkable", "rmdoc", "parser", "ink", "wasm"]
+categories = ["parser-implementations", "encoding", "wasm"]
 readme = "README.md"
 include = ["src/**", "tests/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "FORMAT_UPDATES.md", "LICENSE*", "reader.mjs"]
 

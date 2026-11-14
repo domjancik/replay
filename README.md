@@ -12,7 +12,7 @@ The hosted app parses notebooks and renders ink on your device with Rust compile
 | --- | --- | --- |
 | Hosted app | [native/hosted](native/hosted) | Workers, cloud relay, browser storage and deployment build |
 | Shared UI | [src/rm_redraw/web/static](src/rm_redraw/web/static) | Production gallery, queue, controls and styles |
-| **redraw** | [native/redraw](native/redraw) | Standalone Rust/WASM ink renderer: normalized pages to RGBA |
+| **rm-redraw** | [native/redraw](native/redraw) | Standalone Rust/WASM ink renderer: normalized pages to RGBA |
 | rm-rmdoc | [native/rmdoc](native/rmdoc) | Archive reader, v5/v6 parser and normalization |
 | Replay core | [native/replay-core](native/replay-core) | Scheduling and anchor matching |
 | Python tools | [src/rm_redraw](src/rm_redraw) | USB companion, acquisition, calibration oracle and legacy local app |
@@ -39,3 +39,11 @@ The older local utility remains available through [installation instructions](do
 Project code is MIT licensed. Pillow-derived renderer routines also carry MIT-CMU terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Private captures and rendered artwork are not included.
 
 [Support rePlay on Ko-fi](https://ko-fi.com/domjancik) · [Report an issue](https://github.com/domjancik/replay/issues)
+
+## Rust crates
+
+- [rm-redraw](https://crates.io/crates/rm-redraw): native and WASM ink rendering (Rust library name `redraw`).
+- [rm-rmdoc](https://crates.io/crates/rm-rmdoc): notebook archive reading, page parsing and normalization.
+- [rm-replay-core](https://crates.io/crates/rm-replay-core): replay scheduling and anchor fitting.
+
+The initial releases are version 0.1.0; APIs are experimental. Each crate includes its license and usage documentation.

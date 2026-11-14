@@ -1,6 +1,6 @@
-# Native replay core
+# rm-replay-core
 
-Dependency-light Rust implementations of native-reference anchor fitting and duration scheduling, usable as a native Rust library or standalone WASM. PDF interpretation remains in browser PDF.js; notebook parsing/normalization remains in Python/Pyodide. This crate does not acquire documents or render ink.
+Dependency-light Rust implementations of native-reference anchor fitting and duration scheduling, usable as a native Rust library or standalone WASM. PDF interpretation remains in browser PDF.js; notebook parsing/normalization is provided by `rm-rmdoc`. This crate does not acquire documents or render ink.
 
 Build and verify from the repository root:
 
@@ -18,3 +18,14 @@ Anchor requests contain a binary ink mask, width/height, and direct-stroke templ
 Schedule requests contain a normalized renderer page, FPS, duration and `entry` or `layer` ordering. Returned visibility states preserve compositing independence and include a one-second final hold. Scheduling does not infer timestamps. Memory bounds may reject exceptionally large schedules.
 
 Differential fixtures are synthetic and generated under ignored `artifacts/`. They compare accepted/rejected anchor outcomes and candidate metrics with Python, and entire visibility schedules with the Python implementation. Private native-export evidence is never included in this crate.
+
+## Install
+
+```toml
+[dependencies]
+rm-replay-core = "0.1"
+```
+
+This is an experimental 0.1 API. Rust callers use `rm_replay_core`; the public JSON operations are documented by the `core.mjs` wrapper. Requires Rust 1.88 or later. Licensed under MIT.
+
+[Source](https://github.com/domjancik/replay) · [Try rePlay](https://replay.domj.net) · [Support development](https://ko-fi.com/domjancik)
