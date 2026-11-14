@@ -136,7 +136,7 @@ def test_landing_and_workspace_are_separate():
     landing = (root / "public/index.html").read_text(encoding="utf-8")
     workspace = (root / "public/app.html").read_text(encoding="utf-8")
     assert 'href="/app"' in landing
-    assert landing.count("<video ") == 2
+    assert landing.count("<video ") == 3
     assert 'id="generate"' not in landing
     assert 'id="generate"' in workspace
     assert "Let your drawing unfold" not in workspace

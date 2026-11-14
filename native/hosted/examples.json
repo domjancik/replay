@@ -20,6 +20,16 @@
       "name": "portrait.mp4",
       "sha256": "e15ccab96c0ea87ffc0243db5a5d52726897241c41bc4c93dba2baa193d95f6a",
       "url": "https://github.com/domjancik/replay/releases/download/site-examples-v1/portrait.mp4"
+    },
+    {
+      "name": "colour-study.mp4",
+      "sha256": "5e4ed351b40968823eb6b6008284273779f580916a7feb1f7f696bcf96f67edd",
+      "url": "https://github.com/domjancik/replay/releases/download/site-examples-v1/colour-study.mp4"
+    },
+    {
+      "name": "colour-study.jpg",
+      "sha256": "9f950c985fd9169a2f787dd90bc9899c8a11e4da35434c2ceb05d26446b2eefb",
+      "url": "https://github.com/domjancik/replay/releases/download/site-examples-v1/colour-study.jpg"
     }
   ]
 }
