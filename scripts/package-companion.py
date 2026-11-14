@@ -73,6 +73,9 @@ def main():
     shutil.copyfile(root / "docs/usb-companion.md", license_dir / "COMPANION-GUIDE.md")
     asset = output / (name + "-" + label)
     if actual_os == "macos":
+        # Refresh the ad-hoc bundle signature after adding license/help resources.
+        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(bundle)], check=True)
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(bundle)], check=True)
         archive = Path(str(asset) + ".zip")
         subprocess.run(
             ["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(bundle), str(archive)],

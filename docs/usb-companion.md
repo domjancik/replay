@@ -1,16 +1,32 @@
 # Optional USB companion
 
-Cloud pairing and file import do not use this companion. It is a small, separate desktop app for allowing a browser to read a USB-connected tablet. The Windows build bundles Python and Tk; end users do not need a terminal, Python, uv, FFmpeg or a renderer installation.
+Cloud pairing and file import do not use this companion. It is a small, separate desktop app for allowing a browser to read a USB-connected tablet. The desktop builds bundle Python and Tk; end users do not need a terminal, Python, uv, FFmpeg or a renderer installation.
 
-## Download
+## Downloads
 
-[Download for Windows x64](https://github.com/domjancik/replay/releases/download/companion-v0.1.0/rePlay-USB-Companion.exe) · [Release notes and SHA-256 checksum](https://github.com/domjancik/replay/releases/tag/companion-v0.1.0)
+Unsigned preview bundles, built and startup-tested on native CI runners. No Python installation is required.
 
-Portable unsigned preview: Windows may display a security warning. No installer, administrator access or terminal is required. macOS/Linux downloads are not available yet. Download only from the linked project release.
+| Platform | Download | Minimum build baseline |
+| --- | --- | --- |
+| Windows x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-windows-x64.zip) | Windows 10/11 x64 |
+| Mac · Apple Silicon | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-macos-arm64.zip) | macOS 15, Apple Silicon |
+| Mac · Intel | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-macos-x64.zip) | macOS 15, Intel |
+| Linux x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-linux-x64.tar.gz) | Ubuntu 22.04 / glibc 2.35, X11/XWayland |
+| Linux ARM64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.2.0/rePlay-USB-Companion-linux-arm64.tar.gz) | Ubuntu 24.04 / glibc 2.39, X11/XWayland |
+
+[Release notes and per-download SHA-256 checksums](https://github.com/domjancik/replay/releases/tag/companion-v0.2.0).
+
+### Open the companion
+
+- **Windows:** Extract the ZIP completely, then open `rePlay-USB-Companion.exe` inside the extracted folder. Keep its `_internal` folder alongside it. The preview is unsigned and Windows may display a warning.
+- **macOS:** Unzip, move `rePlay-USB-Companion.app` to Applications, and open it. This preview is not Developer ID signed or notarized. If blocked, use the app-specific **Open Anyway** option in System Settings → Privacy & Security only after checking that it came from this release. Do not disable Gatekeeper globally.
+- **Linux:** Extract the tar.gz in your file manager and open the `rePlay-USB-Companion` executable inside the extracted folder. Keep `_internal` alongside it. If necessary, enable **Allow executing file as program** in file properties. A graphical X11/XWayland session is required; distributions older than the listed glibc baseline and Alpine/musl are not supported.
+
+No native Windows ARM64, iOS, Android or ChromeOS package is provided. Windows ARM64 may run the x64 build through Windows emulation, but that path has not been validated. Live tablet access and browser local-network permissions need validation on each target; CI startup checks do not establish those.
 
 ## Use
 
-1. Open `rePlay-USB-Companion.exe`.
+1. Open the extracted companion for your platform (see above).
 2. In rePlay, select the **Tablet · USB** notebook source and select **Use the optional USB companion**.
 3. Copy the displayed site origin into the companion's **Allow this rePlay site** field. Use the exact HTTPS origin for a hosted site, or the displayed localhost origin for the local app. No paths or wildcard origins are accepted.
 4. Click **Start USB access**, then **Copy connection key**. Paste the key into rePlay and click **Connect companion**.
@@ -36,10 +52,12 @@ The current bridge imports raw ink only. Text-anchored pages may need a matching
 - Only authenticated `GET /status`, `/documents?folder=UUID` and `/notebook?id=UUID` exist. Preflight advertises only GET and the key header. No filesystem, arbitrary URL, device-write, SSH or remote command endpoints.
 - Reuses the fixed `10.11.99.1` reader, rejects redirects, bypasses system proxies, bounds response/archive size and serializes USB work. A raw import compares member hashes from two reads. No raw files, cloud credentials or pairing data are persisted by the bridge.
 - Closing/disconnecting the browser aborts client requests. Stop closes the listener; active tablet reads have bounded transport timeouts. Requests do not extend the listener beyond the visible desktop app lifetime.
-- This is an unsigned development build, not a signed installer or a background service. macOS packaging/signing has not been validated.
+- This is an unsigned development build, not a signed installer or a background service. macOS builds are not Developer ID signed or notarized.
 
 ## Developer build and validation
 
-Run `scripts/build-usb-companion.ps1` on Windows (build machine needs uv). Output stays under ignored `artifacts/usb-companion/dist/`. PyInstaller is build-only; it is not a dependency of the web app. See [PyInstaller windowed packaging](https://www.pyinstaller.org/en/latest/usage.html).
+The `.github/workflows/companion.yml` workflow builds on each native target with Python 3.13 and PyInstaller 6.22.0, runs companion tests, then checks the packaged GUI remains running. `scripts/package-companion.py --platform <target>` performs the build, archive and checksum steps. Linux CI uses Xvfb for the startup check.
+
+The older single-file Windows build remains available via `scripts/build-usb-companion.ps1` (build machine needs uv). Output stays under ignored `artifacts/usb-companion/dist/`. PyInstaller is build-only; it is not a dependency of the web app. See [PyInstaller windowed packaging](https://www.pyinstaller.org/en/latest/usage.html).
 
 Tests use synthetic USB readers for origin/key/Host rejection, preflight, read-only routes and stable-capture dispatch. Browser-client tests verify no contact before opt-in, fixed loopback routing, credential omission, disconnect, failures and invalid archives. Live tablet reachability and browser permission support are separate checks, not implied by these tests.
