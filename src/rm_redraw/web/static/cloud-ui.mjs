@@ -63,7 +63,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
       : connected ? `Connected · protected with ${activeMode === 'passkey' ? 'a passkey' : 'a password'}`
       : savedMode === 'unprotected' ? 'Saved without protection on this browser' : 'Connection locked';
     if ($('cloud-gallery-refresh')) $('cloud-gallery-refresh').disabled = busy || !connected;
-    if ($('cloud-gallery-connect')) $('cloud-gallery-connect').textContent = connected ? 'Connection settings' : savedMode ? 'Open connection' : 'Connect reMarkable';
+    if ($('cloud-open')) $('cloud-open').textContent = connected ? 'Connection settings' : savedMode ? 'Open connection' : 'Connect reMarkable';
     $('cloud-gallery')?.querySelectorAll('button[data-import]').forEach(button => { button.disabled = busy; });
   }
   function clearPreviews() {

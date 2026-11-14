@@ -147,3 +147,23 @@ test('tablet is an inline notebook source and switching sources hides its contro
  assert.equal(el('tablet-library').hidden,true);
  assert.equal(el('source-tablet').attrs['aria-pressed'],'false');
 });
+
+
+test('source views identify their content separately from the saved library',()=>{
+ const {el}=fixture();
+ el('source-cloud').onclick();
+ assert.equal(el('library-view-title').textContent,'Cloud notebooks');
+ el('source-local').onclick();
+ assert.equal(el('library-view-title').textContent,'Saved notebooks');
+ el('source-queue').onclick();
+ assert.equal(el('library-view-title').textContent,'Replay queue');
+});
+
+test('file import returns from a remote source to saved notebooks',async()=>{
+ const {el,context}=fixture();
+ el('source-cloud').onclick();
+ vm.runInContext("api=async()=>({id:'new'});loadLibrary=async()=>{};",context);
+ await vm.runInContext("upload({files:[{size:10}],value:'file'},'/api/upload')",context);
+ assert.equal(el('local-library').hidden,false);
+ assert.equal(el('cloud-library').hidden,true);
+});

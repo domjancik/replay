@@ -127,6 +127,7 @@ async function upload(input, path) {
     notice('Importing into your local library…');
     const result=await api(path,file,true);
     await loadLibrary(result.id);
+    setLibrarySource('local');
     notice('Notebook saved locally.');
   } finally {
     input.value='';
@@ -521,6 +522,7 @@ async function processThumbnailQueue(){
 }
 function setLibrarySource(source){
   const cloud=source==='cloud',tablet=source==='tablet';queueView=source==='queue';
+  $('library-view-title').textContent=cloud?'Cloud notebooks':tablet?'Connected tablet':queueView?'Replay queue':'Saved notebooks';
   $('queue-controls').hidden=!queueView;
   $('replay-history').classList.toggle('queue-view',queueView);
   $('history-title').textContent=queueView?'Replay queue':'Your replays';
@@ -538,7 +540,6 @@ function setupGallery(){
   $('source-local').onclick=()=>setLibrarySource('local');
   $('source-cloud').onclick=()=>setLibrarySource('cloud');
   $('source-tablet').onclick=()=>{setLibrarySource('tablet');if(!$('usb-companion-use').checked||usbCompanion)browse();};
-  $('cloud-gallery-connect').onclick=()=>$('cloud-open').onclick();
   $('cloud-gallery-refresh').onclick=()=>$('cloud-refresh').onclick();
   $('notebook-search').oninput=renderGallery;
   $('drawer-close').onclick=()=>{if(galleryFocused){galleryFocused=false;renderGallery();return;}expandedNotebook=null;renderGallery();};

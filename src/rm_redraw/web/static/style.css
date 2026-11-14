@@ -39,3 +39,5 @@ header{max-width:none;padding:12px 38px}.wordmark{font-family:Georgia,serif;font
 
 #probe-status{white-space:pre-wrap;overflow-wrap:anywhere;padding:18px;border:1px solid var(--line);background:var(--paper);line-height:1.7}
 .kofi-widget{border:0;width:240px;height:54px;max-width:100%;flex-shrink:0}.support-callout{border-left:1px solid var(--line)}.support-callout>a{background:var(--ink);border-color:var(--ink)}.support-callout>a:hover{background:#41413b;border-color:#41413b}
+
+.notebook-sources{padding:0 0 22px;border-bottom:1px solid var(--line);margin-bottom:22px}.notebook-sources h2{margin:0;font-size:13px}.notebook-sources .hint{margin:5px 0 14px}.source-actions{display:flex;flex-wrap:wrap;gap:10px}.source-actions button[aria-pressed=true]{background:var(--ink);color:var(--paper)}.companion-steps{padding-left:22px;line-height:1.65}.companion-steps li{margin:8px 0}
