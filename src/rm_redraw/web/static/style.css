@@ -50,3 +50,12 @@ header{max-width:none;padding:12px 38px}.wordmark{font-family:Georgia,serif;font
 
 /* Keep source choices legible alongside the saved-library navigation. */
 .notebook-navigation .source-label{display:inline;font-size:13px;font-weight:500;color:var(--ink);margin-right:4px}.notebook-navigation .source-actions{gap:8px}.notebook-navigation .source-actions button{min-height:42px;padding:10px 15px;font-size:14px;font-weight:600;line-height:1.25;color:var(--ink);background:var(--paper);border:1px solid #aaa99f;border-radius:4px;white-space:nowrap}.notebook-navigation .source-actions button:hover{background:#eceae2;border-color:var(--ink)}.notebook-navigation .source-actions button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--paper)}@media(max-width:700px){.notebook-navigation .source-actions{gap:8px}.notebook-navigation .source-actions button{font-size:14px;min-height:44px;padding:10px 12px}.notebook-navigation .source-label{font-size:13px}}
+
+/* Use the same selected treatment across saved notebooks and every source. */
+.notebook-navigation button[aria-pressed]{min-height:42px;padding:10px 15px;font-size:14px;font-weight:600;line-height:1.25;background:var(--paper);color:var(--ink);border:1px solid #aaa99f;border-radius:4px;white-space:nowrap}
+.notebook-navigation button[aria-pressed]::before{content:"";display:inline-block;width:1em;margin-right:6px}
+.notebook-navigation button[aria-pressed=true],.notebook-navigation .source-actions button[aria-pressed=true]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.notebook-navigation button[aria-pressed=true]::before{content:"✓"}
+.notebook-navigation button[aria-pressed=false]:hover{background:#eceae2;border-color:var(--ink)}
+.notebook-navigation button:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+@media(max-width:700px){.notebook-navigation button[aria-pressed]{min-height:44px;padding:10px 12px}}
