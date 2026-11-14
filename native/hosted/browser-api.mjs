@@ -23,9 +23,35 @@ export async function createBrowserApi(){
  const media=(id,file)=>urls.get(id+'/'+file)||'';
  const saveJobs=()=>put('jobs',jobs);
  async function source(document,page){const doc=docs.find(d=>d.id===document),entry=doc?.pages.find(p=>p.id===page&&p.available);if(!entry)throw Error('Page unavailable');return {raw:new Uint8Array(await (await get('archive/'+document)).arrayBuffer()),member:entry.member,page};}
- async function prepare(body){try{return await parser.call({op:'prepare',...await source(body.document,body.page),settings:body.settings});}catch(error){if(error.message.includes('outside the selected canvas'))error.code='canvas_clipping';throw error;}}
+ const anchorCache=new Map();
+ async function prepare(body){
+  try{
+   const src=await source(body.document,body.page);
+   const plan=await parser.call({op:'anchors',...src,settings:body.settings});
+   let anchor_result;
+   if(plan){
+    const doc=docs.find(d=>d.id===body.document);
+    const pdf=await get('pdf/'+doc.id);
+    if(!pdf)throw Error('Attach the matching native PDF to resolve this page’s text anchors');
+    const key=JSON.stringify([doc.id,doc.pdf_sha256,body.page,body.settings]);
+    anchor_result=anchorCache.get(key);
+    if(!anchor_result){
+     const {nativeInkMask}=await import('/pdf-reference.mjs');
+     const reference=await nativeInkMask(pdf,doc.pages.find(p=>p.id===body.page).number,[body.settings.width,body.settings.height]);
+     const worker=rpcWorker();let fits;
+     try{fits=await worker.call({op:'match',request:{...reference,templates:plan.templates}});}finally{worker.stop();}
+     anchor_result={fits,evidence:`Rust/WASM native anchor matching; PDF SHA256 ${doc.pdf_sha256}; PDF.js 6.5.438 ink-only raster at ${reference.width}x${reference.height}; direct text removed; luminance <245`};
+     if(anchorCache.size>=16)anchorCache.delete(anchorCache.keys().next().value);
+     anchorCache.set(key,anchor_result);
+    }
+   }
+   const result=await parser.call({op:'prepare',...src,settings:body.settings,anchor_result});
+   if(anchor_result)result.anchor_evidence=anchor_result.evidence;
+   return result;
+  }catch(error){if(error.message.includes('outside the selected canvas'))error.code='canvas_clipping';throw error;}
+ }
  async function storeResult(job,result){
-  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,frames:result.frames,engine:'Rust/WASM',finalEqualsStatic:true})],{type:'application/json'})]]){await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
+  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,finalEqualsStatic:true})],{type:'application/json'})]]){await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
   job.extension=result.extension;job.frames=job.expected_frames=result.frames;job.state='complete';job.finished=Date.now()/1000;
  }
  async function pump(){
@@ -33,7 +59,7 @@ export async function createBrowserApi(){
   try{for(let job;job=jobs.find(j=>j.state==='queued');){
    job.state='running';job.started=Date.now()/1000;await saveJobs();
    try{const prepared=await prepare(job.input);if(job.state==='cancelled')continue;
-    job.settings={...prepared.config,viewport:job.crop?job.crop.slice(2):prepared.config.viewport};activeWorker=rpcWorker();
+    job.anchor_evidence=prepared.anchor_evidence;job.settings={...prepared.config,viewport:job.crop?job.crop.slice(2):prepared.config.viewport};activeWorker=rpcWorker();
     const result=await activeWorker.call({op:'render',prepared,crop:job.crop,reverse_speed:job.reverse_speed},p=>{job.frames=p.progress;job.expected_frames=p.total;if(p.image){const key=job.id+'/latest.png';if(urls.has(key))URL.revokeObjectURL(urls.get(key));urls.set(key,URL.createObjectURL(p.image));}});
     if(job.state!=='cancelled')await storeResult(job,result);
    }catch(error){if(job.state!=='cancelled'){job.state='failed';job.error=error.message;}}
@@ -42,13 +68,22 @@ export async function createBrowserApi(){
  }
  async function api(path,body){
   const url=new URL(path,location.origin);
-  if(url.pathname==='/api/session')return {token:'browser',rust:true,ffmpeg:typeof VideoEncoder!=='undefined',poppler:false,hosted:true};
+  if(url.pathname==='/api/session')return {token:'browser',rust:true,ffmpeg:typeof VideoEncoder!=='undefined',poppler:true,hosted:true};
   if(url.pathname==='/api/library')return docs;
   if(url.pathname==='/api/upload'){
    const blob=body instanceof Blob?body:new Blob([body]);if(blob.size>128*1024*1024)throw Error('Notebook exceeds 128 MiB');
    const info=await parser.call({op:'inspect',raw:new Uint8Array(await blob.arrayBuffer())});
    const existing=docs.find(d=>d.sha256===info.sha256);if(existing)return existing;
    const doc={...info,id:crypto.randomUUID().replaceAll('-','')};await put('archive/'+doc.id,blob);docs.push(doc);await put('documents',docs);return doc;
+  }
+  if(url.pathname==='/api/upload-pdf'){
+   const doc=docs.find(d=>d.id===url.searchParams.get('document'));if(!doc)throw Error('Choose a notebook first');
+   const blob=body instanceof Blob?body:new Blob([body]);if(blob.size>128*1024*1024)throw Error('PDF exceeds 128 MiB');
+   const {pdfPageCount}=await import('/pdf-reference.mjs');
+   if(await pdfPageCount(blob)!==doc.pages.length)throw Error('PDF page count must match the notebook’s ordered pages');
+   const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
+   await put('pdf/'+doc.id,blob);doc.pdf_sha256=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');doc.has_pdf=true;
+   await put('documents',docs);anchorCache.clear();previews.clear();return doc;
   }
   if(url.pathname==='/api/page')return parser.call({op:'info',...await source(url.searchParams.get('document'),url.searchParams.get('page'))});
   if(url.pathname==='/api/jobs'&&!body)return jobs.slice().sort((a,b)=>b.created-a.created);

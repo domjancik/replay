@@ -1,5 +1,5 @@
 import {instantiateRenderer} from './renderer.mjs';
-let python, renderer;
+let python, renderer, anchorCore;
 async function bytes(url){const r=await fetch(url);if(!r.ok)throw Error(`Could not load browser engine (${r.status})`);return new Uint8Array(await r.arrayBuffer());}
 async function runtime(){
  if(!python){
@@ -14,6 +14,7 @@ async function runtime(){
 }
 async function png(frame){const c=new OffscreenCanvas(frame.width,frame.height);c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(frame.rgba),frame.width,frame.height),0,0);return c.convertToBlob({type:'image/png'});}
 async function execute(data,id){
+ if(data.op==='match'){const {instantiateCore}=await import('/core.mjs');anchorCore??=await instantiateCore(await bytes('/replay-core.wasm'));return anchorCore.match(data.request);}
  if(data.op==='render'){
   renderer??=await instantiateRenderer(await bytes('/renderer.wasm'));
   const {request,frames,config}=data.prepared;
@@ -34,15 +35,16 @@ async function execute(data,id){
   const video=await encodeReplay({frames:produce(),width,height,fps:config.fps,frameCount:indices.length});
   return {image:crop?await png({width,height,rgba:cropped(final.rgba)}):image,video:new Blob([video.buffer],{type:video.mimeType}),extension:video.extension,frames:indices.length};
  }
- const py=await runtime();py.globals.set('raw_js',data.raw);py.globals.set('args_json',JSON.stringify(data));
- try{return JSON.parse(py.runPython(`
+ const py=await runtime();py.globals.set('raw_js',data.raw);const {raw:unusedRaw,...args}=data;py.globals.set('args_json',JSON.stringify(args));
+ try{const result=JSON.parse(py.runPython(`
 a=json.loads(args_json)
 raw=bytes(raw_js.to_py())
 if a['op']=='inspect': result=bridge.inspect(raw)
 elif a['op']=='info': result=bridge.info(bridge.page_bytes(raw,a['member']),a['page'])
-elif a['op']=='prepare': result=bridge.prepare(bridge.page_bytes(raw,a['member']),a['page'],a['settings'])
+elif a['op']=='anchors': result=bridge.anchor_templates(bridge.page_bytes(raw,a['member']),a['page'],a['settings'])
+elif a['op']=='prepare': result=bridge.prepare(bridge.page_bytes(raw,a['member']),a['page'],a['settings'],a.get('anchor_result'),native_timing=True)
 json.dumps(result)
-`));}finally{py.globals.delete('raw_js');py.runPython('del raw, a, result');}
+`));if(data.op==='prepare'){const {instantiateCore}=await import('/core.mjs');anchorCore??=await instantiateCore(await bytes('/replay-core.wasm'));result.frames=anchorCore.match({op:'schedule',page:result.request.page,fps:result.config.fps,seconds:result.config.seconds,ordering:result.config.ordering});}return result;}finally{py.globals.delete('raw_js');py.runPython('del raw, a, result');}
 }
 let queue=Promise.resolve();
 self.onmessage=({data:{id,...data}})=>{queue=queue.then(async()=>{try{postMessage({id,result:await execute(data,id)});}catch(error){postMessage({id,error:error.message});}});};

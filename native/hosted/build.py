@@ -35,7 +35,8 @@ html = html.replace(
     "Closing this dialog locks the vault.", "Lock the vault when you finish."
 ).replace(
     "Text-anchored pages may need a separately attached matching PDF.",
-    "Pages requiring native PDF text-anchor matching are not yet supported here.",
+    "Attach the matching native PDF for pages with text anchors; "
+    "matching runs in Rust/WASM on this device.",
 )
 html = html.replace(
     "Downloaded ink feeds the same local replay engine.",
@@ -49,7 +50,7 @@ html = html.replace(
     "No new ink rendering.", "Frames are rendered again on this device for the export."
 )
 (public / "index.html").write_text(html, encoding="utf8")
-for name in ["bootstrap.mjs", "browser-api.mjs", "worker.mjs"]:
+for name in ["bootstrap.mjs", "browser-api.mjs", "worker.mjs", "pdf-reference.mjs"]:
     shutil.copyfile(root / "native/hosted" / name, public / name)
 shutil.copyfile(root / "native/renderer/renderer.mjs", public / "renderer.mjs")
 shutil.copyfile(
@@ -67,6 +68,19 @@ shutil.copyfile(root / "native/renderer/LICENSE-PILLOW", public / "LICENSE-PILLO
 for name in ["LICENSE", "THIRD_PARTY_NOTICES.md"]:
     shutil.copyfile(root / name, public / name)
 shutil.copytree(root / "native/hosted/licenses", public / "licenses", dirs_exist_ok=True)
+shutil.copyfile(root / "native/replay-core/core.mjs", public / "core.mjs")
+shutil.copyfile(
+    root / "native/replay-core/target/wasm32-unknown-unknown/release/rm_replay_core.wasm",
+    public / "replay-core.wasm",
+)
+pdfjs = root / "artifacts/hosted-dependencies/node_modules/pdfjs-dist"
+(public / "pdfjs").mkdir(exist_ok=True)
+for name in ["pdf.mjs", "pdf.worker.mjs", "pdf.renderer.mjs"]:
+    if (pdfjs / "build" / name).exists():
+        shutil.copyfile(pdfjs / "build" / name, public / "pdfjs" / name)
+for name in ["wasm", "standard_fonts", "cmaps"]:
+    shutil.copytree(pdfjs / name, public / "pdfjs" / name, dirs_exist_ok=True)
+shutil.copyfile(pdfjs / "LICENSE", public / "licenses/PDFJS-LICENSE")
 runtime = public / "runtime"
 runtime.mkdir(exist_ok=True)
 for name in [

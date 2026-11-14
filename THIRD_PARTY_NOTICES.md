@@ -41,3 +41,5 @@ The project code and documentation are MIT-licensed; see LICENSE. Selected artwo
 ## Hosted browser distribution
 
 The separately built hosted app bundles Pyodide 0.29.5 (including CPython 3.13), NumPy 2.2.5, Pillow 11.3.0, rmscene 0.8.0, packaging 23.2, and Mediabunny. The Python wheels retain their distribution license files. The deployed renderer retains `LICENSE-PILLOW`, and the encoder bundle includes `MEDIABUNNY-LICENSE`. See `docs/hosted-replay.md` for the hosted build boundary; these versions differ from the desktop environment above.
+
+The hosted native-reference adapter bundles PDF.js (`pdfjs-dist` 6.5.438), Apache-2.0, with its license at `licenses/PDFJS-LICENSE` and its resource notices preserved. The `native/replay-core` Rust/WASM module uses serde and serde_json; its lockfile pins dependencies, whose notices are included in `licenses/RUST-DEPENDENCIES.txt`. PDF.js performs browser PDF interpretation; Rust performs numerical anchor matching and replay scheduling.

@@ -89,7 +89,7 @@ async function selectPage() {
     const needsPdf=info.unresolved_anchors && !notebook.has_pdf;
     const needsPoppler=info.unresolved_anchors && notebook.has_pdf && !capabilities.poppler;
     $('page-info').textContent=`${info.strokes.toLocaleString()} strokes${info.paper_size?' · Source canvas '+info.paper_size.join(' × '):''}. `+
-      (needsPdf?(capabilities.hosted?'This page needs native PDF text-anchor matching, which is not yet supported in the browser edition.':'Attach a matching notebook PDF to resolve text anchors.'):needsPoppler?'Install Poppler and restart the utility to resolve text anchors.':notebook.has_pdf?'Paired PDF saved locally.':'Saved locally.');
+      (needsPdf?(capabilities.hosted?'Attach the matching native PDF to resolve this page’s text anchors in the browser.':'Attach a matching notebook PDF to resolve text anchors.'):needsPoppler?'Install Poppler and restart the utility to resolve text anchors.':notebook.has_pdf?'Paired PDF saved locally.':'Saved locally.');
     if(info.paper_size){$('width').value=info.paper_size[0];$('height').value=info.paper_size[1];$('offset-x').value=info.paper_size[0]/2;}
     if(info.source_to_page_transform){$('offset-x').value=info.source_to_page_transform[4];$('offset-y').value=info.source_to_page_transform[5];}
     canvasSummary();
@@ -337,7 +337,7 @@ function setupExport(){
 async function start(){
   setupExport();setupGallery();
   capabilities=await api('/api/session');token=capabilities.token;
-  if(capabilities.hosted){$('pair-open').hidden=true;$('backend').disabled=true;$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
+  if(capabilities.hosted){$('backend').disabled=true;$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
   const {setupCloud}=await import('/cloud-ui.mjs');
   setupCloud({sessionToken:()=>token,importArchive:async(raw)=>{
     const result=await api('/api/upload',raw,true);

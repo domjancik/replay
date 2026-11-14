@@ -82,3 +82,24 @@ def test_browser_bridge_refuses_unresolved_native_text_anchors(monkeypatch):
                 backend="rust",
             ),
         )
+
+
+def test_browser_anchor_results_reject_conflicting_shared_offsets():
+    import pytest
+
+    spec = importlib.util.spec_from_file_location("bridge", Path("native/hosted/bridge.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    plan = {
+        "root_y": 234,
+        "page_y": 0,
+        "templates": [
+            {"anchor_id": "1:17", "group_id": "1:100", "parent_y": 0},
+            {"anchor_id": "1:17", "group_id": "1:200", "parent_y": 0},
+        ],
+    }
+    fits = [{"accepted": True, "best_candidate": {"translation_y": y}} for y in (500, 600)]
+    with pytest.raises(ValueError, match="conflicting-shared-anchor"):
+        module.resolve_anchor_fits(plan, fits)
+    fits[1] = fits[0]
+    assert module.resolve_anchor_fits(plan, fits) == {"1:17": 266}
