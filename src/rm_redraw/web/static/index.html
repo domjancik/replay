@@ -67,7 +67,7 @@
 <div id="empty"><div class="paper-mark" aria-hidden="true"><span>↗</span></div><p>No page selected.</p><span>Select a notebook and page to preview or create a replay.</span></div>
 <img id="notebook-preview" alt="Selected notebook preview" hidden><p id="notebook-preview-label" class="hint">No saved preview for this page yet.</p><video id="video" controls playsinline loop hidden></video><img id="preview" alt="Latest rendered frame" hidden>
 <div id="view-progress" hidden><progress id="progress" max="1" value="0"></progress><p id="progress-text" class="hint"></p><button id="cancel-active" class="secondary" hidden>Cancel replay</button></div>
-<div id="downloads" hidden><button id="export-open" class="secondary">Crop &amp; loop</button><a id="download-video" download>Save video ↓</a><a id="download-image" download>Save image ↓</a><a id="download-manifest" download>Run details ↓</a></div>
+<div id="downloads" hidden><button id="share-open" class="secondary">Share to Instagram</button><button id="export-open" class="secondary">Crop &amp; loop</button><a id="download-video" download>Save video ↓</a><a id="download-image" download>Save image ↓</a><a id="download-manifest" download>Run details ↓</a></div>
 </section>
 <section id="page-replays" hidden aria-label="Saved replays for selected page"><div class="section-heading"><h2>Replays of this page</h2><span id="page-replay-count" class="badge"></span></div><div id="page-replay-list"></div></section>
 <section class="replay-settings">
@@ -106,4 +106,12 @@
 </dialog>
 
 
-<dialog id="canvas-editor"><div class="section-heading"><h2>Canvas / crop</h2><button id="canvas-editor-close" class="quiet">Close</button></div><p id="canvas-editor-status" role="status"></p><canvas id="canvas-editor-image"></canvas><p id="canvas-editor-size" class="hint"></p><button id="canvas-editor-reset" class="secondary">Full page</button><button id="canvas-editor-apply">Apply crop</button></dialog></body></html>
+<dialog id="canvas-editor"><div class="section-heading"><h2>Canvas / crop</h2><button id="canvas-editor-close" class="quiet">Close</button></div><p id="canvas-editor-status" role="status"></p><canvas id="canvas-editor-image"></canvas><p id="canvas-editor-size" class="hint"></p><button id="canvas-editor-reset" class="secondary">Full page</button><button id="canvas-editor-apply">Apply crop</button></dialog><dialog id="share-dialog" aria-labelledby="share-title">
+<div class="section-heading"><h2 id="share-title">Share to Instagram</h2><button id="share-close" class="secondary" aria-label="Close sharing">Close</button></div>
+<label for="share-caption">Caption</label><textarea id="share-caption" rows="3"></textarea>
+<button id="share-copy" class="secondary">Copy caption</button>
+<p id="share-status" role="status" aria-live="polite"></p>
+<button id="share-native" class="primary" disabled>Share file…</button>
+<p><a id="share-download" download>Download file</a> · <a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer">Open Instagram</a></p>
+</dialog>
+</body></html>

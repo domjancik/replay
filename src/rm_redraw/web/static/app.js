@@ -473,6 +473,46 @@ async function openExport(){
   image.src=mediaUrl(job.id,'static.png');
 }
 function cropPoint(event){const box=$('crop-canvas').getBoundingClientRect();return [Math.max(0,Math.min(cropImage.width,Math.round((event.clientX-box.left)*cropImage.width/box.width))),Math.max(0,Math.min(cropImage.height,Math.round((event.clientY-box.top)*cropImage.height/box.height)))];}
+let preparedShare=null,shareRequest=0;
+async function openShare(){
+  const job=jobs.find(j=>j.id===selectedJob&&j.state==='complete');if(!job)return;
+  const version=++shareRequest;preparedShare=null;
+  $('share-caption').value='Made with rePlay https://replay.domj.net #rmreplay';
+  $('share-native').disabled=true;$('share-status').textContent='Preparing file…';
+  $('share-dialog').setAttribute?.('aria-busy','true');$('share-dialog').showModal();
+  const image=job.kind==='image',extension=image?'.png':(job.extension||'.mp4');
+  const url=mediaUrl(job.id,image?'static.png':'replay.mp4');
+  $('share-download').href=url;$('share-download').download='replay'+extension;
+  try{
+    const response=await fetch(url);if(!response.ok)throw Error('Could not load this export.');
+    const blob=await response.blob();
+    if(version!==shareRequest)return;
+    preparedShare=new File([blob],'replay'+extension,{type:blob.type||(image?'image/png':extension==='.webm'?'video/webm':'video/mp4')});
+    const supported=!!navigator.share&&!!navigator.canShare?.({files:[preparedShare]});
+    $('share-native').disabled=!supported;
+    $('share-status').textContent=supported?'Choose Instagram in the share sheet, then finish your post there. If the caption is missing, paste it from here.':'Download the file, then add it to a post in Instagram and paste the caption.';
+  }catch(error){if(version===shareRequest)$('share-status').textContent=error.message+' Try downloading the file instead.';}
+  finally{if(version===shareRequest)$('share-dialog').setAttribute?.('aria-busy','false');}
+}
+async function sharePrepared(){
+  if(!preparedShare)return;
+  $('share-native').disabled=true;
+  try{
+    await navigator.share({files:[preparedShare],text:$('share-caption').value});
+    $('share-status').textContent='Finish your post in the app you selected.';
+  }catch(error){$('share-status').textContent=error.name==='AbortError'?'Sharing cancelled.':'Could not share this file. Download it and add it in Instagram instead.';}
+  finally{$('share-native').disabled=false;}
+}
+function setupShare(){
+  $('share-open').onclick=openShare;
+  const clear=()=>{shareRequest++;preparedShare=null;};
+  $('share-close').onclick=()=>{$('share-dialog').close();};$('share-dialog').onclose=clear;
+  $('share-native').onclick=sharePrepared;
+  $('share-copy').onclick=async()=>{
+    try{await navigator.clipboard.writeText($('share-caption').value);$('share-status').textContent='Caption copied. Paste it into your Instagram post.';}
+    catch{$('share-caption').focus();$('share-caption').select();$('share-status').textContent='Select and copy the caption above.';}
+  };
+}
 function setupExport(){
   $('export-open').onclick=safely(openExport);$('export-close').onclick=()=>$('export-dialog').close();$('crop-reset').onclick=resetCrop;
   for(const id of ['crop-x','crop-y','crop-w','crop-h'])$(id).oninput=()=>{cropRect=['crop-x','crop-y','crop-w','crop-h'].map(key=>Number($(key).value));drawCrop();};
@@ -488,7 +528,7 @@ function setupExport(){
   };
 }
 async function start(){
-  setupExport();setupGallery();setupCanvasEditor();
+  setupShare();setupExport();setupGallery();setupCanvasEditor();
   capabilities=await api('/api/session');token=capabilities.token;$('output-kind-picker').hidden=!capabilities.hosted;
   if(capabilities.hosted){$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
   const {setupCloud}=await import('/cloud-ui.mjs');
