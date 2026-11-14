@@ -4,11 +4,11 @@ Production: https://replay.domj.net/
 Vercel alias: https://replay-phi-liard.vercel.app/
 Vercel project: `domjanciks-projects/replay`.
 
-The hosted build reuses the notebook gallery, encrypted cloud vault, queue, selected-page replay list, and crop/loop controls. No local Python, FFmpeg, or CLI is required. The optional USB companion remains separate.
+The hosted build reuses the notebook gallery, browser-owned cloud connection, queue, selected-page replay list, and crop/loop controls. No local Python, FFmpeg, or CLI is required. The optional USB companion remains separate.
 
 ## Data and execution
 
-- Cloud pairing credentials and verified tree cache live in the existing encrypted IndexedDB vault. The passphrase never leaves the browser. Pair separately on each origin; a localhost vault is not migrated.
+- Cloud pairing credentials and the verified notebook cache use the selected browser storage mode: passkey encryption (preferred where supported), password encryption, session-only memory, or explicitly acknowledged unprotected IndexedDB. Passwords and passkey-derived secrets never leave the browser. Pair separately on each origin; a localhost connection is not migrated.
 - A fixed-operation, same-origin Vercel relay streams requests to reMarkable. It necessarily sees provider tokens and downloaded bytes in transit, but does not log bodies, persist credentials, or save documents. Provider credentials are supplied per request. Redirects and arbitrary upstream URLs are refused; responses are bounded and marked no-store.
 - Imports and generated images/videos live unencrypted in this browser's IndexedDB library. Browser storage clearing removes them. Save valuable output using the download controls. One editing tab owns the library through Web Locks to prevent concurrent queue overwrites.
 - The worker uses the standalone `rm-rmdoc` Rust/WASM archive reader, v5/v6 parser and normalizer, then Rust/WASM replay scheduling and rasterization and the WebCodecs/Mediabunny encoder. No Python runtime or Python wheels are deployed. It does not use a server renderer. Runtime assets are served by this deployment.
@@ -47,3 +47,12 @@ WASM differential validation covers 46 pages and 184 parse/info/prepare/anchor c
 The final migration checks passed 30 Rust tests (including the package usage example and exact decoded-block oracle), 172 relevant Python tests and 47 browser JavaScript tests. There are also 23 explicit-layout projection comparisons. Pixel checks cover 6 synthetic, 19 controlled and 3 natural successful preparations (including birthday page 12): all 28 outputs match, and all final/static checks pass. The fourth natural page remains explicitly unresolved and is not counted as a pixel success. The Python-free local browser exercised v5/v6 import, native-PDF anchors, preview, video, crop and reverse loops. Cargo package verification and Clippy passed.
 
 Deployed November 14 after Vercel sign-in was restored: `dpl_GSC3RVjU8hcet3G7CE1oNd2Rqj8Z`. Public HTTPS checks on `replay.domj.net` returned 200 for the app, native worker and reader WASM. The deployed reader SHA-256 matches the locally tested binary and has no host imports. The removed `/runtime/pyodide.mjs` returns 404.
+
+
+## Connection simplification and passkeys (November 14, 2026)
+
+Implementation commit `c553ab7` adds the four storage choices, an explicit unprotected-storage warning/acknowledgement, distinct connect/unlock/settings views, automatic notebook loading, and card-local lazy preview progress. Existing version-1 password records remain supported. Passkey PRF encryption is tested before cloud pairing; unsupported or cancelled setup never silently downgrades protection.
+
+Validation passed 55 web JavaScript tests, 6 hosted JavaScript tests, 77 web/release Python tests and 4 hosted Python tests. The hosted build and Ruff check passed. Local browser checks covered all four storage choices and the warning; production verified the passkey-first screen. WebAuthn tests use simulated authenticator responses with real WebCrypto. Real device/password-manager PRF and a fresh real cloud pairing remain unverified.
+
+Deployed as `dpl_rucwtvwjCaZxcST6GH4cMg8dVzKY` to `https://replay.domj.net/`. Public checks confirmed the new interface and passkey vault source. Deployment contains app code only; no private drawings or pairing data were uploaded.
