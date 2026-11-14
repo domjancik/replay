@@ -217,3 +217,14 @@ test('work indicator persists until all pending actions settle, including errors
  context.failWork(new Error('test failure'));await assert.rejects(pending,/test failure/);
  assert.equal(el('work-status').hidden,true);
 });
+
+test('frame rate and resolution pickers update render settings and selected state',()=>{
+ const {el,context}=fixture();
+ for(const [id,values] of [['fps',['6','12','24','30']],['output-width',['468','702','1404','2106','2808']]]){
+  const buttons=values.map(value=>{const button=new Element();button.dataset.value=value;return button;});
+  el(id).value=values[1];el(id+'-buttons').querySelectorAll=()=>buttons;
+  vm.runInContext(`setupSettingPicker('${id}','${id}-buttons')`,context);
+  buttons[2].onclick();assert.equal(el(id).value,values[2]);assert.equal(buttons[2].attrs['aria-pressed'],'true');
+  assert.equal(buttons[1].attrs['aria-pressed'],'false');
+ }
+});
