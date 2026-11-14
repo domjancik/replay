@@ -11,7 +11,7 @@ const document = '11112233-4455-4677-8899-aabbccddeeff';
 const hidden = '22112233-4455-4677-8899-aabbccddeeff';
 const page = '33112233-4455-4677-8899-aabbccddeeff';
 
-function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash', documentParent = folder, extraDocuments = 0, thumbnail} = {}) {
+function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash', documentParent = folder, extraDocuments = 0, thumbnail, thumbnailExtension = 'png'} = {}) {
   const files = new Map();
   const requests = [];
   let generation = 0;
@@ -41,7 +41,7 @@ function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParen
     const ink = blob(`${document}/${page}.rm`, 'Synthetic ink');
     const members = [oversized ? {...ink, size: 128 * 1024 * 1024} : ink, docMeta, content];
     if (thumbnail) {
-      const name = `${document}.thumbnails/${page}.png`;
+      const name = `${document}.thumbnails/${page}.${thumbnailExtension}`;
       const entry = {filename: name, hash: sha256(thumbnail), size: thumbnail.length};
       files.set(`${entry.hash}/${name}`, thumbnail); members.push(entry);
     }
@@ -113,7 +113,7 @@ test('pairs, lists verified visible metadata and downloads only the selected doc
   assert.match(requests[0].device_id, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
   assert.deepEqual(await client.list(), [
     {id: folder, name: 'Sketches', path: 'Sketches', kind: 'folder', parent: ''},
-    {id: document, name: 'Notebook', path: 'Sketches/Notebook', kind: 'document', parent: folder},
+    {id: document, name: 'Notebook', path: 'Sketches/Notebook', kind: 'document', parent: folder, hasPreview: false},
   ]);
   assert.deepEqual(requests[1], {action: 'session', token: 'synthetic-device'});
   assert.equal(requests.some(request => request.filename?.endsWith('.rm') || request.filename?.endsWith('.content')), false);
@@ -323,7 +323,8 @@ const previewPng = new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABC
 test('preview fetches only bounded verified PNG and handles absent thumbnails', async () => {
   const f = fixture({thumbnail: previewPng});
   const client = createCloudClient({relay: f.relay});
-  client.setDeviceToken('synthetic-device'); await client.list();
+  client.setDeviceToken('synthetic-device'); const entries = await client.list();
+  assert.equal(entries.find(entry => entry.id === document).hasPreview, true);
   assert.deepEqual(await client.preview(document), previewPng);
   assert.equal(f.requests.some(r => r.filename?.endsWith('.rm')), false);
   const key = [...f.files.keys()].find(k => k.endsWith('.png'));
@@ -341,7 +342,7 @@ test('preview rejects excessive decoded dimensions and non-PNG content', async (
   })()]) {
     const client = createCloudClient({relay: fixture({thumbnail: invalid}).relay});
     client.setDeviceToken('synthetic-device'); await client.list();
-    await assert.rejects(client.preview(document), /preview PNG/i);
+    await assert.rejects(client.preview(document), /preview (PNG|image)/i);
   }
 });
 
@@ -391,4 +392,15 @@ test('downloads a verified notebook before the remaining scan completes',async()
  client.setDeviceToken('synthetic-device');const pending=client.list({onProgress:update=>{if(update.completed===2)started();}});await waiting;
  try {assert.equal(localEntries(await client.download(document)).size,3);}
  finally {release();await pending;}
+});
+
+test('cloud JPEG thumbnails are detected, verified and dimension bounded',async()=>{
+ const jpeg=Uint8Array.from([255,216,255,192,0,11,8,0,1,0,1,1,1,17,0,255,217]);
+ const f=fixture({thumbnail:jpeg,thumbnailExtension:'jpg'});
+ const client=createCloudClient({relay:f.relay});client.setDeviceToken('synthetic-device');
+ assert.equal((await client.list()).find(e=>e.id===document).hasPreview,true);
+ assert.deepEqual(await client.preview(document),jpeg);
+ const oversized=jpeg.slice();oversized[7]=255;oversized[8]=255;
+ const other=createCloudClient({relay:fixture({thumbnail:oversized,thumbnailExtension:'jpg'}).relay});
+ other.setDeviceToken('synthetic-device');await other.list();await assert.rejects(other.preview(document),/Oversized/);
 });

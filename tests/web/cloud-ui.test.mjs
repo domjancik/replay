@@ -165,7 +165,7 @@ function cloudHarness(t, {savedMode=null, prepareError=null, storageError=false}
   installGlobal(t,'window',{addEventListener(){}});
   installGlobal(t,'navigator',{credentials:{create(){},get(){}}, storage:{persist:async()=>false}});
   const calls=[];
-  const entries=[{id:'test',name:'Drawing',kind:'notebook'}];
+  const entries=[{id:'test',name:'Drawing',kind:'notebook',hasPreview:true}];
   const vault={
     async mode(){if(storageError)throw new Error('Storage unavailable');return savedMode;},
     async exists(){if(storageError)throw new Error('Storage unavailable');return !!savedMode;},
@@ -329,7 +329,7 @@ test('visible cloud preview starts during scanning and its card survives later b
  let observe;installGlobal(t,'IntersectionObserver',class{constructor(fn){observe=fn;}observe(){}disconnect(){}});
  let release,started,progress;
  const waiting=new Promise(r=>started=r),gate=new Promise(r=>release=r);
- const entries=[{id:'one',name:'One',kind:'document',parent:''}];
+ const entries=[{id:'one',name:'One',kind:'document',parent:'',hasPreview:true}];
  client.list=async({onProgress})=>{progress=onProgress;onProgress({completed:2,total:6,entries});started();await gate;return entries;};
  let reads=0;client.preview=async()=>{reads++;return null;};
  await el('cloud-open').onclick();const pending=el('cloud-unlock').onclick();await waiting;
@@ -344,10 +344,36 @@ test('visible cloud preview starts during scanning and its card survives later b
 test('opening a partial cloud notebook does not wait for or restart the scan',async t=>{
  const {el,client}=cloudHarness(t,{savedMode:'password'});let release,started,downloads=0,lists=0;
  const gate=new Promise(r=>release=r),waiting=new Promise(r=>started=r);
- const entries=[{id:'one',name:'One',kind:'document',parent:''}];
+ const entries=[{id:'one',name:'One',kind:'document',parent:'',hasPreview:true}];
  client.list=async({onProgress})=>{lists++;onProgress({completed:2,total:6,entries});started();await gate;return entries;};
  client.download=async id=>{assert.equal(id,'one');downloads++;return new Uint8Array();};
  await el('cloud-open').onclick();const pending=el('cloud-unlock').onclick();await waiting;
  try {await el('cloud-gallery').children[0].children.at(-1).onclick();assert.equal(downloads,1);assert.equal(lists,1);}
  finally {release();await pending;}
+});
+
+test('notebooks without indexed thumbnails do not request previews or show loading controls',async t=>{
+ const {el,client,vault}=cloudHarness(t,{savedMode:'password'});
+ vault.unlock=async()=>({deviceToken:'test',entries:[]});
+ let observed=0,reads=0;
+ installGlobal(t,'IntersectionObserver',class{constructor(){}observe(){observed++;}disconnect(){}});
+ client.list=async()=>[{id:'none',name:'No thumbnail',kind:'document',parent:'',hasPreview:false}];
+ client.preview=async()=>{reads++;return null;};
+ await el('cloud-open').onclick();await el('cloud-unlock').onclick();
+ const row=el('cloud-gallery').children[0];
+ assert.equal(row.children[2].hidden,true);assert.equal(row.children[3].hidden,true);
+ assert.equal(observed,0);assert.equal(reads,0);
+});
+
+test('cloud folders precede notebooks with alphabetical ordering within each group',async t=>{
+ const {el,client}=cloudHarness(t,{savedMode:'password'});
+ client.list=async()=>[
+  {id:'note',name:'A notebook',kind:'document',parent:''},
+  {id:'z',name:'Z folder',kind:'folder',parent:''},
+  {id:'a',name:'A folder',kind:'folder',parent:''},
+ ];
+ await el('cloud-open').onclick();await el('cloud-unlock').onclick();
+ const rows=el('cloud-gallery').children;
+ assert.equal(rows[0].textContent,'▱ A folder');assert.equal(rows[1].textContent,'▱ Z folder');
+ assert.equal(rows[2].dataset.cloudId,'note');
 });

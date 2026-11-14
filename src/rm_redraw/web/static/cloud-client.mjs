@@ -152,7 +152,7 @@ function visibleTree(records) {
     while (next && !next.hidden && !visited.has(next.id) && names.length < 64) {
       names.unshift(next.name);
       if (next.parent === '') {
-        visible.push({id: record.id, name: record.name, path: names.join('/'), kind: record.kind, parent: record.parent});
+        visible.push({id: record.id, name: record.name, path: names.join('/'), kind: record.kind, parent: record.parent, ...(record.kind === 'document' ? {hasPreview: record.hasPreview === true} : {})});
         break;
       }
       visited.add(next.id);
@@ -404,7 +404,10 @@ export function createCloudClient({relay, cache, onCache} = {}) {
             const bytes = await verifiedText(metadata.name, metadata.hash, maxMetadataBytes,
               data => verifyBlob(data, metadata), blobs, session.read, signal);
             const record = readMetadata(bytes, id);
-            if (record) records.set(id, record);
+            if (record) {
+              record.hasPreview = [...index.values()].some(entry => entry.name.startsWith(`${id}.thumbnails/`) && /\.(png|jpe?g)$/i.test(entry.name) && entry.size <= 2 * MiB);
+              records.set(id, record);
+            }
           }
           check(signal);
           if (failure) return;
@@ -500,18 +503,37 @@ export function createCloudClient({relay, cache, onCache} = {}) {
       const session = sessionReads(device, signal, sessionToken);
       const index = await fetchIndex(`${id}.docSchema`, selected.hash, id, blobCache(snapshot), session.read, signal);
       const candidates = [...index.values()].filter(entry =>
-        entry.name.startsWith(`${id}.thumbnails/`) && entry.name.endsWith('.png') && entry.size <= 2 * MiB);
+        entry.name.startsWith(`${id}.thumbnails/`) && /\.(png|jpe?g)$/i.test(entry.name) && entry.size <= 2 * MiB);
       candidates.sort((a, b) => compare(a.name, b.name));
       if (!candidates.length) return null;
       const entry = candidates[0];
       const bytes = await session.read({action: 'file', hash: entry.hash, filename: entry.name}, 2 * MiB);
       await verifyBlob(bytes, entry); check(signal);
-      const header = [137, 80, 78, 71, 13, 10, 26, 10];
-      if (bytes.length < 24 || !header.every((value, i) => bytes[i] === value) ||
-          decoder.decode(bytes.subarray(12, 16)) !== 'IHDR') throw new Error('Invalid preview PNG');
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      const width = view.getUint32(16), height = view.getUint32(20);
-      if (!width || !height || width > 8192 || height > 8192 || width * height > 16 * 1024 * 1024) throw new Error('Oversized preview PNG');
+      let width = 0, height = 0;
+      const png = [137, 80, 78, 71, 13, 10, 26, 10];
+      if (bytes.length >= 24 && png.every((value, i) => bytes[i] === value) &&
+          decoder.decode(bytes.subarray(12, 16)) === 'IHDR') {
+        width = view.getUint32(16); height = view.getUint32(20);
+      } else if (bytes[0] === 255 && bytes[1] === 216) {
+        // Read JPEG frame dimensions before giving compressed data to the browser.
+        let offset = 2;
+        while (offset + 3 < bytes.length) {
+          if (bytes[offset++] !== 255) break;
+          while (bytes[offset] === 255) offset++;
+          const marker = bytes[offset++];
+          if (marker === 217 || marker === 218 || offset + 2 > bytes.length) break;
+          const length = view.getUint16(offset);
+          if (length < 2 || offset + length > bytes.length) break;
+          if ([192,193,194,195,197,198,199,201,202,203,205,206,207].includes(marker)) {
+            if (length < 8) break;
+            height = view.getUint16(offset + 3); width = view.getUint16(offset + 5); break;
+          }
+          offset += length;
+        }
+      }
+      if (!width || !height) throw new Error('Invalid preview PNG or JPEG');
+      if (width > 8192 || height > 8192 || width * height > 16 * 1024 * 1024) throw new Error('Oversized preview image');
       sessionToken = session.token();
       return bytes;
     },
