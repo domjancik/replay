@@ -2,10 +2,16 @@
 
 Cloud pairing and file import do not use this companion. It is a small, separate desktop app for allowing a browser to read a USB-connected tablet. The Windows build bundles Python and Tk; end users do not need a terminal, Python, uv, FFmpeg or a renderer installation.
 
+## Download
+
+[Download for Windows x64](https://github.com/domjancik/replay/releases/download/companion-v0.1.0/rePlay-USB-Companion.exe) · [Release notes and SHA-256 checksum](https://github.com/domjancik/replay/releases/tag/companion-v0.1.0)
+
+Portable unsigned preview: Windows may display a security warning. No installer, administrator access or terminal is required. macOS/Linux downloads are not available yet. Download only from the linked project release.
+
 ## Use
 
 1. Open `rePlay-USB-Companion.exe`.
-2. In rePlay, open **Import from a connected tablet** and select **Use the optional USB companion**.
+2. In rePlay, select the **Tablet · USB** notebook source and select **Use the optional USB companion**.
 3. Copy the displayed site origin into the companion's **Allow this rePlay site** field. Use the exact HTTPS origin for a hosted site, or the displayed localhost origin for the local app. No paths or wildcard origins are accepted.
 4. Click **Start USB access**, then **Copy connection key**. Paste the key into rePlay and click **Connect companion**.
 5. Enable the tablet's USB web interface under Storage. Browse folders and import a notebook. Keep the companion window open. Stop or close it to stop new requests; an already-running download may finish.
@@ -13,6 +19,14 @@ Cloud pairing and file import do not use this companion. It is a small, separate
 The browser may ask for local-network/loopback permission. Browser support varies; never disable browser security protections. A connection failure does not prevent cloud pairing or importing an existing file. Chrome's [local-network access documentation](https://developer.chrome.com/docs/modern-web-guidance/guides/security/local-network-access) describes this permission boundary.
 
 The current bridge imports raw ink only. Text-anchored pages may need a matching PDF attached separately. The local app's existing direct USB backend retains its paired PDF workflow. Imported bytes go through the existing file-import consumer: in the current local app that saves the notebook on this computer. The standalone client module returns bytes to its caller and does not upload them to a hosted server.
+
+## Troubleshooting
+
+- Keep the companion running; check the allowed origin matches the website exactly (`https://replay.domj.net` for the public app).
+- Restarting USB access generates a new key. Copy it again and reconnect in the browser.
+- If prompted, allow the browser to access the local network. A browser that blocks loopback access may not support this flow; do not disable browser security.
+- Check the USB cable supports data and that the tablet’s USB web interface is enabled. Stop other companion instances if port 8786 is already in use.
+- Cloud pairing and file import remain available without the companion.
 
 ## Security and lifecycle
 
