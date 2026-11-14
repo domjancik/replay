@@ -1,4 +1,4 @@
-"""Browser-only parsing/timing bridge; rasterization is performed by Rust WASM."""
+"""Python reference oracle for the native browser reader; not deployed to browsers."""
 
 from dataclasses import asdict
 from io import BytesIO

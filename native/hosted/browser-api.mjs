@@ -51,7 +51,7 @@ export async function createBrowserApi(){
   }catch(error){if(error.message.includes('outside the selected canvas'))error.code='canvas_clipping';throw error;}
  }
  async function storeResult(job,result){
-  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,finalEqualsStatic:true})],{type:'application/json'})]]){await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
+  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,parser:job.parser,finalEqualsStatic:true})],{type:'application/json'})]]){await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
   job.extension=result.extension;job.frames=job.expected_frames=result.frames;job.state='complete';job.finished=Date.now()/1000;
  }
  async function pump(){
@@ -59,7 +59,7 @@ export async function createBrowserApi(){
   try{for(let job;job=jobs.find(j=>j.state==='queued');){
    job.state='running';job.started=Date.now()/1000;await saveJobs();
    try{const prepared=await prepare(job.input);if(job.state==='cancelled')continue;
-    job.anchor_evidence=prepared.anchor_evidence;job.settings={...prepared.config,viewport:job.crop?job.crop.slice(2):prepared.config.viewport};activeWorker=rpcWorker();
+    job.parser=prepared.parser;job.anchor_evidence=prepared.anchor_evidence;job.settings={...prepared.config,viewport:job.crop?job.crop.slice(2):prepared.config.viewport};activeWorker=rpcWorker();
     const result=await activeWorker.call({op:'render',prepared,crop:job.crop,reverse_speed:job.reverse_speed},p=>{job.frames=p.progress;job.expected_frames=p.total;if(p.image){const key=job.id+'/latest.png';if(urls.has(key))URL.revokeObjectURL(urls.get(key));urls.set(key,URL.createObjectURL(p.image));}});
     if(job.state!=='cancelled')await storeResult(job,result);
    }catch(error){if(job.state!=='cancelled'){job.state='failed';job.error=error.message;}}

@@ -3,7 +3,6 @@
 import json
 import shutil
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
 
 root = Path(__file__).resolve().parents[2]
 out = root / "artifacts/hosted-replay"
@@ -81,24 +80,19 @@ for name in ["pdf.mjs", "pdf.worker.mjs", "pdf.renderer.mjs"]:
 for name in ["wasm", "standard_fonts", "cmaps"]:
     shutil.copytree(pdfjs / name, public / "pdfjs" / name, dirs_exist_ok=True)
 shutil.copyfile(pdfjs / "LICENSE", public / "licenses/PDFJS-LICENSE")
+# Remove only the previous generated Python runtime inside this staging directory.
 runtime = public / "runtime"
-runtime.mkdir(exist_ok=True)
-for name in [
-    "pyodide.mjs",
-    "pyodide.asm.js",
-    "pyodide.asm.wasm",
-    "python_stdlib.zip",
-    "pyodide-lock.json",
-    "rmscene-0.8.0-py3-none-any.whl",
-    "packaging-23.2-py3-none-any.whl",
-    "numpy-2.2.5-cp313-cp313-pyemscripten_2025_0_wasm32.whl",
-    "pillow-11.3.0-cp313-cp313-pyemscripten_2025_0_wasm32.whl",
-]:
-    shutil.copyfile(root / "artifacts/browser-prototype-20261113/pyodide" / name, runtime / name)
-with ZipFile(runtime / "engine.zip", "w", ZIP_DEFLATED) as z:
-    for path in (root / "src/rm_redraw").rglob("*.py"):
-        z.write(path, path.relative_to(root / "src").as_posix())
-    z.write(root / "native/hosted/bridge.py", "bridge.py")
+if runtime.exists():
+    if runtime.is_symlink() or runtime.resolve().parent != public.resolve():
+        raise ValueError("Unsafe stale runtime path")
+    shutil.rmtree(runtime)
+(public / "licenses/PYODIDE-LICENSE").unlink(missing_ok=True)
+shutil.copyfile(root / "native/rmdoc/reader.mjs", public / "reader.mjs")
+shutil.copyfile(
+    root / "native/rmdoc/target/wasm32-unknown-unknown/release/rm_rmdoc.wasm",
+    public / "rmdoc.wasm",
+)
+shutil.copyfile(root / "native/rmdoc/LICENSE-RMSCENE", public / "licenses/RMSCENE-LICENSE")
 (out / "api").mkdir(exist_ok=True)
 shutil.copyfile(root / "native/hosted/api/cloud-relay.mjs", out / "api/cloud-relay.mjs")
 config = {

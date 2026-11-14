@@ -1,17 +1,6 @@
 import {instantiateRenderer} from './renderer.mjs';
-let python, renderer, anchorCore;
+let reader, renderer, anchorCore;
 async function bytes(url){const r=await fetch(url);if(!r.ok)throw Error(`Could not load browser engine (${r.status})`);return new Uint8Array(await r.arrayBuffer());}
-async function runtime(){
- if(!python){
-  const {loadPyodide}=await import('/runtime/pyodide.mjs');
-  python=await loadPyodide({indexURL:'/runtime/',packages:['numpy','pillow']});
-  for(const name of ['engine.zip','rmscene-0.8.0-py3-none-any.whl','packaging-23.2-py3-none-any.whl']){
-   python.FS.writeFile('/'+name,await bytes('/runtime/'+name));
-  }
-  python.runPython("import sys, json\nsys.path[:0]=['/engine.zip','/rmscene-0.8.0-py3-none-any.whl','/packaging-23.2-py3-none-any.whl']\nimport bridge");
- }
- return python;
-}
 async function png(frame){const c=new OffscreenCanvas(frame.width,frame.height);c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(frame.rgba),frame.width,frame.height),0,0);return c.convertToBlob({type:'image/png'});}
 async function execute(data,id){
  if(data.op==='match'){const {instantiateCore}=await import('/core.mjs');anchorCore??=await instantiateCore(await bytes('/replay-core.wasm'));return anchorCore.match(data.request);}
@@ -35,16 +24,10 @@ async function execute(data,id){
   const video=await encodeReplay({frames:produce(),width,height,fps:config.fps,frameCount:indices.length});
   return {image:crop?await png({width,height,rgba:cropped(final.rgba)}):image,video:new Blob([video.buffer],{type:video.mimeType}),extension:video.extension,frames:indices.length};
  }
- const py=await runtime();py.globals.set('raw_js',data.raw);const {raw:unusedRaw,...args}=data;py.globals.set('args_json',JSON.stringify(args));
- try{const result=JSON.parse(py.runPython(`
-a=json.loads(args_json)
-raw=bytes(raw_js.to_py())
-if a['op']=='inspect': result=bridge.inspect(raw)
-elif a['op']=='info': result=bridge.info(bridge.page_bytes(raw,a['member']),a['page'])
-elif a['op']=='anchors': result=bridge.anchor_templates(bridge.page_bytes(raw,a['member']),a['page'],a['settings'])
-elif a['op']=='prepare': result=bridge.prepare(bridge.page_bytes(raw,a['member']),a['page'],a['settings'],a.get('anchor_result'),native_timing=True)
-json.dumps(result)
-`));if(data.op==='prepare'){const {instantiateCore}=await import('/core.mjs');anchorCore??=await instantiateCore(await bytes('/replay-core.wasm'));result.frames=anchorCore.match({op:'schedule',page:result.request.page,fps:result.config.fps,seconds:result.config.seconds,ordering:result.config.ordering});}return result;}finally{py.globals.delete('raw_js');py.runPython('del raw, a, result');}
+ const {instantiateReader}=await import('./reader.mjs');reader??=await instantiateReader(await bytes('/rmdoc.wasm'));
+ const {raw,...args}=data;const result=reader.execute(raw,args);
+ if(data.op==='prepare'){const {instantiateCore}=await import('/core.mjs');anchorCore??=await instantiateCore(await bytes('/replay-core.wasm'));result.frames=anchorCore.match({op:'schedule',page:result.request.page,fps:result.config.fps,seconds:result.config.seconds,ordering:result.config.ordering});}
+ return result;
 }
 let queue=Promise.resolve();
 self.onmessage=({data:{id,...data}})=>{queue=queue.then(async()=>{try{postMessage({id,result:await execute(data,id)});}catch(error){postMessage({id,error:error.message});}});};
