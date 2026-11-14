@@ -152,7 +152,7 @@ function visibleTree(records) {
     while (next && !next.hidden && !visited.has(next.id) && names.length < 64) {
       names.unshift(next.name);
       if (next.parent === '') {
-        visible.push({id: record.id, name: record.name, path: names.join('/'), kind: record.kind, parent: record.parent, ...(record.kind === 'document' ? {hasPreview: record.hasPreview === true} : {})});
+        visible.push({id: record.id, name: record.name, path: names.join('/'), kind: record.kind, parent: record.parent, ...(record.kind === 'document' ? {hasPreview: record.hasPreview === true, version: record.version} : {})});
         break;
       }
       visited.add(next.id);
@@ -284,6 +284,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
   let listing;
   let previewDocuments = new Map();
   let downloading = false;
+  let indexDiagnostics = null;
 
   function reset(token, preserveInitial = false) {
     connection.abort();
@@ -294,7 +295,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     documents = new Map();
     previewDocuments = new Map();
     listing = undefined;
-    downloading = false;
+    downloading = false; indexDiagnostics = null;
     if (!preserveInitial) initialCache = undefined;
   }
 
@@ -389,6 +390,8 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     }
     const root = hash === '' ? new Map() : await fetchIndex('root.docSchema', hash, '.', blobs, session.read, signal);
     const records = new Map();
+    const diagnostics = {indexes:0, members:0, thumbnailMembers:0, extensions:{}, thumbnailExtensions:{}, thumbnailPathShapes:[]};
+    indexDiagnostics = diagnostics;
     const ids = [...root.keys()].filter(id => uuid.test(id));
     onProgress?.({completed: 0, total: ids.length, entries: []});
     // A rolling pool avoids waiting for the slowest request in each fixed batch.
@@ -399,12 +402,28 @@ export function createCloudClient({relay, cache, onCache} = {}) {
         try {
           check(signal);
           const index = await fetchIndex(`${id}.docSchema`, root.get(id).hash, id, blobs, session.read, signal);
+          diagnostics.indexes++;
+          for (const member of index.values()) {
+            diagnostics.members++;
+            const extension = /\.([a-z0-9]+)$/i.exec(member.name)?.[1]?.toLowerCase() || '(none)';
+            diagnostics.extensions[extension] = (diagnostics.extensions[extension] || 0) + 1;
+            if (/thumb|preview/i.test(member.name)) {
+              diagnostics.thumbnailMembers++;
+              diagnostics.thumbnailExtensions[extension] = (diagnostics.thumbnailExtensions[extension] || 0) + 1;
+              const shape = member.name.split('/').map(part => {
+                const suffix = /\.([a-z0-9]+)$/i.exec(part)?.[1] || '';
+                return /thumb|preview/i.test(part) ? `<id>.${suffix || 'thumbnail'}` : `<id>${suffix ? '.'+suffix : ''}`;
+              }).join('/');
+              if (diagnostics.thumbnailPathShapes.length < 12 && !diagnostics.thumbnailPathShapes.includes(shape)) diagnostics.thumbnailPathShapes.push(shape);
+            }
+          }
           const metadata = index.get(`${id}.metadata`);
           if (metadata) {
             const bytes = await verifiedText(metadata.name, metadata.hash, maxMetadataBytes,
               data => verifyBlob(data, metadata), blobs, session.read, signal);
             const record = readMetadata(bytes, id);
             if (record) {
+              record.version = root.get(id).hash;
               record.hasPreview = [...index.values()].some(entry => entry.name.startsWith(`${id}.thumbnails/`) && /\.(png|jpe?g)$/i.test(entry.name) && entry.size <= 2 * MiB);
               records.set(id, record);
             }
@@ -482,6 +501,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     setDeviceToken,
     lock() { reset(); },
     getCache,
+    getIndexDiagnostics() { return structuredClone(indexDiagnostics); },
     async list({onProgress} = {}) {
       const device = requireDevice();
       if (downloading) throw new Error('Already downloading a cloud document');

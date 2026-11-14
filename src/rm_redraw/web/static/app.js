@@ -396,8 +396,9 @@ async function start(){
   capabilities=await api('/api/session');token=capabilities.token;
   if(capabilities.hosted){$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
   const {setupCloud}=await import('/cloud-ui.mjs');
-  setupCloud({sessionToken:()=>token,importArchive:async(raw)=>{
-    const result=await api('/api/upload',raw,true);
+  setupCloud({sessionToken:()=>token,getSavedNotebooks:()=>api('/api/library'),importArchive:async(raw,source)=>{
+    const query=capabilities.hosted&&source?.version?'?cloud_id='+encodeURIComponent(source.id)+'&cloud_version='+encodeURIComponent(source.version):'';
+    const result=await api('/api/upload'+query,raw,true);
     await loadLibrary(result.id);setLibrarySource('local');notice('Cloud notebook saved locally. Choose a page to animate.');
   }});
   rendererBackend=capabilities.rust?'rust':'python';

@@ -155,7 +155,7 @@ test('unlocked cloud notebooks appear in gallery and explicit lock clears them',
  el('cloud-lock').onclick();assert.equal(el('cloud-gallery').children.length,0);assert.equal(el('cloud-gallery-refresh').disabled,true);
 });
 
-function cloudHarness(t, {savedMode=null, prepareError=null, storageError=false}={}) {
+function cloudHarness(t, {savedMode=null, prepareError=null, storageError=false,savedNotebooks=[]}={}) {
   const elements = new Map();
   const make = () => ({dataset:{}, children:[], value:'', checked:false, disabled:false, hidden:false, textContent:'', handlers:{},
     querySelectorAll(){return [];}, append(...items){this.children.push(...items);}, replaceChildren(...items){this.children=items;},
@@ -180,7 +180,7 @@ function cloudHarness(t, {savedMode=null, prepareError=null, storageError=false}
     setDeviceToken(){},lock(){},async preview(){calls.push('preview');return null;}};
   el('source-cloud').onclick=()=>calls.push('gallery');
   t.mock.timers.enable({apis:['setTimeout']});
-  setupCloud({sessionToken:()=>'',importArchive(){},vault,clientFactory:()=>client});
+  setupCloud({sessionToken:()=>'',importArchive(){},getSavedNotebooks:async()=>savedNotebooks,vault,clientFactory:()=>client});
   return {el,calls,vault,client};
 }
 
@@ -376,4 +376,22 @@ test('cloud folders precede notebooks with alphabetical ordering within each gro
  const rows=el('cloud-gallery').children;
  assert.equal(rows[0].textContent,'▱ A folder');assert.equal(rows[1].textContent,'▱ Z folder');
  assert.equal(rows[2].dataset.cloudId,'note');
+});
+
+test('cloud cards distinguish saved current versions from updates',async t=>{
+ const {el,client}=cloudHarness(t,{savedMode:'password',savedNotebooks:[
+  {cloud_source:{id:'one',version:'same'}},{cloud_source:{id:'two',version:'old'}}
+ ]});
+ client.list=async()=>[
+  {id:'one',name:'One',kind:'document',version:'same'},
+  {id:'two',name:'Two',kind:'document',version:'new'},
+  {id:'three',name:'Three',kind:'document',version:'first'}
+ ];
+ await el('cloud-open').onclick();await el('cloud-unlock').onclick();
+ const rows=el('cloud-gallery').children;
+ const one=rows.find(row=>row.dataset.cloudId==='one'),two=rows.find(row=>row.dataset.cloudId==='two');
+ assert.ok(one.children.some(child=>child.textContent==='Saved'));
+ assert.equal(one.children.at(-1).disabled,true);
+ assert.ok(two.children.some(child=>child.textContent==='Update available'));
+ assert.equal(two.children.at(-1).textContent,'Save updated notebook');
 });

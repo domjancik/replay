@@ -73,8 +73,14 @@ export async function createBrowserApi(){
   if(url.pathname==='/api/upload'){
    const blob=body instanceof Blob?body:new Blob([body]);if(blob.size>128*1024*1024)throw Error('Notebook exceeds 128 MiB');
    const info=await parser.call({op:'inspect',raw:new Uint8Array(await blob.arrayBuffer())});
-   const existing=docs.find(d=>d.sha256===info.sha256);if(existing)return existing;
-   const doc={...info,id:crypto.randomUUID().replaceAll('-','')};await put('archive/'+doc.id,blob);docs.push(doc);await put('documents',docs);return doc;
+   const cloudId=url.searchParams.get('cloud_id'),cloudVersion=url.searchParams.get('cloud_version');
+   let cloud_source;
+   if(cloudId||cloudVersion){
+    if(!/^[a-f0-9-]{36}$/i.test(cloudId||'')||!/^[a-f0-9]{64}$/i.test(cloudVersion||''))throw Error('Invalid cloud source version');
+    cloud_source={id:cloudId,version:cloudVersion};
+   }
+   const existing=docs.find(d=>d.sha256===info.sha256);if(existing){if(cloud_source){existing.cloud_source=cloud_source;await put('documents',docs);}return existing;}
+   const doc={...info,...(cloud_source?{cloud_source}:{}),id:crypto.randomUUID().replaceAll('-','')};await put('archive/'+doc.id,blob);docs.push(doc);await put('documents',docs);return doc;
   }
   if(url.pathname==='/api/upload-pdf'){
    const doc=docs.find(d=>d.id===url.searchParams.get('document'));if(!doc)throw Error('Choose a notebook first');

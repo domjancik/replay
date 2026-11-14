@@ -111,7 +111,7 @@ test('pairs, lists verified visible metadata and downloads only the selected doc
   const client = createCloudClient({relay});
   assert.equal(await client.pair('abcdefgh'), 'synthetic-device');
   assert.match(requests[0].device_id, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
-  assert.deepEqual(await client.list(), [
+  assert.deepEqual((await client.list()).map(({version,...entry})=>entry), [
     {id: folder, name: 'Sketches', path: 'Sketches', kind: 'folder', parent: ''},
     {id: document, name: 'Notebook', path: 'Sketches/Notebook', kind: 'document', parent: folder, hasPreview: false},
   ]);
@@ -403,4 +403,13 @@ test('cloud JPEG thumbnails are detected, verified and dimension bounded',async(
  const oversized=jpeg.slice();oversized[7]=255;oversized[8]=255;
  const other=createCloudClient({relay:fixture({thumbnail:oversized,thumbnailExtension:'jpg'}).relay});
  other.setDeviceToken('synthetic-device');await other.list();await assert.rejects(other.preview(document),/Oversized/);
+});
+
+test('index diagnostics summarize actual member structure without names or tokens',async()=>{
+ const client=createCloudClient({relay:fixture({thumbnail:previewPng,thumbnailExtension:'jpg'}).relay});
+ client.setDeviceToken('synthetic-device');await client.list();
+ const report=client.getIndexDiagnostics();
+ assert.equal(report.indexes,3);assert.equal(report.thumbnailMembers,1);
+ assert.equal(report.extensions.jpg,1);
+ assert.doesNotMatch(JSON.stringify(report),/synthetic-device|Notebook|11112233/);
 });

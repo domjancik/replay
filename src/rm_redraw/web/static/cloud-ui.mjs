@@ -8,13 +8,15 @@ const STORAGE_HELP = {
   unprotected: 'Reconnect without an unlock prompt. Only use this on a private, trusted browser.',
 };
 
-export function setupCloud({ sessionToken, importArchive, vault = createVault(), clientFactory = createCloudClient }) {
+export function setupCloud({ sessionToken, importArchive, getSavedNotebooks = async () => [], vault = createVault(), clientFactory = createCloudClient }) {
   const $ = (id) => document.getElementById(id);
   let client = null, data = null, savedMode = null, activeMode = null;
   let busy = false, accountBusy = false, epoch = 0, idle, passkeyFailed = false;
   let previewObserver = null, previewBusy = false, libraryLoading = false, importBusy = false;
   let cloudFolder = "", cloudEntries = [];
   const cloudRows = new Map();
+  let savedNotebooks = [];
+  const isSaved = entry => !!entry.version && savedNotebooks.some(doc => doc.cloud_source?.id === entry.id && doc.cloud_source.version === entry.version);
   const previewUrls = new Set(), visiblePreviews = new Map(), attemptedPreviews = new Set();
   const hasPasskeys = !!globalThis.navigator?.credentials?.create && !!globalThis.navigator?.credentials?.get;
   $('cloud-storage').value = hasPasskeys ? 'passkey' : 'password';
@@ -70,7 +72,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     if ($('cloud-gallery-status')) $('cloud-gallery-status').hidden=settingsOpen;
     $('cloud-open').hidden=settingsOpen;
     if ($('cloud-open')) $('cloud-open').textContent = connected ? 'Connection settings' : savedMode ? 'Open connection' : 'Connect reMarkable';
-    $('cloud-gallery')?.querySelectorAll('button[data-import]').forEach(button => { button.disabled = importBusy || (busy && !libraryLoading); });
+    $('cloud-gallery')?.querySelectorAll('button[data-import]').forEach(button => { button.disabled = button.dataset.saved === 'true' || importBusy || (busy && !libraryLoading); });
   }
   function clearPreviews() {
     previewObserver?.disconnect(); visiblePreviews.clear(); attemptedPreviews.clear();
@@ -127,6 +129,8 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     let shown = ''; libraryLoading = true;
     const entries = await client.list({onProgress: ({completed, total, entries: partial}) => {
       if (current !== epoch || !data) return;
+      const report = client.getIndexDiagnostics?.();
+      if (report && $('cloud-index-report')) $('cloud-index-report').textContent = JSON.stringify(report, null, 2);
       const notebooks = partial.filter(entry => entry.kind !== 'folder');
       const signature = JSON.stringify(partial);
       if (partial.length && signature !== shown) {
@@ -150,6 +154,8 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     if (current === epoch && !importBusy) status(entries.length ? 'Choose a notebook to save to this browser.' : 'No notebooks found in this cloud account.');
   }
   async function browse(current) {
+    savedNotebooks = await getSavedNotebooks();
+    if (current !== epoch) return;
     renderEntries(data.entries || []);
     $('source-cloud')?.onclick?.();
     $('cloud-dialog').hidden=true;
@@ -208,7 +214,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
         folder.onclick = () => {cloudFolder = entry.id; renderEntries(cloudEntries); controls();}; target.append(folder); continue;
       }
       const existing = cloudRows.get(entry.id);
-      if (existing && existing.entryKey === JSON.stringify(entry)) {
+      if (existing && existing.entryKey === JSON.stringify([entry, savedNotebooks.filter(doc => doc.cloud_source?.id === entry.id).map(doc => doc.cloud_source.version)])) {
         target.append(existing); if (previewObserver && entry.hasPreview === true) previewObserver.observe(existing); continue;
       }
       const row = document.createElement('div'); row.className = 'cloud-notebook-card'; row.dataset.cloudId = entry.id;
@@ -232,23 +238,29 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
         } catch { if (renderedEpoch === epoch) previewStatus.textContent = 'Preview unavailable. You can still save this notebook.'; }
         finally { previewStatus.setAttribute?.('aria-busy','false'); previewBusy = false; preview.disabled = false; queueMicrotask(pumpPreviews); }
       };
-      const button = document.createElement('button'); button.textContent = 'Save notebook'; button.dataset.import = 'true'; button.disabled = importBusy || (busy && !libraryLoading);
+      const saved = isSaved(entry), outdated = !saved && savedNotebooks.some(doc => doc.cloud_source?.id === entry.id);
+      const savedStatus = document.createElement('small'); savedStatus.className = 'cloud-saved-status';
+      savedStatus.textContent = saved ? 'Saved' : outdated ? 'Update available' : ''; savedStatus.hidden = !saved && !outdated;
+      const button = document.createElement('button'); button.textContent = saved ? 'Saved notebook' : outdated ? 'Save updated notebook' : 'Save notebook'; button.dataset.saved = String(saved); button.dataset.import = 'true'; button.disabled = saved || importBusy || (busy && !libraryLoading);
       button.onclick = async () => {
-        if (importBusy || (busy && !libraryLoading)) return;
+        if (saved || importBusy || (busy && !libraryLoading)) return;
         const generation = epoch; importBusy = true; controls();
         status('Saving notebook…');
         try {
         if (generation !== epoch) return;
         const archive = await client.download(entry.id);
         if (generation !== epoch) return;
-        await importArchive(archive);
+        await importArchive(archive, {id: entry.id, version: entry.version});
+        savedNotebooks = await getSavedNotebooks();
+        if (generation !== epoch) return;
+        renderEntries(cloudEntries);
         $('cloud-dialog').hidden=true;
         if (generation === epoch) status(libraryLoading ? 'Notebook saved. Cloud scan continues…' : 'Notebook saved.');
         } catch (error) { if (generation === epoch) status(error.message); }
         finally { importBusy = false; controls(); touch(); queueMicrotask(pumpPreviews); }
       };
-      row.entryKey = JSON.stringify(entry); cloudRows.set(entry.id, row);
-      row.append(image, label, previewStatus, preview, button); target.append(row);
+      row.entryKey = JSON.stringify([entry, savedNotebooks.filter(doc => doc.cloud_source?.id === entry.id).map(doc => doc.cloud_source.version)]); cloudRows.set(entry.id, row);
+      row.append(image, label, previewStatus, preview, savedStatus, button); target.append(row);
       if (previewObserver && entry.hasPreview === true) { row.loadPreview = preview.onclick; previewObserver.observe(row); }
     }
   }
