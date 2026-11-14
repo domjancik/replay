@@ -291,7 +291,7 @@ async function browse(folder='', label='Tablet') {
         $('usb-status').textContent='Saving notebook and verifying two raw reads… This can take a minute.';
         try{const result=$('usb-companion-use').checked
           ? await api('/api/upload',await usbCompanion.download(entry.id),true)
-          : await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);$('usb-dialog').close();notice('Notebook saved locally.');}
+          : await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);setLibrarySource('local');notice('Notebook saved locally. Choose a page to animate.');}
         catch(error){$('usb-status').textContent=error.message+($('include-pdf').checked?' Try without the PDF for pages without text anchors. Any downloaded raw data is retained locally.':'');}
         finally{usbBusy=false;$('usb-companion-use').disabled=false;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=b.dataset.unsupported==='true');}
       };row.append(name,action);$('usb-items').append(row);
@@ -357,7 +357,7 @@ async function start(){
   $('refresh').onclick=safely(()=>loadLibrary());$('generate').onclick=safely(generate);
   $('upload-open').onclick=()=>$('upload').click();$('upload').onchange=safely(()=>upload($('upload'),'/api/upload'));
   $('pair-open').onclick=()=>$('pair').click();$('pair').onchange=safely(()=>upload($('pair'),'/api/upload-pdf?document='+encodeURIComponent($('notebook').value)));
-  $('usb-open').onclick=()=>{$('usb-dialog').showModal();if(!$('usb-companion-use').checked)browse();};$('usb-close').onclick=()=>$('usb-dialog').close();$('usb-up').onclick=()=>browse();
+  $('usb-up').onclick=()=>browse();
   setupUsbCompanion();
   await loadLibrary();await poll();setInterval(()=>poll().catch(error=>notice('Server unavailable: '+error.message)),2000);
 }
@@ -520,15 +520,16 @@ async function processThumbnailQueue(){
   }
 }
 function setLibrarySource(source){
-  const cloud=source==='cloud';queueView=source==='queue';
+  const cloud=source==='cloud',tablet=source==='tablet';queueView=source==='queue';
   $('queue-controls').hidden=!queueView;
   $('replay-history').classList.toggle('queue-view',queueView);
   $('history-title').textContent=queueView?'Replay queue':'Your replays';
   $('source-queue').setAttribute('aria-pressed',String(queueView));
-  $('local-library').hidden=cloud||queueView;$('cloud-library').hidden=!cloud;
+  $('local-library').hidden=cloud||tablet||queueView;$('cloud-library').hidden=!cloud;
+  $('tablet-library').hidden=!tablet;$('source-tablet').setAttribute('aria-pressed',String(tablet));
   $('source-cloud').setAttribute('aria-pressed',String(cloud));
-  $('source-local').setAttribute('aria-pressed',String(!cloud&&!queueView));
-  $('notebook-search').hidden=cloud||queueView;$('gallery-grid').hidden=cloud||queueView;$('gallery-list').hidden=cloud||queueView;
+  $('source-local').setAttribute('aria-pressed',String(!cloud&&!tablet&&!queueView));
+  $('notebook-search').hidden=cloud||tablet||queueView;$('gallery-grid').hidden=cloud||tablet||queueView;$('gallery-list').hidden=cloud||tablet||queueView;
   renderJobs();
 }
 function setupGallery(){
@@ -536,6 +537,7 @@ function setupGallery(){
   $('queue-filter').onchange=renderJobs;
   $('source-local').onclick=()=>setLibrarySource('local');
   $('source-cloud').onclick=()=>setLibrarySource('cloud');
+  $('source-tablet').onclick=()=>{setLibrarySource('tablet');if(!$('usb-companion-use').checked||usbCompanion)browse();};
   $('cloud-gallery-connect').onclick=()=>$('cloud-open').onclick();
   $('cloud-gallery-refresh').onclick=()=>$('cloud-refresh').onclick();
   $('notebook-search').oninput=renderGallery;

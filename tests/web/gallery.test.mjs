@@ -133,3 +133,17 @@ test('selected page lists only its completed replays including exports and opens
  assert.equal(el('page-replays').hidden,true);
  assert.equal(el('page-replay-list').children.length,0);
 });
+
+test('tablet is an inline notebook source and switching sources hides its controls',()=>{
+ const {el,context}=fixture();
+ el('usb-companion-use').checked=true;
+ el('source-tablet').onclick();
+ assert.equal(el('tablet-library').hidden,false);
+ assert.equal(el('local-library').hidden,true);
+ assert.equal(el('cloud-library').hidden,true);
+ assert.equal(el('source-tablet').attrs['aria-pressed'],'true');
+ assert.equal(el('source-local').attrs['aria-pressed'],'false');
+ vm.runInContext("setLibrarySource('cloud')",context);
+ assert.equal(el('tablet-library').hidden,true);
+ assert.equal(el('source-tablet').attrs['aria-pressed'],'false');
+});
