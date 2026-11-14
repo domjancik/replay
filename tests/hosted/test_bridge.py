@@ -103,3 +103,24 @@ def test_browser_anchor_results_reject_conflicting_shared_offsets():
         module.resolve_anchor_fits(plan, fits)
     fits[1] = fits[0]
     assert module.resolve_anchor_fits(plan, fits) == {"1:17": 266}
+
+
+def test_kofi_widget_is_isolated_from_the_credential_origin():
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    subprocess.run([sys.executable, "native/hosted/build.py"], check=True, capture_output=True)
+    root = Path("artifacts/hosted-replay")
+    html = (root / "public/index.html").read_text(encoding="utf-8")
+    assert 'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"' in html
+    assert 'src="/kofi-button.html"' in html
+    config = json.loads((root / "vercel.json").read_text())
+    widget = next(rule for rule in config["headers"] if rule["source"] == "/kofi-button.html")
+    policy = next(h["value"] for h in widget["headers"] if h["key"] == "Content-Security-Policy")
+    assert "https://storage.ko-fi.com" in policy
+    assert "allow-same-origin" not in policy
+    assert "connect-src 'none'" in policy
+    script = (root / "public/kofi-init.js").read_text()
+    assert "'#252521', 'P2M22AN647'" in script

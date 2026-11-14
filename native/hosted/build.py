@@ -48,7 +48,15 @@ html = html.replace(
 html = html.replace(
     "No new ink rendering.", "Frames are rendered again on this device for the export."
 )
+html = html.replace(
+    '<a href="https://ko-fi.com/domjancik" target="_blank" rel="noopener noreferrer">Support me on Ko-fi <span aria-hidden="true">↗</span></a>',
+    '<iframe class="kofi-widget" src="/kofi-button.html" title="Support me on Ko-fi" '
+    'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" '
+    'referrerpolicy="no-referrer" width="240" height="54"></iframe>',
+)
 (public / "index.html").write_text(html, encoding="utf8")
+for name in ["kofi-button.html", "kofi-init.js", "kofi-button.css"]:
+    shutil.copyfile(root / "native/hosted" / name, public / name)
 for name in [
     "bootstrap.mjs",
     "browser-api.mjs",
@@ -109,7 +117,7 @@ config = {
     "functions": {"api/cloud-relay.mjs": {"maxDuration": 60}},
     "headers": [
         {
-            "source": "/(.*)",
+            "source": "/((?!kofi-button\\.html$).*)",
             "headers": [
                 {
                     "key": "Content-Security-Policy",
@@ -124,7 +132,25 @@ config = {
                 {"key": "Referrer-Policy", "value": "no-referrer"},
                 {"key": "Cache-Control", "value": "no-cache"},
             ],
-        }
+        },
+        {
+            "source": "/kofi-button.html",
+            "headers": [
+                {
+                    "key": "Content-Security-Policy",
+                    "value": (
+                        "default-src 'none'; script-src 'self' https://storage.ko-fi.com; "
+                        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                        "font-src https://fonts.gstatic.com; img-src https://storage.ko-fi.com; "
+                        "connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; "
+                        "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                    ),
+                },
+                {"key": "Referrer-Policy", "value": "no-referrer"},
+                {"key": "X-Content-Type-Options", "value": "nosniff"},
+                {"key": "Cache-Control", "value": "no-cache"},
+            ],
+        },
     ],
 }
 (out / "vercel.json").write_text(json.dumps(config, indent=2), encoding="utf8")
