@@ -286,3 +286,12 @@ test('custom duration input is visible only when Custom is selected',()=>{
  vm.runInContext(`chooseDuration('24')`,context);assert.equal(el('custom-duration').hidden,true);assert.equal(el('seconds').value,'24');
  vm.runInContext(`restoreReplaySettings({seconds:75})`,context);assert.equal(el('custom-duration').hidden,false);
 });
+
+test('gallery controls initialize at the real script startup position',()=>{
+ const elements=new Map();const el=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
+ const context=vm.createContext({document:{getElementById:el},window:{addEventListener(){}}});
+ const source=readFileSync(new URL('../../src/rm_redraw/web/static/app.js',import.meta.url),'utf8');
+ // Exercise synchronous control setup where production invokes start, not after evaluation.
+ vm.runInContext(source.replace('safely(start)();','setupGallery();'),context);
+ assert.equal(el('custom-duration').hidden,true);
+});

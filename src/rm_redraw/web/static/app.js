@@ -553,7 +553,7 @@ async function start(){
   setupUsbCompanion();
   await loadLibrary();await poll();setInterval(()=>poll().catch(error=>notice('Server unavailable: '+error.message)),2000);
 }
-safely(start)();
+
 
 
 function thumbnailFor(documentId,pageId){
@@ -807,3 +807,6 @@ function setupUsbCompanion(){
   $('usb-companion-disconnect').onclick=()=>{clearUsbPreviews();setUsbConnected(false);usbCompanion?.disconnect();usbCompanion=null;$('usb-items').replaceChildren();$('usb-status').textContent='Companion disconnected from this tab.';};
   window.addEventListener('pagehide',()=>usbCompanion?.disconnect());
 }
+
+// Start after all module-level state has been initialized.
+safely(start)();
