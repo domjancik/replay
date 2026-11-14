@@ -1,3 +1,14 @@
+export async function deleteSavedNotebook(db,docs,jobs,id){
+ if(!docs.some(doc=>doc.id===id))throw Error('Saved notebook not found');
+ if(jobs.some(job=>job.document_id===id&&['queued','running'].includes(job.state)))throw Error('Cancel active replays for this notebook before deleting it.');
+ const remaining=docs.filter(doc=>doc.id!==id);
+ await new Promise((resolve,reject)=>{
+  const tx=db.transaction('records','readwrite'),store=tx.objectStore('records');
+  store.delete('archive/'+id);store.delete('pdf/'+id);store.put(remaining,'documents');
+  tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Could not delete notebook'));
+ });
+ return remaining;
+}
 // Notebook archives and generated media stay in this origin's IndexedDB.
 export function rpcWorker(){
  const worker=new Worker('/worker.mjs',{type:'module'});let serial=0;const pending=new Map();
@@ -70,6 +81,7 @@ export async function createBrowserApi(){
   const url=new URL(path,location.origin);
   if(url.pathname==='/api/session')return {token:'browser',rust:true,ffmpeg:typeof VideoEncoder!=='undefined',poppler:true,hosted:true};
   if(url.pathname==='/api/library')return docs;
+  if(url.pathname==='/api/delete-notebook'){docs=await deleteSavedNotebook(db,docs,jobs,body.id);anchorCache.clear();previews.clear();return {};}
   if(url.pathname==='/api/upload'){
    const blob=body instanceof Blob?body:new Blob([body]);if(blob.size>128*1024*1024)throw Error('Notebook exceeds 128 MiB');
    const info=await parser.call({op:'inspect',raw:new Uint8Array(await blob.arrayBuffer())});

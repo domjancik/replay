@@ -515,6 +515,7 @@ function renderGallery(){
     grid.children[after]?.after(drawer);
   }
   pages.dataset.notebook=notebook?.id || '';pages.replaceChildren();if(!notebook){observeGalleryThumbnails();return;}
+  $('notebook-delete').hidden=!capabilities?.hosted;
   $('drawer-title').textContent=notebook.name+' · '+notebook.pages.length+' pages';
   for(const page of notebook.pages){
     const card=document.createElement('button');card.className='page-card';card.disabled=!page.available;
@@ -613,6 +614,13 @@ function setupGallery(){
   $('cloud-gallery-refresh').onclick=()=>$('cloud-refresh').onclick();
   $('notebook-search').oninput=renderGallery;
   $('drawer-close').onclick=()=>{if(galleryFocused){galleryFocused=false;renderGallery();return;}expandedNotebook=null;renderGallery();};
+  $('notebook-delete').onclick=safely(async()=>{
+    const notebook=library.find(n=>n.id===expandedNotebook);if(!notebook)return;
+    if(!window.confirm('Delete the saved copy of “'+notebook.name+'” from this browser? Your tablet and cloud originals stay untouched. Completed replay downloads remain, but new exports need the notebook imported again.'))return;
+    await api('/api/delete-notebook',{id:notebook.id});
+    expandedNotebook=null;galleryFocused=false;selectedJob=null;pageReady=false;selectionPreview=null;
+    await loadLibrary();notice('Saved notebook deleted from this browser.');
+  });
   $('drawer-open').onclick=()=>{galleryFocused=true;renderGallery();};
   window.addEventListener('resize',()=>renderGallery());
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
