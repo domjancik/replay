@@ -25,7 +25,7 @@ def main():
         wraplength=490,
     ).pack(anchor="w", pady=(10, 18))
     ttk.Label(frame, text="Allow this rePlay site (exact origin)").pack(anchor="w")
-    origin = tk.StringVar(value="http://127.0.0.1:8765")
+    origin = tk.StringVar(value="https://replay.domj.net")
     entry = ttk.Entry(frame, textvariable=origin)
     entry.pack(fill="x", pady=(4, 12))
     key = tk.StringVar()
