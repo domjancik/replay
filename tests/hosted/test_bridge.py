@@ -124,3 +124,21 @@ def test_kofi_widget_is_isolated_from_the_credential_origin():
     assert "connect-src 'none'" in policy
     script = (root / "public/kofi-init.js").read_text()
     assert "'#252521', 'P2M22AN647'" in script
+
+
+def test_landing_and_workspace_are_separate():
+    import json
+    import subprocess
+    import sys
+
+    subprocess.run([sys.executable, "native/hosted/build.py"], check=True, capture_output=True)
+    root = Path("artifacts/hosted-replay")
+    landing = (root / "public/index.html").read_text(encoding="utf-8")
+    workspace = (root / "public/app.html").read_text(encoding="utf-8")
+    assert 'href="/app"' in landing
+    assert landing.count("<video ") == 2
+    assert 'id="generate"' not in landing
+    assert 'id="generate"' in workspace
+    assert "Let your drawing unfold" not in workspace
+    config = json.loads((root / "vercel.json").read_text())
+    assert {"source": "/app", "destination": "/app.html"} in config["rewrites"]

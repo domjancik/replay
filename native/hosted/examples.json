@@ -1,0 +1,25 @@
+{
+  "permission": "Owner authorized publication of personal drawings on 2026-11-14. Media remain outside Git history.",
+  "files": [
+    {
+      "name": "botanical.jpg",
+      "sha256": "2a9076aa9c2f939590ca2fc8e2d687ece19cc75a1774595c6244bb3f3b70a42e",
+      "url": "https://github.com/domjancik/replay/releases/download/site-examples-v1/botanical.jpg"
+    },
+    {
+      "name": "botanical.mp4",
+      "sha256": "395aeeae79d5ea3d3961eca9d1d38e9e8e6c1693f6892c986a04ca9b75a9d270",
+      "url": "https://github.com/domjancik/replay/releases/download/site-examples-v1/botanical.mp4"
+    },
+    {
+      "name": "portrait.jpg",
+      "sha256": "a01ecec41ec269709bb4cfe67127584e83c1eb3fc71fb538a6bde56dfea18062",
+      "url": "https://github.com/domjancik/replay/releases/download/site-examples-v1/portrait.jpg"
+    },
+    {
+      "name": "portrait.mp4",
+      "sha256": "e15ccab96c0ea87ffc0243db5a5d52726897241c41bc4c93dba2baa193d95f6a",
+      "url": "https://github.com/domjancik/replay/releases/download/site-examples-v1/portrait.mp4"
+    }
+  ]
+}

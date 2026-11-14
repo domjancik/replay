@@ -1,5 +1,6 @@
-"""Build a code-only Vercel staging directory. Never includes user fixtures."""
+"""Build Vercel staging with code and explicitly approved public examples."""
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -49,12 +50,25 @@ html = html.replace(
     "No new ink rendering.", "Frames are rendered again on this device for the export."
 )
 html = html.replace(
-    '<a href="https://ko-fi.com/domjancik" target="_blank" rel="noopener noreferrer">Support me on Ko-fi <span aria-hidden="true">↗</span></a>',
+    '<a href="https://ko-fi.com/domjancik" target="_blank" rel="noopener noreferrer">'
+    'Support me on Ko-fi <span aria-hidden="true">↗</span></a>',
     '<iframe class="kofi-widget" src="/kofi-button.html" title="Support me on Ko-fi" '
     'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" '
     'referrerpolicy="no-referrer" width="240" height="54"></iframe>',
 )
-(public / "index.html").write_text(html, encoding="utf8")
+(public / "app.html").write_text(html, encoding="utf8")
+shutil.copyfile(root / "native/hosted/landing.html", public / "index.html")
+shutil.copyfile(root / "native/hosted/landing.css", public / "landing.css")
+example_manifest = json.loads((root / "native/hosted/examples.json").read_text(encoding="utf-8"))
+(public / "examples").mkdir(exist_ok=True)
+for asset in example_manifest["files"]:
+    source = root / "artifacts/landing-examples" / asset["name"]
+
+    if not source.exists() or hashlib.sha256(source.read_bytes()).hexdigest() != asset["sha256"]:
+        raise ValueError(
+            "Missing or mismatched public example. Run python scripts/fetch-site-examples.py"
+        )
+    shutil.copyfile(source, public / "examples" / asset["name"])
 for name in ["kofi-button.html", "kofi-init.js", "kofi-button.css"]:
     shutil.copyfile(root / "native/hosted" / name, public / name)
 for name in [
@@ -114,6 +128,10 @@ shutil.copyfile(root / "native/hosted/api/cloud-relay.mjs", out / "api/cloud-rel
 config = {
     "version": 2,
     "outputDirectory": "public",
+    "rewrites": [
+        {"source": "/app", "destination": "/app.html"},
+        {"source": "/app/", "destination": "/app.html"},
+    ],
     "functions": {"api/cloud-relay.mjs": {"maxDuration": 60}},
     "headers": [
         {
@@ -142,7 +160,8 @@ config = {
                         "default-src 'none'; script-src 'self' https://storage.ko-fi.com; "
                         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                         "font-src https://fonts.gstatic.com; img-src https://storage.ko-fi.com; "
-                        "connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; "
+                        "connect-src 'none'; object-src 'none'; base-uri 'none'; "
+                        "frame-ancestors 'self'; "
                         "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox"
                     ),
                 },

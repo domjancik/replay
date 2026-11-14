@@ -2,7 +2,7 @@
 
 Turn reMarkable notebooks into drawing animations. Select pages, choose layer or entry order, crop the drawing, and export a replay or a forward/reverse loop.
 
-**[Open rePlay](https://replay.domj.net)** · [Creator](https://domj.net) · **[Support development on Ko-fi](https://ko-fi.com/domjancik)**
+**[Open rePlay](https://replay.domj.net/app)** · [About and examples](https://replay.domj.net) · [Creator](https://domj.net) · **[Support development on Ko-fi](https://ko-fi.com/domjancik)**
 
 The hosted app parses notebooks and renders ink on your device with Rust compiled to WebAssembly. No Python or CLI installation is required. Import a `.rmdoc` or connect reMarkable Cloud through a stateless relay. Saved pairing information stays in your browser. USB import uses an optional [desktop companion](docs/usb-companion.md).
 
