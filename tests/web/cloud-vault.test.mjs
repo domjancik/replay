@@ -327,7 +327,7 @@ test('creation failures explain the stage and do not expose raw provider errors'
 });
 
 
-test('creation-time PRF output avoids a second prompt and reopens with the same key',async()=>{
+test('creation-time PRF output must pass an independent unlock before saving',async()=>{
  const storage=memoryStorage();let creates=0,gets=0;
  const id=new Uint8Array([5]);const secret=new Uint8Array(32).fill(41);
  const credentials={
@@ -336,6 +336,18 @@ test('creation-time PRF output avoids a second prompt and reopens with the same 
  };
  const vault=createVault({storage,credentials});
  await vault.preparePasskey();await vault.createPasskey(data);
- assert.equal(creates,1);assert.equal(gets,0);
- vault.lock();assert.deepEqual(await vault.unlock(),data);assert.equal(gets,1);
+ assert.equal(creates,1);assert.equal(gets,1);
+ vault.lock();assert.deepEqual(await vault.unlock(),data);assert.equal(gets,2);
+});
+
+
+test('creation success cannot save a passkey that Windows refuses on assertion',async()=>{
+ const storage=memoryStorage();const id=new Uint8Array([3]);
+ const vault=createVault({storage,credentials:{
+  async create(){return {rawId:id.buffer,getClientExtensionResults:()=>({prf:{enabled:true,results:{first:new Uint8Array(32).buffer}}})};},
+  async get(){throw new DOMException('Provider refused','NotAllowedError');},
+ }});
+ await assert.rejects(vault.preparePasskey(),/provider|Windows/i);
+ await assert.rejects(vault.createPasskey(data),/Set up/);
+ assert.equal(await vault.exists(),false);
 });

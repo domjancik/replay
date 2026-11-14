@@ -9,7 +9,14 @@ const pageThumbnails=new Map(), thumbnailStates=new Map();
 let thumbnailObserver=null, activeThumbnail=null;
 const visibleThumbnailSlots=new Set(), thumbnailQueue=new Map();
 const notice = message => { $('notice').textContent = message; $('notice').hidden = !message; };
+let pendingWork=0;
 async function api(path, body, raw = false) {
+  const tracked=body!==undefined || path.startsWith('/api/usb') || path.startsWith('/api/page?') || path==='/api/library' || path==='/api/session';
+  if(tracked){pendingWork++;$('work-status').hidden=false;}
+  try{return await requestApi(path,body,raw);}
+  finally{if(tracked){pendingWork--;$('work-status').hidden=pendingWork===0;}}
+}
+async function requestApi(path, body, raw = false) {
   if(globalThis.replayBrowser)return globalThis.replayBrowser.api(path,body);
   const response = await fetch(path, body === undefined ? {} : {method:'POST',
     headers:{'Content-Type':raw?'application/octet-stream':'application/json','X-Replay-Token':token},
@@ -253,7 +260,7 @@ function renderJobs(){
     const totalSeconds=(job.state==='complete'?job.frames:job.expected_frames)/job.settings.fps;
     const detail=document.createElement('small');detail.textContent=`${totalSeconds.toFixed(1)}s total · ${job.settings.fps} fps · ${job.settings.ordering==='entry'?'entry order':'by layer'} · ${job.settings.viewport.join(' × ')}${job.finished&&job.started?' · rendered in '+Math.round(job.finished-job.started)+'s':''}`;label.append(detail);open.append(recentPreview(job),label);
     open.onclick=()=>{selectedJob=job.id;previewKey='';showJob(job);};
-    const state=document.createElement('span');state.className='state';state.textContent=job.state+(job.state==='running'&&job.expected_frames?' · '+Math.min(100,Math.round((job.frames||0)/job.expected_frames*100))+'%':'');row.append(open,state);
+    const state=document.createElement('span');state.className='state';state.setAttribute('aria-busy',String(['queued','running'].includes(job.state)));state.textContent=job.state+(job.state==='running'&&job.expected_frames?' · '+Math.min(100,Math.round((job.frames||0)/job.expected_frames*100))+'%':'');row.append(open,state);
     if(['queued','running'].includes(job.state)){const cancel=document.createElement('button');cancel.className='quiet';cancel.textContent='Cancel';cancel.onclick=safely(async()=>{await api('/api/cancel',{id:job.id});await poll();});row.append(cancel);}
     if(queueView&&job.error){const error=document.createElement('small');error.className='job-error';error.textContent=job.error;row.append(error);}
     $('jobs').append(row);
@@ -289,7 +296,7 @@ function observeUsbPreviews(){
     }
     usbPreviewTask=usbPreviewTask.then(async()=>{
       while(usbPreviewQueue.length && generation===usbBrowseGeneration && !usbBusy){
-        const slot=usbPreviewQueue.shift(),label=slot.children[0];usbPreviewObserver.unobserve(slot);label.textContent='Loading preview…';
+        const slot=usbPreviewQueue.shift(),label=slot.children[0];usbPreviewObserver.unobserve(slot);label.setAttribute('aria-busy','true');label.textContent='Loading preview…';
         try{
           const bytes=await client.thumbnail(slot.dataset.usbId);
           if(generation!==usbBrowseGeneration)return;
@@ -299,6 +306,7 @@ function observeUsbPreviews(){
           image.src=url;image.onerror=()=>{image.hidden=true;label.hidden=false;label.textContent='Preview unavailable';};
           label.hidden=true;slot.append(image);
         }catch{if(generation===usbBrowseGeneration)label.textContent='Preview unavailable';}
+        finally{label.setAttribute('aria-busy','false');}
       }
     });
   },{rootMargin:'0px'});
@@ -310,6 +318,7 @@ async function browse(folder='', label='Tablet') {
   const companion=!!$('usb-companion-use').checked;
   await usbPreviewTask;
   if(generation!==usbBrowseGeneration || companion!==!!$('usb-companion-use').checked)return;
+  $('usb-status').setAttribute('aria-busy','true');
   $('usb-status').textContent='Connecting to USB web interface…';$('usb-items').replaceChildren();
   try{
     const entries=$('usb-companion-use').checked
@@ -331,17 +340,19 @@ async function browse(folder='', label='Tablet') {
         if(usbBusy)return;
         if(entry.folder){await browse(entry.id,entry.name);return;}
         usbBusy=true;usbPreviewQueue=[];await usbPreviewTask;$('usb-companion-use').disabled=true;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=true);
+        $('usb-status').setAttribute('aria-busy','true');
         $('usb-status').textContent='Saving notebook and verifying two raw reads… This can take a minute.';
         try{const result=$('usb-companion-use').checked
           ? await api('/api/upload',await usbCompanion.download(entry.id),true)
           : await api('/api/usb-import',{id:entry.id,pdf:$('include-pdf').checked});await loadLibrary(result.id);setLibrarySource('local');notice('Notebook saved locally. Choose a page to animate.');}
         catch(error){$('usb-status').textContent=error.message+($('include-pdf').checked?' Try without the PDF for pages without text anchors. Any downloaded raw data is retained locally.':'');}
-        finally{usbBusy=false;$('usb-companion-use').disabled=false;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=b.dataset.unsupported==='true');}
+        finally{$('usb-status').setAttribute('aria-busy','false');usbBusy=false;$('usb-companion-use').disabled=false;document.querySelectorAll('#usb-items button').forEach(b=>b.disabled=b.dataset.unsupported==='true');}
       };action.className='quiet usb-card-action';row.append(cover,name,action);$('usb-items').append(row);
     }
     observeUsbPreviews();
     if(!entries.length)$('usb-status').textContent='This folder is empty.';
   }catch(error){if(generation!==usbBrowseGeneration || companion!==!!$('usb-companion-use').checked)return;setUsbConnected(false);$('usb-status').textContent='USB unavailable: '+error.message+'. Check the cable and USB web interface setting. Saved notebooks still work.';}
+  finally{if(generation===usbBrowseGeneration)$('usb-status').setAttribute('aria-busy','false');}
 }
 let cropImage=null, cropRect=null, cropStart=null, exportSource=null;
 function drawCrop(){
@@ -608,13 +619,14 @@ function setupUsbCompanion(){
   };
   $('usb-companion-connect').onclick=async()=>{
     $('usb-companion-connect').disabled=true;
+    $('usb-companion-connect').setAttribute('aria-busy','true');
     try{
       const {createUsbCompanion}=await import('/usb-companion.mjs');
       usbCompanion?.disconnect();usbCompanion=createUsbCompanion();
       const key=$('usb-companion-key').value.trim();$('usb-companion-key').value='';
       await usbCompanion.connect(key);await browse();
     }catch(error){usbCompanion?.disconnect();usbCompanion=null;setUsbConnected(false);$('usb-status').textContent=error.message;}
-    finally{$('usb-companion-connect').disabled=false;}
+    finally{$('usb-companion-connect').disabled=false;$('usb-companion-connect').setAttribute('aria-busy','false');}
   };
   $('usb-companion-disconnect').onclick=()=>{clearUsbPreviews();setUsbConnected(false);usbCompanion?.disconnect();usbCompanion=null;$('usb-items').replaceChildren();$('usb-status').textContent='Companion disconnected from this tab.';};
   window.addEventListener('pagehide',()=>usbCompanion?.disconnect());

@@ -192,7 +192,7 @@ test('first-time flow prefers passkey, then loads gallery automatically',async t
   el('cloud-code').value='AB12CD34';
   await el('cloud-pair').onclick();
   assert.deepEqual(calls,['prepare','pair','passkey','gallery','list','save']);
-  assert.equal(el('cloud-dialog').open,false);
+  assert.equal(el('cloud-dialog').hidden,true);
   assert.equal(el('cloud-gallery').children.length,1);
   assert.equal(el('cloud-items').children.length,0);
 });
@@ -234,7 +234,7 @@ test('saved password connection shows only unlock and refreshes after opening ca
   assert.equal(el('cloud-new').hidden,true);assert.equal(el('cloud-confirm-fields').hidden,true);
   el('cloud-passphrase').value='synthetic long password';await el('cloud-unlock').onclick();
   assert.deepEqual(calls,['unlock','gallery','list','save']);
-  assert.equal(el('cloud-dialog').open,false);
+  assert.equal(el('cloud-dialog').hidden,true);
 });
 
 test('thumbnail loading leaves connection status and notebook actions usable',async t=>{
@@ -259,10 +259,10 @@ test('failed save can continue session-only without pairing twice',async t=>{
   el('cloud-passphrase').value=el('cloud-confirm').value='synthetic password';el('cloud-code').value='AB12CD34';
   await el('cloud-pair').onclick();
   assert.match(el('cloud-status').textContent,/saving failed/);
-  assert.equal(el('cloud-dialog').open,true);
+  assert.equal(el('cloud-dialog').hidden,false);
   el('cloud-storage').value='session';el('cloud-storage').onchange();await el('cloud-pair').onclick();
   assert.equal(calls.filter(call=>call==='pair').length,1);
-  assert.equal(el('cloud-dialog').open,false);
+  assert.equal(el('cloud-dialog').hidden,true);
   assert.equal(el('cloud-gallery').children.length,1);
 });
 
@@ -273,4 +273,16 @@ test('saved passkey and unprotected connections reopen without password fields',
     await el('cloud-unlock').onclick();
     assert.deepEqual(calls,['unlock','gallery','list','save']);
   });
+});
+
+
+test('failed saved-passkey unlock preserves the vault and shows recovery guidance inline',async t=>{
+ const {el,vault}=cloudHarness(t,{savedMode:'passkey'});
+ vault.unlock=async()=>{throw new Error('Passkey provider refused (NotAllowedError)');};
+ await el('cloud-open').onclick();await el('cloud-unlock').onclick();
+ assert.equal(el('cloud-dialog').hidden,false);
+ assert.equal(el('cloud-unlock-help').hidden,false);
+ assert.match(el('cloud-status').textContent,/provider refused/);
+ assert.equal(await vault.mode(),'passkey');
+ assert.equal(el('cloud-unlock').disabled,false);
 });

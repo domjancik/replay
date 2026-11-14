@@ -207,3 +207,13 @@ test('USB previews read only visible cards and skip queued cards scrolled away',
  observer([{target:slots[1],isIntersecting:false}]);finish();
  await vm.runInContext('usbPreviewTask',context);assert.deepEqual(calls,['0']);
 });
+
+
+test('work indicator persists until all pending actions settle, including errors',async()=>{
+ const {context,el}=fixture();
+ vm.runInContext("requestApi=()=>new Promise((resolve,reject)=>{globalThis.finishWork=resolve;globalThis.failWork=reject;})",context);
+ const pending=vm.runInContext("api('/api/upload',{})",context);
+ assert.equal(el('work-status').hidden,false);
+ context.failWork(new Error('test failure'));await assert.rejects(pending,/test failure/);
+ assert.equal(el('work-status').hidden,true);
+});

@@ -1,3 +1,5 @@
+> **Current hosted experience:** Cloud connection settings now open inline in the Cloud source view, just like USB setup. Password/passkey unlock opens the notebook gallery and collapses settings. Pending operations show progress indicators. Passkey setup tests an independent assertion before saving; registration success alone does not prove that Windows Hello can unlock the vault. A provider failure preserves the saved record. Users can retry or explicitly remove only the saved connection and pair again with another protection method. Imported notebooks/videos remain. Older rmctl/CLI descriptions below are historical, not hosted-app requirements.
+
 # Browser cloud connection
 
 Choose **Cloud notebooks**, open **Get a pairing code** on the official reMarkable account page, paste its eight-character code, and select how to keep the connection. Connecting opens the gallery and loads notebooks automatically. Returning users unlock the saved connection; cached notebooks appear immediately while the list refreshes.

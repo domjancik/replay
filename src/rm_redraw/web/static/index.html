@@ -6,8 +6,47 @@
 <header><a class="wordmark" href="/" aria-label="rePlay home">rePlay</a></header>
 <main>
 <div class="intro"><h1>Let your drawing unfold.</h1><p>Choose a page. Make it move.</p></div>
-<div id="notice" role="status" hidden></div>
-<div class="layout gallery-layout"><div class="gallery-column"><section class="notebook-sources" aria-labelledby="sources-title"><h2 id="sources-title">Notebook sources</h2><p class="hint">Bring a notebook into your library.</p><div class="source-actions"><button id="source-cloud" class="secondary" aria-pressed="false">reMarkable Cloud</button><button id="source-tablet" class="secondary" aria-pressed="false">Tablet · USB</button><button id="upload-open" class="secondary">Import a file ↗</button><input id="upload" type="file" accept=".rmdoc" hidden></div></section><nav class="library-sources" aria-label="Saved library"><button id="source-local" aria-pressed="true">Saved notebooks</button><button id="source-queue" aria-pressed="false">Queue</button></nav><div class="gallery-toolbar"><h2 id="library-view-title">Saved notebooks</h2><input id="notebook-search" type="search" placeholder="Find a notebook" aria-label="Find a notebook"><button id="gallery-grid" class="secondary" aria-label="Grid view" aria-pressed="true">⊞</button><button id="gallery-list" class="secondary" aria-label="List view" aria-pressed="false">☰</button></div><section id="cloud-library" hidden><div class="cloud-gallery-toolbar"><p id="cloud-gallery-status" role="status">Unlock your saved pairing or connect your reMarkable to browse cloud notebooks.</p><button id="cloud-open" class="secondary">Connect / unlock</button><button id="cloud-gallery-refresh" class="secondary" disabled>Refresh notebooks</button></div><div id="cloud-gallery" class="cloud-notebook-gallery"></div></section><section id="tablet-library" hidden aria-label="Connected tablet"><div class="section-heading"><h2>Connected tablet</h2></div><div id="usb-connected" class="usb-connection-bar" hidden><span>USB connected</span><button id="usb-settings-toggle" class="quiet">Connection settings</button><button id="usb-companion-disconnect" class="quiet">Disconnect</button></div><div id="usb-setup"><p class="hint">Connect USB and enable USB web interface in the tablet’s Storage settings. Close the notebook before importing.</p>
+<div id="notice" role="status" hidden></div><div id="work-status" role="status" aria-live="polite" hidden><span class="work-spinner" aria-hidden="true"></span><span>Working…</span></div>
+<div class="layout gallery-layout"><div class="gallery-column"><nav class="notebook-navigation" aria-label="Notebooks and sources"><div class="saved-navigation"><button id="source-local" aria-pressed="true">Saved notebooks</button></div><span class="navigation-divider" aria-hidden="true"></span><div class="source-actions" aria-label="Import sources"><span class="source-label">Import from</span><button id="source-cloud" class="quiet" aria-pressed="false">Cloud</button><button id="source-tablet" class="quiet" aria-pressed="false">Tablet · USB</button><button id="upload-open" class="quiet">File ↗</button><input id="upload" type="file" accept=".rmdoc" hidden></div><button id="source-queue" class="quiet" aria-pressed="false">Queue</button></nav><div class="gallery-toolbar"><h2 id="library-view-title">Saved notebooks</h2><input id="notebook-search" type="search" placeholder="Find a notebook" aria-label="Find a notebook"><button id="gallery-grid" class="secondary" aria-label="Grid view" aria-pressed="true">⊞</button><button id="gallery-list" class="secondary" aria-label="List view" aria-pressed="false">☰</button></div><section id="cloud-library" hidden><div class="cloud-gallery-toolbar"><p id="cloud-gallery-status" role="status">Unlock your saved pairing or connect your reMarkable to browse cloud notebooks.</p><button id="cloud-open" class="secondary">Connect / unlock</button><button id="cloud-gallery-refresh" class="secondary" disabled>Refresh notebooks</button></div><section hidden class="connection-panel" id="cloud-dialog" aria-labelledby="cloud-heading">
+<div class="section-heading"><h2 id="cloud-heading">Connect reMarkable</h2><button id="cloud-close" class="quiet">Hide settings</button></div>
+<div id="cloud-new">
+<p>Bring your notebooks into rePlay. Your originals stay untouched.</p>
+<p><a class="cloud-code-link" href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">1. Get a pairing code ↗</a> <span class="hint">Opens your reMarkable account in a new tab.</span></p>
+<label for="cloud-code">2. Paste your pairing code</label><input id="cloud-code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="8" pattern="[A-Za-z0-9]{8}" placeholder="8-character code">
+<label for="cloud-storage">Keep this connection</label>
+<select id="cloud-storage" aria-describedby="cloud-storage-help">
+<option id="cloud-passkey-option" value="passkey">With a passkey (device check required)</option>
+<option value="password">With a password</option>
+<option value="session">For this session only</option>
+<option value="unprotected">Without protection</option>
+</select>
+<p id="cloud-storage-help" class="hint"></p>
+<div id="cloud-unprotected-warning" class="cloud-warning" hidden>
+<strong>Anyone with access to this browser profile could access your cloud notebooks.</strong>
+<p>Your cloud credential and notebook list will be saved without encryption. Malicious site scripts, extensions with access to this site, or someone who copies your browser data could steal the credential. Although rePlay only reads drawings, the credential can also authorize cloud changes. Closing the connection does not protect saved credentials. Avoid shared or public computers.</p>
+<label class="checkbox"><input id="cloud-unprotected-confirm" type="checkbox"> I understand and want to save without protection.</label>
+</div>
+<button id="cloud-password-fallback" class="secondary" hidden>Use a password instead</button>
+</div>
+<div id="cloud-password-fields" hidden>
+<label for="cloud-passphrase">Browser unlock password</label><input id="cloud-passphrase" type="password" autocomplete="new-password" minlength="12" maxlength="1024" aria-describedby="cloud-password-help">
+<p id="cloud-password-help" class="hint">At least 12 characters. This protects the saved connection on this browser.</p>
+<div id="cloud-confirm-fields"><label for="cloud-confirm">Repeat password</label><input id="cloud-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="1024"></div>
+</div>
+<button id="cloud-pair" class="primary">Connect</button><button id="cloud-unlock" class="primary" hidden>Unlock connection</button>
+<div id="cloud-connected" hidden><p id="cloud-connection-state"></p><button id="cloud-refresh" class="secondary">Refresh notebooks</button><button id="cloud-lock" class="quiet">Lock connection</button></div>
+<div id="cloud-unlock-help" class="cloud-warning" hidden><strong>Couldn’t unlock the saved connection</strong><p>Windows or your passkey provider may have refused the request. Retry once. If it keeps failing, the encryption key is unavailable to rePlay. To use a password or session only, expand “Disconnect or remove saved connection”, confirm removal, then pair again. Your imported notebooks and videos stay here.</p></div><p id="cloud-status" role="status" aria-live="polite"></p><div id="cloud-items" hidden></div>
+<details id="cloud-disconnect" hidden><summary>Disconnect or remove saved connection</summary>
+<p>Disconnect revokes this reMarkable registration and removes the saved connection. Removing only the saved connection leaves the registration active. Imported notebooks and videos remain. Removing a saved connection does not delete its passkey from your password manager.</p>
+<label class="checkbox"><input id="cloud-revoke-confirm" type="checkbox"> Confirm removing this connection</label>
+<button id="cloud-revoke" class="secondary" disabled>Disconnect from reMarkable</button><button id="cloud-forget" class="quiet" disabled>Remove saved connection only</button></details>
+<details class="privacy-details"><summary>Privacy and connection help</summary>
+<p>Passkey and password options encrypt the saved cloud credential and notebook list in this browser. Session only saves neither. Without protection saves both unencrypted. Our server forwards cloud requests and sees the credentials needed for access, but does not save them or your notebook list.</p>
+<p>Passkeys require encryption support from your browser and passkey provider. If unavailable, choose a password or session only. A synced passkey does not sync this browser’s saved connection. Clearing site data, changing site address, or losing your unlock method requires pairing again.</p>
+<p>Protection applies while locked; site scripts can access credentials while connected. Imported notebooks and videos are stored separately and are not protected by your connection password or passkey. rePlay only reads documents, but its cloud credential can authorize writes.</p>
+<p class="hint">Downloaded ink feeds the same local replay engine. Templates and PDF backgrounds are omitted. Text-anchored pages may need a separately attached matching PDF. This unofficial cloud connector may be affected by changes at reMarkable.</p>
+</details>
+</section><div id="cloud-gallery" class="cloud-notebook-gallery"></div></section><section id="tablet-library" hidden aria-label="Connected tablet"><div class="section-heading"><h2>Connected tablet</h2></div><div id="usb-connected" class="usb-connection-bar" hidden><span>USB connected</span><button id="usb-settings-toggle" class="quiet">Connection settings</button><button id="usb-companion-disconnect" class="quiet">Disconnect</button></div><div id="usb-setup"><p class="hint">Connect USB and enable USB web interface in the tablet’s Storage settings. Close the notebook before importing.</p>
 <label class="checkbox"><input id="usb-companion-use" type="checkbox"> Use the optional USB companion</label>
 <div id="usb-companion-settings" hidden>
 <div class="source-actions companion-downloads"><a class="secondary" href="https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-windows-x64.zip">Windows x64 ↓</a><a class="secondary" href="https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-macos-arm64.zip">Mac · Apple Silicon ↓</a><a class="secondary" href="https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-macos-x64.zip">Mac · Intel ↓</a><a class="secondary" href="https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-linux-x64.tar.gz">Linux x64 ↓</a><a class="secondary" href="https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-linux-arm64.tar.gz">Linux ARM64 ↓</a></div><p class="hint">Download for your desktop, extract the archive, then open rePlay-USB-Companion. No Python or terminal installation required. Unsigned preview builds: Windows and macOS may show a security warning. <a href="https://github.com/domjancik/replay/releases/tag/companion-v0.3.0" target="_blank" rel="noopener noreferrer">Release notes &amp; checksums ↗</a></p><ol class="companion-steps"><li>Connect your tablet by USB. Enable <strong>USB web interface</strong> in its Storage settings and close the notebook you want to import.</li><li>Extract the download and open <strong>rePlay-USB-Companion</strong> (.exe on Windows, .app on Mac). See the guide below for platform-specific steps.</li><li>Set <strong>Allow this rePlay site</strong> to <code id="usb-companion-origin"></code>, then click <strong>Start USB access</strong>.</li><li>Click <strong>Copy connection key</strong>, paste it below, and select <strong>Connect companion</strong>. Allow local-network access if your browser asks.</li><li>Browse your tablet’s folders below and import a notebook. Keep the companion open while importing; click <strong>Stop</strong> or close it when finished.</li></ol>
@@ -65,45 +104,6 @@
 <p class="hint">Keeps the forward end hold, then reverses to the first frame. No new ink rendering. Exports use the selected rectangle's pixel resolution.</p>
 <p id="export-status" role="status"></p><button id="export-save" class="primary" disabled>Export video</button>
 </dialog>
-<dialog id="cloud-dialog" aria-labelledby="cloud-heading">
-<div class="section-heading"><h2 id="cloud-heading">Connect reMarkable</h2><button id="cloud-close" class="quiet">Close</button></div>
-<div id="cloud-new">
-<p>Bring your notebooks into rePlay. Your originals stay untouched.</p>
-<p><a class="cloud-code-link" href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">1. Get a pairing code ↗</a> <span class="hint">Opens your reMarkable account in a new tab.</span></p>
-<label for="cloud-code">2. Paste your pairing code</label><input id="cloud-code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="8" pattern="[A-Za-z0-9]{8}" placeholder="8-character code">
-<label for="cloud-storage">Keep this connection</label>
-<select id="cloud-storage" aria-describedby="cloud-storage-help">
-<option id="cloud-passkey-option" value="passkey">With a passkey (recommended)</option>
-<option value="password">With a password</option>
-<option value="session">For this session only</option>
-<option value="unprotected">Without protection</option>
-</select>
-<p id="cloud-storage-help" class="hint"></p>
-<div id="cloud-unprotected-warning" class="cloud-warning" hidden>
-<strong>Anyone with access to this browser profile could access your cloud notebooks.</strong>
-<p>Your cloud credential and notebook list will be saved without encryption. Malicious site scripts, extensions with access to this site, or someone who copies your browser data could steal the credential. Although rePlay only reads drawings, the credential can also authorize cloud changes. Closing the connection does not protect saved credentials. Avoid shared or public computers.</p>
-<label class="checkbox"><input id="cloud-unprotected-confirm" type="checkbox"> I understand and want to save without protection.</label>
-</div>
-<button id="cloud-password-fallback" class="secondary" hidden>Use a password instead</button>
-</div>
-<div id="cloud-password-fields" hidden>
-<label for="cloud-passphrase">Browser unlock password</label><input id="cloud-passphrase" type="password" autocomplete="new-password" minlength="12" maxlength="1024" aria-describedby="cloud-password-help">
-<p id="cloud-password-help" class="hint">At least 12 characters. This protects the saved connection on this browser.</p>
-<div id="cloud-confirm-fields"><label for="cloud-confirm">Repeat password</label><input id="cloud-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="1024"></div>
-</div>
-<button id="cloud-pair" class="primary">Connect</button><button id="cloud-unlock" class="primary" hidden>Unlock connection</button>
-<div id="cloud-connected" hidden><p id="cloud-connection-state"></p><button id="cloud-refresh" class="secondary">Refresh notebooks</button><button id="cloud-lock" class="quiet">Lock connection</button></div>
-<p id="cloud-status" role="status" aria-live="polite"></p><div id="cloud-items" hidden></div>
-<details id="cloud-disconnect" hidden><summary>Disconnect or remove saved connection</summary>
-<p>Disconnect revokes this reMarkable registration and removes the saved connection. Removing only the saved connection leaves the registration active. Imported notebooks and videos remain. Removing a saved connection does not delete its passkey from your password manager.</p>
-<label class="checkbox"><input id="cloud-revoke-confirm" type="checkbox"> Confirm removing this connection</label>
-<button id="cloud-revoke" class="secondary" disabled>Disconnect from reMarkable</button><button id="cloud-forget" class="quiet" disabled>Remove saved connection only</button></details>
-<details class="privacy-details"><summary>Privacy and connection help</summary>
-<p>Passkey and password options encrypt the saved cloud credential and notebook list in this browser. Session only saves neither. Without protection saves both unencrypted. Our server forwards cloud requests and sees the credentials needed for access, but does not save them or your notebook list.</p>
-<p>Passkeys require encryption support from your browser and passkey provider. If unavailable, choose a password or session only. A synced passkey does not sync this browser’s saved connection. Clearing site data, changing site address, or losing your unlock method requires pairing again.</p>
-<p>Protection applies while locked; site scripts can access credentials while connected. Imported notebooks and videos are stored separately and are not protected by your connection password or passkey. rePlay only reads documents, but its cloud credential can authorize writes.</p>
-<p class="hint">Downloaded ink feeds the same local replay engine. Templates and PDF backgrounds are omitted. Text-anchored pages may need a separately attached matching PDF. This unofficial cloud connector may be affected by changes at reMarkable.</p>
-</details>
-</dialog>
+
 
 </body></html>

@@ -200,7 +200,7 @@ async function passkeyOperation(stage, run) {
     const known = ['UnknownError', 'NotAllowedError', 'NotSupportedError', 'SecurityError', 'InvalidStateError', 'AbortError', 'NotReadableError'];
     const code = known.includes(error?.name) ? error.name : 'ProviderError';
     const advice = code === 'NotAllowedError' || code === 'AbortError'
-      ? 'The prompt was cancelled or timed out. Keep this tab focused and retry.'
+      ? 'The browser or passkey provider did not complete the request. This can mean cancellation, timeout, or a Windows Hello/provider failure; it does not prove you cancelled. Retry once. If Windows reports a sign-in error, use a different provider or pair with password/session-only protection.'
       : 'Your browser or passkey provider could not complete the encryption request. Firefox-based browsers with Windows Hello can fail here. Try another browser or passkey provider, or use a password or session only.';
     throw new Error(`Passkey ${stage} failed (${code}). ${advice}`);
   }
@@ -301,7 +301,15 @@ export function createVault({
           if (prf.results?.first) {
             const key = await derivePasskeyKey(crypto, prf.results.first, salt);
             check();
-            prepared = {key, salt, mode: 'passkey', credentialId};
+            // Registration output alone does not prove this provider can unlock later.
+            const unlockKey = await passkeyKey(crypto, credentials, credentialId, salt);
+            check();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const probe = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new Uint8Array([1]));
+            try { await crypto.subtle.decrypt({name:'AES-GCM', iv}, unlockKey, probe); }
+            catch { throw new Error('This provider returned different encryption keys during setup and unlock. No connection was saved. Choose another provider or a password.'); }
+            check();
+            prepared = {key: unlockKey, salt, mode: 'passkey', credentialId};
             return;
           }
         }

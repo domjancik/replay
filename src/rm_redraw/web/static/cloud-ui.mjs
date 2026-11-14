@@ -2,7 +2,7 @@ import { createVault } from './cloud-vault.mjs';
 import { createCloudClient } from './cloud-client.mjs';
 
 const STORAGE_HELP = {
-  passkey: 'Requires a passkey provider with PRF encryption support. Ordinary passkey sign-in support is not enough; Windows Hello support varies. Setup may ask for a second confirmation. Password and session only are available if this fails.',
+  passkey: 'Requires a passkey provider with PRF encryption support. Ordinary passkey sign-in support is not enough; Windows Hello support varies. Setup verifies a second unlock before saving; successful passkey creation alone is not enough. Password and session only are available if this fails.',
   password: 'Choose a browser unlock password, not your reMarkable password. It stays on this device.',
   session: 'Nothing about this connection is saved. Pair again after closing or reloading this tab.',
   unprotected: 'Reconnect without an unlock prompt. Only use this on a private, trusted browser.',
@@ -23,6 +23,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     if ($('cloud-gallery-status')) $('cloud-gallery-status').textContent = message;
   }
   function controls() {
+    for(const id of ['cloud-status','cloud-gallery-status'])$(id)?.setAttribute?.('aria-busy',String(busy));
     const connected = !!data && !!activeMode;
     const newConnection = !savedMode && !connected;
     const mode = savedMode || $('cloud-storage').value;
@@ -62,7 +63,10 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
       : activeMode === 'session' ? 'Connected · this session only'
       : connected ? `Connected · protected with ${activeMode === 'passkey' ? 'a passkey' : 'a password'}`
       : savedMode === 'unprotected' ? 'Saved without protection on this browser' : 'Connection locked';
-    if ($('cloud-gallery-refresh')) $('cloud-gallery-refresh').disabled = busy || !connected;
+    const settingsOpen=$('cloud-dialog').hidden===false;
+    if ($('cloud-gallery-refresh')) {$('cloud-gallery-refresh').disabled = busy || !connected;$('cloud-gallery-refresh').hidden=settingsOpen||!connected;}
+    if ($('cloud-gallery-status')) $('cloud-gallery-status').hidden=settingsOpen;
+    $('cloud-open').hidden=settingsOpen;
     if ($('cloud-open')) $('cloud-open').textContent = connected ? 'Connection settings' : savedMode ? 'Open connection' : 'Connect reMarkable';
     $('cloud-gallery')?.querySelectorAll('button[data-import]').forEach(button => { button.disabled = busy; });
   }
@@ -75,6 +79,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     const previousMode = activeMode;
     clearPreviews(); epoch++; clearTimeout(idle);
     client?.lock(); client = null; data = null; activeMode = null; vault.lock();
+    $('cloud-unlock-help').hidden=true;
     $('cloud-items').replaceChildren(); $('cloud-gallery')?.replaceChildren();
     $('cloud-code').value = ''; $('cloud-passphrase').value = ''; $('cloud-confirm').value = '';
     $('cloud-revoke-confirm').checked = false;
@@ -108,13 +113,14 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
   }
   async function action(fn, account = false) {
     if (busy) return;
-    busy = true; accountBusy = account; if (account) clearTimeout(idle); controls();
+    busy = true; accountBusy = account; status('Working…'); if (account) clearTimeout(idle); controls();
     try { await fn(epoch); }
     catch (error) {
       status(error.name === 'NotAllowedError' ? 'Passkey setup or unlock was cancelled. Try again, or choose another connection option.' : error.message);
     } finally { busy = false; accountBusy = false; controls(); touch(); queueMicrotask(pumpPreviews); }
   }
   async function showList(current) {
+    status('Loading cloud notebooks…');
     status('Loading notebooks…');
     const entries = await client.list();
     if (current !== epoch || !data) return;
@@ -132,7 +138,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
   async function browse(current) {
     renderEntries(data.entries || []);
     $('source-cloud')?.onclick?.();
-    $('cloud-dialog').close();
+    $('cloud-dialog').hidden=true;
     try { await showList(current); }
     catch (error) {
       if (current === epoch) status(`Connected, but notebooks could not be refreshed. ${data?.entries?.length ? 'Showing the saved list. ' : ''}Use Refresh to retry.`);
@@ -171,7 +177,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
       const preview = document.createElement('button'); preview.textContent = 'Load preview'; preview.className = 'secondary';
       preview.onclick = async () => {
         if (busy || previewBusy || renderedEpoch !== epoch || !data) return;
-        previewBusy = true; preview.disabled = true; previewStatus.textContent = 'Loading preview…';
+        previewBusy = true; preview.disabled = true; previewStatus.setAttribute?.('aria-busy','true'); previewStatus.textContent = 'Loading preview…';
         try {
           const bytes = await client.preview(entry.id);
           if (renderedEpoch !== epoch || !data || !target.children || !Array.from(target.children).includes(row)) return;
@@ -181,7 +187,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
           image.onerror = () => { image.hidden = true; previewStatus.textContent = 'Preview unavailable'; };
           image.src = url; image.hidden = false; previewStatus.textContent = 'Notebook preview'; preview.hidden = true;
         } catch { if (renderedEpoch === epoch) previewStatus.textContent = 'Preview unavailable. You can still open this notebook.'; }
-        finally { previewBusy = false; preview.disabled = false; queueMicrotask(pumpPreviews); }
+        finally { previewStatus.setAttribute?.('aria-busy','false'); previewBusy = false; preview.disabled = false; queueMicrotask(pumpPreviews); }
       };
       const button = document.createElement('button'); button.textContent = 'Open notebook'; button.dataset.import = 'true';
       button.onclick = () => action(async generation => {
@@ -191,21 +197,21 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
         const archive = await client.download(entry.id);
         if (generation !== epoch) return;
         await importArchive(archive);
-        $('cloud-dialog').close();
+        $('cloud-dialog').hidden=true;
       });
       row.append(image, label, previewStatus, preview, button); target.append(row);
       if (previewObserver) { row.loadPreview = preview.onclick; previewObserver.observe(row); }
     }
   }
   $('cloud-open').onclick = async () => {
-    $('cloud-dialog').showModal();
+    $('cloud-dialog').hidden=false;
     await action(async () => {
       savedMode = await vault.mode();
       status(data ? 'Your cloud connection is ready.' : savedMode === 'unprotected' ? 'This connection is saved without protection. Open it to browse.'
         : savedMode ? 'Unlock your saved connection.' : 'Get a pairing code, then connect.');
     });
   };
-  $('cloud-close').onclick = () => { if (!accountBusy) $('cloud-dialog').close(); };
+  $('cloud-close').onclick = () => { if (!accountBusy) {$('cloud-dialog').hidden=true;controls();} };
   $('cloud-dialog').addEventListener('cancel', event => { if (accountBusy) event.preventDefault(); });
   $('cloud-dialog').addEventListener('close', touch);
   document.addEventListener?.('pointerdown', touch);
@@ -231,7 +237,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     if (mode === 'unprotected' && !$('cloud-unprotected-confirm').checked) throw new Error('Acknowledge the risks before saving without protection.');
     try {
       if (mode === 'passkey') {
-        try { await vault.preparePasskey(); }
+        try { status('Verify your passkey, then confirm it can unlock this connection…'); await vault.preparePasskey(); }
         catch (error) { passkeyFailed = true; throw error; }
       }
       if (generation !== epoch) return;
@@ -239,6 +245,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
       if (generation !== epoch) return;
       if (!data) {
         client = clientFactory({relay});
+        status('Pairing with reMarkable…');
         const deviceToken = await client.pair(code);
         if (generation !== epoch) return;
         $('cloud-code').value = '';
@@ -263,7 +270,11 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
   $('cloud-unlock').onclick = () => action(async generation => {
     let password = $('cloud-passphrase').value; $('cloud-passphrase').value = '';
     try {
-      const unlocked = await vault.unlock(password);
+      $('cloud-unlock-help').hidden=true;
+      status(savedMode==='passkey'?'Waiting for your passkey provider…':'Unlocking saved connection…');
+      let unlocked;
+      try { unlocked = await vault.unlock(password); }
+      catch(error){$('cloud-unlock-help').hidden=savedMode!=='passkey';throw error;}
       if (generation !== epoch) return;
       data = unlocked; activeMode = savedMode; activate(); await browse(generation);
     } finally { password = ''; }
