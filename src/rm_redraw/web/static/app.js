@@ -609,7 +609,7 @@ function setupGallery(){
   window.addEventListener('resize',()=>renderGallery());
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
   for(const [id,delta] of [['page-prev',-1],['page-next',1]])$(id).onclick=safely(async()=>{const pages=[...$('page').options].filter(p=>!p.disabled);const i=pages.findIndex(p=>p.value===$('page').value);const next=pages[i+delta];if(next){$('page').value=next.value;await selectPage();}});
-  setupSettingPicker('fps','fps-buttons');setupSettingPicker('output-width','output-width-buttons');
+  setupSettingPicker('ordering','ordering-buttons');setupSettingPicker('fps','fps-buttons');setupSettingPicker('output-width','output-width-buttons');
   $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('seconds').value=button.dataset.seconds;$('duration-buttons').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));});
 }
 
