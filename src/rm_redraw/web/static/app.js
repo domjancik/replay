@@ -3,6 +3,7 @@ const mediaUrl=(id,file)=>globalThis.replayBrowser?globalThis.replayBrowser.medi
 let token = '', library = [], jobs = [], selectedJob = null, pageReady = false, capabilities;
 let previewKey = '', pageRequest = 0, usbBusy = false;
 let usbCompanion=null;
+let rendererBackend="python";
 let selectionPreview = null, previewRefreshTimer;
 let expandedNotebook=null, galleryList=false, galleryFocused=false;
 const pageThumbnails=new Map(), thumbnailStates=new Map();
@@ -110,7 +111,7 @@ async function requestSelectionPreview(version) {
   selectionPreview=pending;showNotebookPreview();
   const settings={};
   for(const key of ['width','height','offset-x','offset-y'])settings[key.replaceAll('-','_')]=Number($(key).value);
-  Object.assign(settings,{seconds:6,fps:6,output_width:234,backend:$('backend').value});
+  Object.assign(settings,{seconds:6,fps:6,output_width:234,backend:rendererBackend});
   try {
     let result=await api('/api/page-preview',{document:pending.document,page:pending.page,settings});
     while(version===pageRequest && selectionPreview===pending){
@@ -147,7 +148,7 @@ async function generate() {
   try {
     const settings={};
     for(const key of ['width','height','offset-x','offset-y','seconds','fps','output-width'])settings[key.replaceAll('-','_')]=Number($(key).value);
-    settings.backend=$('backend').value;
+    settings.backend=rendererBackend;
     settings.ordering=$('ordering').value;
     settings.allow_clipping=$('allow-clipping').checked;
     const job=await api('/api/jobs',{document:$('notebook').value,page:$('page').value,settings});
@@ -393,21 +394,19 @@ function setupExport(){
 async function start(){
   setupExport();setupGallery();
   capabilities=await api('/api/session');token=capabilities.token;
-  if(capabilities.hosted){$('backend').disabled=true;$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
+  if(capabilities.hosted){$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
   const {setupCloud}=await import('/cloud-ui.mjs');
   setupCloud({sessionToken:()=>token,importArchive:async(raw)=>{
     const result=await api('/api/upload',raw,true);
     await loadLibrary(result.id);setLibrarySource('local');notice('Cloud notebook saved locally. Choose a page to animate.');
   }});
-  $('backend').querySelector('[value=rust]').disabled=!capabilities.rust;
-  $('backend').value=capabilities.rust?'rust':'python';
+  rendererBackend=capabilities.rust?'rust':'python';
   if(!capabilities.ffmpeg)notice(capabilities.hosted?'This browser does not support video encoding. Try current Chrome or Edge.':'FFmpeg was not found. Install it and restart the utility before generating videos.');
   for(const id of ['width','height','offset-x','offset-y'])$(id).oninput=()=>{
     resetClipping();canvasSummary();updateGenerateButton();
     clearTimeout(previewRefreshTimer);
     previewRefreshTimer=setTimeout(()=>requestSelectionPreview(pageRequest),600);
   };
-  $('backend').onchange=()=>requestSelectionPreview(pageRequest);
   $('allow-clipping').onchange=updateGenerateButton;
   $('notebook').onchange=safely(selectNotebook);$('page').onchange=safely(selectPage);
   $('refresh').onclick=safely(()=>loadLibrary());$('generate').onclick=safely(generate);
@@ -562,7 +561,7 @@ async function processThumbnailQueue(){
       // A scroll while reading metadata must not submit an offscreen render.
       if(!thumbnailStillVisible(key)){thumbnailStates.delete(key);continue;}
       const [width,height]=info.paper_size || [1404,1872];
-      const settings={width,height,offset_x:info.source_to_page_transform?.[4] ?? width/2,offset_y:info.source_to_page_transform?.[5] ?? 0,seconds:6,fps:6,output_width:234,backend:$('backend').value};
+      const settings={width,height,offset_x:info.source_to_page_transform?.[4] ?? width/2,offset_y:info.source_to_page_transform?.[5] ?? 0,seconds:6,fps:6,output_width:234,backend:rendererBackend};
       let result=await api('/api/page-preview',{...item,settings});
       thumbnailStates.set(key,result);updateGalleryImages();
       while(['queued','running'].includes(result.state)){
