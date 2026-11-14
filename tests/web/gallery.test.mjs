@@ -250,3 +250,10 @@ test('auto canvas includes off-page ink without changing relative stroke positio
  const crop=vm.runInContext('canvasCrop({width:1600,height:2130,offset_x:802,offset_y:30},[100,50,800,1000])',context);
  assert.equal(crop.width,800);assert.equal(crop.offset_x,702);assert.equal(crop.offset_y,-20);
 });
+
+test('replay settings restore custom duration, output width, crop offsets and ordering',()=>{
+ const {el,context}=fixture();
+ vm.runInContext("restoreReplaySettings({width:800,height:900,offset_x:123,offset_y:-45,seconds:180.5,fps:24,output_width:2106,ordering:'entry',allow_clipping:true})",context);
+ assert.equal(Number(el('seconds').value),180.5);assert.equal(Number(el('output-width').value),2106);
+ assert.equal(Number(el('offset-y').value),-45);assert.equal(el('ordering').value,'entry');assert.equal(el('allow-clipping').checked,true);
+});

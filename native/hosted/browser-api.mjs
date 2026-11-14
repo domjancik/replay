@@ -72,7 +72,7 @@ export async function createBrowserApi(){
   }catch(error){if(error.message.includes('outside the selected canvas'))error.code='canvas_clipping';throw error;}
  }
  async function storeResult(job,result){
-  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,parser:job.parser,finalEqualsStatic:true})],{type:'application/json'})]]){await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
+  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,input:job.input,source_reference:job.source_reference,crop:job.crop,reverse_speed:job.reverse_speed,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,parser:job.parser,finalEqualsStatic:true})],{type:'application/json'})]]){await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
   job.extension=result.extension;job.frames=job.expected_frames=result.frames;job.state='complete';job.finished=Date.now()/1000;
  }
  async function pump(){
@@ -126,7 +126,7 @@ export async function createBrowserApi(){
     if(![0,2,4,8].includes(reverse_speed))throw Error('Invalid reverse speed');
    }
    const prepared=await prepare(input),doc=docs.find(d=>d.id===input.document);
-   const job={id:crypto.randomUUID().replaceAll('-',''),document_id:doc.id,page_id:input.page,page:doc.pages.find(p=>p.id===input.page).number,name:doc.name+(kind==='export'?(reverse_speed?' · loop':' · crop'):''),kind,state:'queued',created:Date.now()/1000,frames:0,expected_frames:prepared.frames.length,settings:prepared.config,input,crop,reverse_speed};
+   const job={id:crypto.randomUUID().replaceAll('-',''),document_id:doc.id,page_id:input.page,page:doc.pages.find(p=>p.id===input.page).number,name:doc.name+(kind==='export'?(reverse_speed?' · loop':' · crop'):''),kind,state:'queued',created:Date.now()/1000,frames:0,expected_frames:prepared.frames.length,settings:prepared.config,input:structuredClone(input),source_reference:{document_id:doc.id,page_id:input.page,archive_sha256:doc.sha256,paired_pdf_sha256:doc.pdf_sha256||null,cloud_source:doc.cloud_source||null},crop,reverse_speed};
    jobs.unshift(job);await saveJobs();pump().catch(error=>{console.error('Queue storage failure');});return job;
   }
   if(url.pathname==='/api/cancel'){const job=jobs.find(j=>j.id===body.id);if(job&&['queued','running'].includes(job.state)){const active=job.state==='running';job.state='cancelled';if(active)activeWorker?.stop();await saveJobs();}return {};}

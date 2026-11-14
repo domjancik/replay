@@ -247,6 +247,28 @@ function renderPageReplays(){
     list.append(button);
   }
 }
+function restoreReplaySettings(settings){
+  for(const id of ['width','height','offset-x','offset-y','seconds','fps','output-width']){
+    const value=settings[id.replaceAll('-','_')];if(value!==undefined)$(id).value=value;
+  }
+  $('ordering').value=settings.ordering||'layer';
+  resetClipping();$('allow-clipping').checked=settings.allow_clipping===true;
+  $('seconds').oninput?.();
+  for(const id of ['fps','ordering','output-width'])$(id).onchange?.();
+  canvasSummary();
+}
+async function useReplaySettings(job){
+  if(!job.input?.settings)throw Error('This older replay has no saved input settings.');
+  await loadLibrary();
+  const notebook=library.find(doc=>doc.id===job.document_id)||library.find(doc=>job.source_reference?.archive_sha256&&doc.sha256===job.source_reference.archive_sha256);
+  if(!notebook)throw Error('Import the original notebook again to regenerate this replay.');
+  if(!notebook.pages.some(page=>page.id===job.page_id&&page.available))throw Error('The original page is not available in this notebook.');
+  $('notebook').value=notebook.id;await selectNotebook();$('page').value=job.page_id;await selectPage();
+  clearTimeout(previewRefreshTimer);const version=++pageRequest;selectedJob=null;
+  restoreReplaySettings(job.input.settings);setLibrarySource('local');updateGenerateButton();
+  requestSelectionPreview(version);
+  notice(job.kind==='export'?'Original render settings restored. Adjust and create a replay, then reapply the export crop or reverse loop.':'Replay settings restored. Adjust them and choose Create replay.');
+}
 function showJob(job) {
   if(!job)return;
   $('view-title').textContent=`${job.name} · page ${job.page}`;
@@ -332,6 +354,7 @@ function renderJobs(){
     open.onclick=()=>{selectedJob=job.id;previewKey='';showJob(job);};
     const state=document.createElement('span');state.className='state';state.setAttribute('aria-busy',String(['queued','running'].includes(job.state)));state.textContent=job.state+(job.state==='running'&&job.expected_frames?' · '+Math.min(100,Math.round((job.frames||0)/job.expected_frames*100))+'%':'');row.append(open,state);
     if(['queued','running'].includes(job.state)){const cancel=document.createElement('button');cancel.className='quiet';cancel.textContent='Cancel';cancel.onclick=safely(async()=>{await api('/api/cancel',{id:job.id});await poll();});row.append(cancel);}
+    if(job.input?.settings){const reuse=document.createElement('button');reuse.className='secondary';reuse.textContent='Use settings';reuse.onclick=safely(()=>useReplaySettings(job));row.append(reuse);}
     if(queueView&&job.error){const error=document.createElement('small');error.className='job-error';error.textContent=job.error;row.append(error);}
     $('jobs').append(row);
   }
