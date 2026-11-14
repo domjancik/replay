@@ -311,3 +311,16 @@ test('selected page preview uses loading and failure states instead of no select
  vm.runInContext('selectionPreview=null;showNotebookPreview();',context);
  assert.equal(el('empty-title').textContent,'No page selected.');
 });
+
+test('crop handles resize, interior drag preserves size, and bounds clamp movement',()=>{
+ const {context}=fixture();const run=code=>JSON.parse(vm.runInContext(`JSON.stringify(${code})`,context));
+ assert.equal(vm.runInContext(`cropHandle([20,20,60,50],[20,20],5)`,context),'nw');
+ assert.equal(vm.runInContext(`cropHandle([20,20,60,50],[50,40],5)`,context),'move');
+ assert.deepEqual(run(`dragCrop([20,20,60,50],[30,30],[100,100],'move',100,100,10)`),[40,50,60,50]);
+ assert.deepEqual(run(`dragCrop([20,20,60,50],[20,20],[10,5],'nw',100,100,10)`),[10,5,70,65]);
+ assert.deepEqual(run(`dragCrop([20,20,60,50],[80,70],[0,0],'se',100,100,10)`),[20,20,10,10]);
+});
+test('crop rectangles round trip through every page rotation',()=>{
+ const {context}=fixture();
+ for(const rotation of [0,90,180,270])assert.equal(vm.runInContext(`JSON.stringify(rotateCrop(rotateCrop([10,20,30,40],100,200,${rotation}),${rotation%180?200:100},${rotation%180?100:200},${(360-rotation)%360}))`,context),'[10,20,30,40]');
+});

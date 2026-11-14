@@ -74,9 +74,10 @@ function resetClipping() {
   $('allow-clipping').checked=false;
 }
 function updateGenerateButton() {
-  $('generate').disabled=!pageReady || (!capabilities.ffmpeg && $('output-kind').value!=='image')
+  $('generate').disabled=inlineCropOpen || !pageReady || (!capabilities.ffmpeg && $('output-kind').value!=='image')
     || (!$('canvas-clipping').hidden && !$('allow-clipping').checked);
 }
+let inlineCropOpen=false;
 let fullCanvas=null,canvasEditorImage=null,canvasEditorRect=null,canvasEditorStart=null,canvasEditorBase=null;
 function fitCanvas(settings,bounds){
   if(!bounds)return {...settings};
@@ -96,44 +97,97 @@ async function fitInitialCanvas(version){
   if(version!==pageRequest)return;
   const fitted=fitCanvas(settings,result.bounds);applyCanvas(fitted);fullCanvas=fitted;
 }
+function rotateCrop([x,y,w,h],width,height,rotation){
+  if(rotation===90)return [height-y-h,x,h,w];
+  if(rotation===180)return [width-x-w,height-y-h,w,h];
+  if(rotation===270)return [y,width-x-w,h,w];
+  return [x,y,w,h];
+}
+function cropHandles([x,y,w,h]){return [['nw',x,y],['n',x+w/2,y],['ne',x+w,y],['e',x+w,y+h/2],['se',x+w,y+h],['s',x+w/2,y+h],['sw',x,y+h],['w',x,y+h/2]];}
+function cropHandle(rect,p,tolerance){
+  for(const [name,x,y] of cropHandles(rect))if(Math.hypot(p[0]-x,p[1]-y)<=tolerance)return name;
+  const [x,y,w,h]=rect;return p[0]>=x&&p[0]<=x+w&&p[1]>=y&&p[1]<=y+h?'move':'new';
+}
+function dragCrop(rect,start,point,mode,width,height,minimum=2){
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));const [x,y,w,h]=rect;
+  const dx=point[0]-start[0],dy=point[1]-start[1];
+  if(mode==='move')return [clamp(x+dx,0,width-w),clamp(y+dy,0,height-h),w,h];
+  if(mode==='new'){const left=clamp(Math.min(start[0],point[0]),0,width-minimum),top=clamp(Math.min(start[1],point[1]),0,height-minimum);return [left,top,clamp(Math.abs(dx),minimum,width-left),clamp(Math.abs(dy),minimum,height-top)];}
+  let left=x,top=y,right=x+w,bottom=y+h;
+  if(mode.includes('w'))left=clamp(x+dx,0,right-minimum);
+  if(mode.includes('e'))right=clamp(x+w+dx,left+minimum,width);
+  if(mode.includes('n'))top=clamp(y+dy,0,bottom-minimum);
+  if(mode.includes('s'))bottom=clamp(y+h+dy,top+minimum,height);
+  return [left,top,right-left,bottom-top];
+}
+function cropPadding(image){return Math.round(Math.max(image.naturalWidth||image.width,image.naturalHeight||image.height)*.08);}
+function drawCropView(canvas,image,rect){
+  const ctx=canvas.getContext('2d'),pad=cropPadding(image),iw=image.naturalWidth||image.width,ih=image.naturalHeight||image.height;
+  canvas.width=iw+pad*2;canvas.height=ih+pad*2;
+  ctx.fillStyle='#e8e6df';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,pad,pad,iw,ih);
+  const [x,y,w,h]=rect;ctx.fillStyle='rgba(37,37,33,.28)';ctx.fillRect(pad,pad,iw,y);ctx.fillRect(pad,pad+y+h,iw,ih-y-h);ctx.fillRect(pad,pad+y,x,h);ctx.fillRect(pad+x+w,pad+y,iw-x-w,h);
+  const scale=canvas.width/(canvas.getBoundingClientRect().width||canvas.width);
+  ctx.strokeStyle='#252521';ctx.lineWidth=1.5*scale;ctx.strokeRect(pad+x,pad+y,w,h);
+  ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=scale;
+  for(const f of [1/3,2/3]){ctx.beginPath();ctx.moveTo(pad+x+w*f,pad+y);ctx.lineTo(pad+x+w*f,pad+y+h);ctx.moveTo(pad+x,pad+y+h*f);ctx.lineTo(pad+x+w,pad+y+h*f);ctx.stroke();}
+  for(const [,hx,hy] of cropHandles(rect)){ctx.fillStyle='#fff';ctx.strokeStyle='#252521';ctx.fillRect(pad+hx-4*scale,pad+hy-4*scale,8*scale,8*scale);ctx.strokeRect(pad+hx-4*scale,pad+hy-4*scale,8*scale,8*scale);}
+}
+function setupCropDrag(canvas,getImage,getRect,setRect,paint,minimum=()=>2){
+  let drag=null;
+  const point=e=>{const image=getImage(),box=canvas.getBoundingClientRect(),pad=cropPadding(image);return [(e.clientX-box.left)*canvas.width/box.width-pad,(e.clientY-box.top)*canvas.height/box.height-pad];};
+  canvas.onpointerdown=e=>{if(!getImage())return;e.preventDefault();const p=point(e),rect=[...getRect()];drag={point:p,rect,mode:cropHandle(rect,p,14*canvas.width/canvas.getBoundingClientRect().width)};canvas.setPointerCapture(e.pointerId);};
+  canvas.onpointermove=e=>{if(!getImage())return;const p=point(e);if(!drag){const mode=cropHandle(getRect(),p,14*canvas.width/canvas.getBoundingClientRect().width);canvas.style.cursor=mode==='move'?'move':mode==='new'?'crosshair':mode+'-resize';return;}
+    const img=getImage();setRect(dragCrop(drag.rect,drag.point,p,drag.mode,img.naturalWidth||img.width,img.naturalHeight||img.height,minimum()));paint();};
+  canvas.onpointerup=()=>{drag=null;};canvas.onpointercancel=()=>{if(drag){setRect(drag.rect);paint();}drag=null;};
+  canvas.onkeydown=e=>{if(!getImage()||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const delta=e.shiftKey?10:1;const p=[e.key==='ArrowLeft'?-delta:e.key==='ArrowRight'?delta:0,e.key==='ArrowUp'?-delta:e.key==='ArrowDown'?delta:0],img=getImage();setRect(dragCrop(getRect(),[0,0],p,'move',img.naturalWidth||img.width,img.naturalHeight||img.height));paint();};
+}
+let canvasEditorRotation=0,canvasEditorRequest=0;
+function closeInlineCrop(){
+  inlineCropOpen=false;if(capabilities)updateGenerateButton();
+  canvasEditorRequest++;canvasEditorImage=null;canvasEditorStart=null;cropImage=null;
+  $('canvas-editor').hidden=true;$('export-dialog').hidden=true;$('preview-display').hidden=false;
+}
 function paintCanvasEditor(){
   if(!canvasEditorImage)return;
-  const c=$('canvas-editor-image'),ctx=c.getContext('2d'),[x,y,w,h]=canvasEditorRect;
-  ctx.drawImage(canvasEditorImage,0,0,c.width,c.height);
-  ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(0,0,c.width,y);ctx.fillRect(0,y+h,c.width,c.height-y-h);ctx.fillRect(0,y,x,h);ctx.fillRect(x+w,y,c.width-x-w,h);
-  ctx.strokeStyle='#252521';ctx.lineWidth=2;ctx.strokeRect(x,y,w,h);
-  $('canvas-editor-size').textContent=`${Math.round(w/c.width*canvasEditorBase.width)} × ${Math.round(h/c.height*canvasEditorBase.height)} source pixels`;
+  drawCropView($('canvas-editor-image'),canvasEditorImage,canvasEditorRect);
+  const sw=canvasEditorRotation%180?canvasEditorBase.height:canvasEditorBase.width,sh=canvasEditorRotation%180?canvasEditorBase.width:canvasEditorBase.height;
+  $('canvas-editor-size').textContent=`${Math.round(canvasEditorRect[2]/canvasEditorImage.naturalWidth*sw)} × ${Math.round(canvasEditorRect[3]/canvasEditorImage.naturalHeight*sh)} source pixels`;
 }
 async function openCanvasEditor(){
   if(!pageReady)return;
-  const version=pageRequest;canvasEditorImage=null;$('canvas-editor-apply').disabled=true;$('canvas-editor-status').textContent='Preparing full-page view…';$('canvas-editor').showModal();
+  closeInlineCrop();const generation=++canvasEditorRequest,version=pageRequest;
+  $('video').pause();$('preview-display').hidden=true;$('canvas-editor').hidden=false;inlineCropOpen=true;updateGenerateButton();
+  $('canvas-editor-apply').disabled=true;$('canvas-editor-status').textContent='Preparing full-page view…';$('canvas-editor-status').setAttribute('aria-busy','true');
   try{
-    canvasEditorBase=fullCanvas||currentCanvas();
-    let result=await api('/api/page-preview',{document:$('notebook').value,page:$('page').value,settings:{...canvasEditorBase,seconds:6,fps:6,output_width:702,backend:rendererBackend}});
-    while(['queued','running'].includes(result.state)){await new Promise(r=>setTimeout(r,500));if(version!==pageRequest||!$('canvas-editor').open)return;result=await api('/api/page-preview?id='+encodeURIComponent(result.id));}
+    canvasEditorBase=fullCanvas||currentCanvas();canvasEditorRotation=Number($('rotation').value||0);
+    let result=await api('/api/page-preview',{document:$('notebook').value,page:$('page').value,settings:{...canvasEditorBase,seconds:6,fps:6,output_width:702,rotation:canvasEditorRotation,backend:rendererBackend}});
+    while(['queued','running'].includes(result.state)){await new Promise(r=>setTimeout(r,500));if(version!==pageRequest||generation!==canvasEditorRequest)return;result=await api('/api/page-preview?id='+encodeURIComponent(result.id));}
     if(result.state!=='complete')throw Error(result.error||'Preview unavailable');
-    const img=new Image();img.src=result.url;await img.decode();if(version!==pageRequest||!$('canvas-editor').open)return;
-    canvasEditorImage=img;const c=$('canvas-editor-image');c.width=img.naturalWidth;c.height=img.naturalHeight;
-    const current=currentCanvas();
-    const x=Math.max(0,(canvasEditorBase.offset_x-current.offset_x)/canvasEditorBase.width*c.width),y=Math.max(0,(canvasEditorBase.offset_y-current.offset_y)/canvasEditorBase.height*c.height);
-    canvasEditorRect=[x,y,Math.min(c.width-x,current.width/canvasEditorBase.width*c.width),Math.min(c.height-y,current.height/canvasEditorBase.height*c.height)];paintCanvasEditor();$('canvas-editor-apply').disabled=false;$('canvas-editor-status').textContent='Drag a rectangle to crop. Full page restores the expanded canvas.';
-  }catch(error){$('canvas-editor-status').textContent=error.message;}
+    const img=new Image();img.src=result.url;await img.decode();if(version!==pageRequest||generation!==canvasEditorRequest)return;
+    canvasEditorImage=img;const current=currentCanvas();
+    const rect=rotateCrop([canvasEditorBase.offset_x-current.offset_x,canvasEditorBase.offset_y-current.offset_y,current.width,current.height],canvasEditorBase.width,canvasEditorBase.height,canvasEditorRotation);
+    const sw=canvasEditorRotation%180?canvasEditorBase.height:canvasEditorBase.width,sh=canvasEditorRotation%180?canvasEditorBase.width:canvasEditorBase.height;
+    canvasEditorRect=rect.map((n,i)=>n*(i%2?img.naturalHeight/sh:img.naturalWidth/sw));
+    paintCanvasEditor();$('canvas-editor-apply').disabled=false;$('canvas-editor-status').textContent='Drag inside to move; drag handles to resize. Click outside to draw a new crop.';
+  }catch(error){if(generation===canvasEditorRequest)$('canvas-editor-status').textContent=error.message;}
+  finally{if(generation===canvasEditorRequest)$('canvas-editor-status').setAttribute('aria-busy','false');}
 }
 function setupCanvasEditor(){
-  $('canvas-editor-open').onclick=safely(openCanvasEditor);$('canvas-editor-close').onclick=()=>$('canvas-editor').close();
-  $('canvas-editor-reset').onclick=()=>{if(canvasEditorImage){const c=$('canvas-editor-image');canvasEditorRect=[0,0,c.width,c.height];paintCanvasEditor();}};
-  const c=$('canvas-editor-image');
-  const point=e=>{const b=c.getBoundingClientRect();return [Math.max(0,Math.min(c.width,(e.clientX-b.left)*c.width/b.width)),Math.max(0,Math.min(c.height,(e.clientY-b.top)*c.height/b.height))];};
-  c.onpointerdown=e=>{if(!canvasEditorImage)return;canvasEditorStart=point(e);c.setPointerCapture(e.pointerId);};
-  c.onpointermove=e=>{if(!canvasEditorStart)return;const p=point(e);canvasEditorRect=[Math.min(p[0],canvasEditorStart[0]),Math.min(p[1],canvasEditorStart[1]),Math.abs(p[0]-canvasEditorStart[0]),Math.abs(p[1]-canvasEditorStart[1])];paintCanvasEditor();};
-  c.onpointerup=c.onpointercancel=()=>{canvasEditorStart=null;};
+  $('canvas-editor-open').onclick=safely(openCanvasEditor);$('canvas-editor-close').onclick=closeInlineCrop;
+  $('canvas-editor-reset').onclick=()=>{if(canvasEditorImage){canvasEditorRect=[0,0,canvasEditorImage.naturalWidth,canvasEditorImage.naturalHeight];paintCanvasEditor();}};
+  setupCropDrag($('canvas-editor-image'),()=>canvasEditorImage,()=>canvasEditorRect,r=>canvasEditorRect=r,paintCanvasEditor,()=>64*Math.max(canvasEditorImage.naturalWidth,canvasEditorImage.naturalHeight)/Math.max(canvasEditorBase.width,canvasEditorBase.height));
   $('canvas-editor-apply').onclick=()=>{try{
-    const rect=canvasEditorRect.map((n,i)=>n*(i%2?canvasEditorBase.height/c.height:canvasEditorBase.width/c.width));
-    applyCanvas(canvasCrop(canvasEditorBase,rect));resetClipping();$('allow-clipping').checked=true;updateGenerateButton();$('canvas-editor').close();requestSelectionPreview(pageRequest);
+    const sw=canvasEditorRotation%180?canvasEditorBase.height:canvasEditorBase.width,sh=canvasEditorRotation%180?canvasEditorBase.width:canvasEditorBase.height;
+    const displayed=canvasEditorRect.map((n,i)=>n*(i%2?sh/canvasEditorImage.naturalHeight:sw/canvasEditorImage.naturalWidth));
+    const rect=rotateCrop(displayed,sw,sh,(360-canvasEditorRotation)%360);
+    applyCanvas(canvasCrop(canvasEditorBase,rect));resetClipping();$('allow-clipping').checked=true;selectedJob=null;
+    $('video').hidden=true;$('preview').hidden=true;$('downloads').hidden=true;$('view-progress').hidden=true;
+    closeInlineCrop();updateGenerateButton();requestSelectionPreview(pageRequest);
   }catch(error){$('canvas-editor-status').textContent=error.message;}};
 }
 function canvasSummary(){$('canvas-summary').textContent=`Canvas: ${$('width').value} × ${$('height').value} · manual offset (${$('offset-x').value}, ${$('offset-y').value})`;}
 async function selectPage() {
+  closeInlineCrop();
   clearTimeout(previewRefreshTimer);
   selectionPreview=null;fullCanvas=null;
   selectedJob=null;$('video').hidden=true;$('preview').hidden=true;$('downloads').hidden=true;$('view-progress').hidden=true;
@@ -457,23 +511,15 @@ async function browse(folder='', label='Tablet') {
   finally{if(generation===usbBrowseGeneration)$('usb-status').setAttribute('aria-busy','false');}
 }
 let cropImage=null, cropRect=null, cropStart=null, exportSource=null;
-function drawCrop(){
-  if(!cropImage)return;
-  const canvas=$('crop-canvas'), ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(cropImage,0,0);
-  if(cropRect){const [x,y,w,h]=cropRect;ctx.fillStyle='rgba(0,0,0,.35)';
-    ctx.fillRect(0,0,canvas.width,y);ctx.fillRect(0,y+h,canvas.width,canvas.height-y-h);
-    ctx.fillRect(0,y,x,h);ctx.fillRect(x+w,y,canvas.width-x-w,h);
-    ctx.strokeStyle='#e94d37';ctx.lineWidth=Math.max(2,canvas.width/250);ctx.strokeRect(x,y,w,h);}
-}
+function drawCrop(){if(cropImage)drawCropView($('crop-canvas'),cropImage,cropRect);}
 function cropFields(){['crop-x','crop-y','crop-w','crop-h'].forEach((id,i)=>$(id).value=cropRect[i]);drawCrop();}
 function resetCrop(){if(!cropImage)return;cropRect=[0,0,cropImage.width,cropImage.height];cropFields();}
 async function openExport(){
   const job=jobs.find(j=>j.id===selectedJob);if(!job || job.state!=='complete' || job.kind==='export')return;
   exportSource=job.id;cropImage=null;$('export-save').disabled=true;$('export-status').textContent='Loading final image…';
-  $('export-dialog').showModal();
+  closeInlineCrop();$('video').pause();$('preview-display').hidden=true;$('export-dialog').hidden=false;inlineCropOpen=true;updateGenerateButton();
   const image=new Image();
-  image.onload=()=>{cropImage=image;const canvas=$('crop-canvas');canvas.width=image.width;canvas.height=image.height;resetCrop();$('export-status').textContent='';$('export-save').disabled=false;};
+  image.onload=()=>{if($('export-dialog').hidden||exportSource!==job.id)return;cropImage=image;const canvas=$('crop-canvas');canvas.width=image.width;canvas.height=image.height;resetCrop();$('export-status').textContent='';$('export-save').disabled=false;};
   image.onerror=()=>{$('export-status').textContent='Could not load the final image.';};
   image.src=mediaUrl(job.id,'static.png');
 }
@@ -519,15 +565,13 @@ function setupShare(){
   };
 }
 function setupExport(){
-  $('export-open').onclick=safely(openExport);$('export-close').onclick=()=>$('export-dialog').close();$('crop-reset').onclick=resetCrop;
+  $('export-open').onclick=safely(openExport);$('export-close').onclick=closeInlineCrop;$('crop-reset').onclick=resetCrop;
   for(const id of ['crop-x','crop-y','crop-w','crop-h'])$(id).oninput=()=>{cropRect=['crop-x','crop-y','crop-w','crop-h'].map(key=>Number($(key).value));drawCrop();};
   const canvas=$('crop-canvas');
-  canvas.onpointerdown=event=>{if(!cropImage)return;cropStart=cropPoint(event);canvas.setPointerCapture(event.pointerId);};
-  canvas.onpointermove=event=>{if(!cropStart)return;const point=cropPoint(event);cropRect=[Math.min(cropStart[0],point[0]),Math.min(cropStart[1],point[1]),Math.abs(point[0]-cropStart[0]),Math.abs(point[1]-cropStart[1])];cropFields();};
-  canvas.onpointerup=canvas.onpointercancel=()=>{cropStart=null;};
+  setupCropDrag(canvas,()=>cropImage,()=>cropRect,r=>cropRect=r.map(n=>Math.floor(n/2)*2),cropFields);
   $('export-save').onclick=async()=>{
     $('export-save').disabled=true;$('export-status').textContent='Queuing export…';
-    try{const job=await api('/api/export',{job:exportSource,crop:cropRect,reverse_speed:Number($('reverse-speed').value)});selectedJob=job.id;previewKey='';$('export-dialog').close();await poll();}
+    try{const job=await api('/api/export',{job:exportSource,crop:cropRect,reverse_speed:Number($('reverse-speed').value)});selectedJob=job.id;previewKey='';closeInlineCrop();await poll();}
     catch(error){$('export-status').textContent=error.message;}
     finally{$('export-save').disabled=false;}
   };
