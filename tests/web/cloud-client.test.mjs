@@ -338,3 +338,26 @@ test('preview rejects excessive decoded dimensions and non-PNG content', async (
     await assert.rejects(client.preview(document), /preview PNG/i);
   }
 });
+
+ test('reports verified partial notebooks before the full tree finishes', async () => {
+  const f = fixture({hiddenParent: ''});
+  let release, started;
+  const waiting = new Promise(resolve => {started = resolve;});
+  const gate = new Promise(resolve => {release = resolve;});
+  const client = createCloudClient({relay: async payload => {
+    if (payload.filename === `${folder}.docSchema`) {started(); await gate;}
+    return f.relay(payload);
+  }});
+  client.setDeviceToken('synthetic-device');
+  const updates = [];
+  const pending = client.list({onProgress: update => updates.push(update)});
+  await waiting;
+  try {
+    assert.equal(updates.at(-1)?.completed, 2);
+    assert.equal(updates.at(-1)?.total, 3);
+    assert.deepEqual(updates.at(-1)?.entries.map(entry => entry.id), [hidden]);
+    assert.equal(client.getCache(), null);
+  } finally {release(); await pending;}
+  assert.equal(updates.at(-1).completed, 3);
+  assert.equal(updates.at(-1).entries.length, 3);
+ });

@@ -181,7 +181,7 @@ function cloudHarness(t, {savedMode=null, prepareError=null, storageError=false}
   el('source-cloud').onclick=()=>calls.push('gallery');
   t.mock.timers.enable({apis:['setTimeout']});
   setupCloud({sessionToken:()=>'',importArchive(){},vault,clientFactory:()=>client});
-  return {el,calls,vault};
+  return {el,calls,vault,client};
 }
 
 test('first-time flow prefers passkey, then loads gallery automatically',async t=>{
@@ -285,4 +285,24 @@ test('failed saved-passkey unlock preserves the vault and shows recovery guidanc
  assert.match(el('cloud-status').textContent,/provider refused/);
  assert.equal(await vault.mode(),'passkey');
  assert.equal(el('cloud-unlock').disabled,false);
+});
+
+test('cloud loading is visible and renders partial notebooks while awaiting completion', async t => {
+  const {el,client}=cloudHarness(t,{savedMode:'password'});
+  await el('cloud-open').onclick();
+  let release, started;
+  const waiting=new Promise(resolve=>{started=resolve;});
+  const gate=new Promise(resolve=>{release=resolve;});
+  client.list=async ({onProgress}={})=>{
+    onProgress?.({completed:2,total:8,entries:[{id:'partial',name:'Available now',kind:'document'}]});
+    started(); await gate; return [];
+  };
+  const pending=el('cloud-unlock').onclick();
+  await waiting;
+  try {
+    assert.equal(el('cloud-gallery-status').hidden,false);
+    assert.match(el('cloud-gallery-status').textContent,/2 of 8/);
+    assert.equal(el('cloud-gallery').children[0].children[1].textContent,'Available now');
+    assert.equal(el('cloud-gallery').children[0].children.at(-1).disabled,true);
+  } finally {release();await pending;}
 });

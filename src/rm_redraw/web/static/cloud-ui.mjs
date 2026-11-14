@@ -120,9 +120,21 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     } finally { busy = false; accountBusy = false; controls(); touch(); queueMicrotask(pumpPreviews); }
   }
   async function showList(current) {
-    status('Loading cloud notebooks…');
-    status('Loading notebooks…');
-    const entries = await client.list();
+    status('Loading cloud notebooks… Connecting to reMarkable Cloud.');
+    controls();
+    let shown = '';
+    const entries = await client.list({onProgress: ({completed, total, entries: partial}) => {
+      if (current !== epoch || !data) return;
+      const notebooks = partial.filter(entry => entry.kind !== 'folder');
+      const signature = JSON.stringify(notebooks);
+      if (notebooks.length && signature !== shown) {
+        renderEntries(partial); shown = signature; controls();
+      }
+      status(`Loading cloud notebooks… ${completed} of ${total} items checked · ${notebooks.length} notebooks found. You can browse the list as it fills.`);
+    }}).catch(error => {
+      if (current === epoch) renderEntries(data?.entries || []);
+      throw error;
+    });
     if (current !== epoch || !data) return;
     data.cache = client.getCache(); data.entries = entries;
     renderEntries(entries);
@@ -141,6 +153,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     $('cloud-dialog').hidden=true;
     try { await showList(current); }
     catch (error) {
+      if (current === epoch) renderEntries(data?.entries || []);
       if (current === epoch) status(`Connected, but notebooks could not be refreshed. ${data?.entries?.length ? 'Showing the saved list. ' : ''}Use Refresh to retry.`);
     }
   }
@@ -189,7 +202,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
         } catch { if (renderedEpoch === epoch) previewStatus.textContent = 'Preview unavailable. You can still open this notebook.'; }
         finally { previewStatus.setAttribute?.('aria-busy','false'); previewBusy = false; preview.disabled = false; queueMicrotask(pumpPreviews); }
       };
-      const button = document.createElement('button'); button.textContent = 'Open notebook'; button.dataset.import = 'true';
+      const button = document.createElement('button'); button.textContent = 'Open notebook'; button.dataset.import = 'true'; button.disabled = busy;
       button.onclick = () => action(async generation => {
         status('Opening notebook…');
         await client.list();

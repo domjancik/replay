@@ -374,7 +374,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     return verifiedText(name, hash, maxIndexBytes, bytes => verifyIndex(bytes, hash, owner), blobs, read, signal);
   }
 
-  async function refresh(device, signal) {
+  async function refresh(device, signal, onProgress) {
     const session = sessionReads(device, signal);
     await session.open();
     const scope = await digest(encoder.encode(device));
@@ -388,6 +388,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     const root = hash === '' ? new Map() : await fetchIndex('root.docSchema', hash, '.', blobs, session.read, signal);
     const records = new Map();
     const ids = [...root.keys()].filter(id => uuid.test(id));
+    onProgress?.({completed: 0, total: ids.length, entries: []});
     for (let start = 0; start < ids.length; start += 2) {
       const batch = ids.slice(start, start + 2);
       const results = await Promise.allSettled(batch.map(async id => {
@@ -401,6 +402,8 @@ export function createCloudClient({relay, cache, onCache} = {}) {
       }));
       const failed = results.find(result => result.status === 'rejected');
       if (failed) throw failed.reason;
+      check(signal);
+      onProgress?.({completed: Math.min(start + 2, ids.length), total: ids.length, entries: visibleTree(records)});
     }
     check(signal);
     const tree = visibleTree(records);
@@ -464,11 +467,11 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     setDeviceToken,
     lock() { reset(); },
     getCache,
-    async list() {
+    async list({onProgress} = {}) {
       const device = requireDevice();
       if (downloading) throw new Error('Already downloading a cloud document');
       if (listing) return listing;
-      const pending = refresh(device, connection.signal);
+      const pending = refresh(device, connection.signal, onProgress);
       listing = pending;
       try {
         return await pending;
