@@ -11,7 +11,7 @@ const document = '11112233-4455-4677-8899-aabbccddeeff';
 const hidden = '22112233-4455-4677-8899-aabbccddeeff';
 const page = '33112233-4455-4677-8899-aabbccddeeff';
 
-function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash', thumbnail} = {}) {
+function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParent = 'trash', documentParent = folder, thumbnail} = {}) {
   const files = new Map();
   const requests = [];
   let generation = 0;
@@ -35,7 +35,7 @@ function fixture({badPath, oversized = false, fileType = 'notebook', hiddenParen
   function refresh(visibleName = 'Notebook') {
     generation++;
     const folderMeta = blob(`${folder}.metadata`, {visibleName: 'Sketches', parent: '', type: 'CollectionType'});
-    const docMeta = blob(`${document}.metadata`, {visibleName, parent: folder, type: 'DocumentType'});
+    const docMeta = blob(`${document}.metadata`, {visibleName, parent: documentParent, type: 'DocumentType'});
     const hiddenMeta = blob(`${hidden}.metadata`, {visibleName: 'Hidden', parent: hiddenParent, type: 'DocumentType'});
     const content = blob(`${document}.content`, {fileType, pages: [page]});
     const ink = blob(`${document}/${page}.rm`, 'Synthetic ink');
@@ -107,8 +107,8 @@ test('pairs, lists verified visible metadata and downloads only the selected doc
   assert.equal(await client.pair('abcdefgh'), 'synthetic-device');
   assert.match(requests[0].device_id, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
   assert.deepEqual(await client.list(), [
-    {id: folder, name: 'Sketches', path: 'Sketches', kind: 'folder'},
-    {id: document, name: 'Notebook', path: 'Sketches/Notebook', kind: 'document'},
+    {id: folder, name: 'Sketches', path: 'Sketches', kind: 'folder', parent: ''},
+    {id: document, name: 'Notebook', path: 'Sketches/Notebook', kind: 'document', parent: folder},
   ]);
   assert.deepEqual(requests[1], {action: 'session', token: 'synthetic-device'});
   assert.equal(requests.some(request => request.filename?.endsWith('.rm') || request.filename?.endsWith('.content')), false);
@@ -361,3 +361,16 @@ test('preview rejects excessive decoded dimensions and non-PNG content', async (
   assert.equal(updates.at(-1).completed, 3);
   assert.equal(updates.at(-1).entries.length, 3);
  });
+
+test('verified preview is available while later library metadata is pending', async () => {
+ const f=fixture({documentParent:'',thumbnail:previewPng});
+ let release,started;const gate=new Promise(r=>release=r),waiting=new Promise(r=>started=r);
+ const client=createCloudClient({relay:async payload=>{
+  if(payload.filename===`${folder}.docSchema`){started();await gate;}
+  return f.relay(payload);
+ }});
+ client.setDeviceToken('synthetic-device');
+ const pending=client.list();await waiting;
+ try {assert.deepEqual(await client.preview(document),previewPng);}
+ finally {release();await pending;}
+});

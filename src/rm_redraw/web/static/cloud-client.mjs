@@ -152,7 +152,7 @@ function visibleTree(records) {
     while (next && !next.hidden && !visited.has(next.id) && names.length < 64) {
       names.unshift(next.name);
       if (next.parent === '') {
-        visible.push({id: record.id, name: record.name, path: names.join('/'), kind: record.kind});
+        visible.push({id: record.id, name: record.name, path: names.join('/'), kind: record.kind, parent: record.parent});
         break;
       }
       visited.add(next.id);
@@ -282,6 +282,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
   let initialCache = cache;
   let documents = new Map();
   let listing;
+  let previewDocuments = new Map();
   let downloading = false;
 
   function reset(token, preserveInitial = false) {
@@ -291,6 +292,7 @@ export function createCloudClient({relay, cache, onCache} = {}) {
     sessionToken = undefined;
     snapshot = undefined;
     documents = new Map();
+    previewDocuments = new Map();
     listing = undefined;
     downloading = false;
     if (!preserveInitial) initialCache = undefined;
@@ -403,6 +405,8 @@ export function createCloudClient({relay, cache, onCache} = {}) {
       const failed = results.find(result => result.status === 'rejected');
       if (failed) throw failed.reason;
       check(signal);
+      previewDocuments = new Map(visibleTree(records).filter(entry => entry.kind === 'document').map(({id}) => [id, root.get(id)]));
+      sessionToken = session.token();
       onProgress?.({completed: Math.min(start + 2, ids.length), total: ids.length, entries: visibleTree(records)});
     }
     check(signal);
@@ -476,13 +480,13 @@ export function createCloudClient({relay, cache, onCache} = {}) {
       try {
         return await pending;
       } finally {
-        if (listing === pending) listing = undefined;
+        if (listing === pending) { listing = undefined; previewDocuments = new Map(); }
       }
     },
     async preview(id) {
       const device = requireDevice();
-      if (listing || downloading) throw new Error('Wait for the current cloud request');
-      const selected = documents.get(id);
+      if (downloading) throw new Error('Wait for the current cloud request');
+      const selected = (listing ? previewDocuments : documents).get(id);
       if (!selected) throw new Error('Select a visible cloud document');
       const {signal} = connection;
       const session = sessionReads(device, signal, sessionToken);

@@ -12,7 +12,9 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
   const $ = (id) => document.getElementById(id);
   let client = null, data = null, savedMode = null, activeMode = null;
   let busy = false, accountBusy = false, epoch = 0, idle, passkeyFailed = false;
-  let previewObserver = null, previewBusy = false;
+  let previewObserver = null, previewBusy = false, libraryLoading = false;
+  let cloudFolder = "", cloudEntries = [];
+  const cloudRows = new Map();
   const previewUrls = new Set(), visiblePreviews = new Map(), attemptedPreviews = new Set();
   const hasPasskeys = !!globalThis.navigator?.credentials?.create && !!globalThis.navigator?.credentials?.get;
   $('cloud-storage').value = hasPasskeys ? 'passkey' : 'password';
@@ -73,11 +75,11 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
   function clearPreviews() {
     previewObserver?.disconnect(); visiblePreviews.clear(); attemptedPreviews.clear();
     for (const url of previewUrls) URL.revokeObjectURL(url);
-    previewUrls.clear();
+    previewUrls.clear(); cloudRows.clear();
   }
   function lock(message) {
     const previousMode = activeMode;
-    clearPreviews(); epoch++; clearTimeout(idle);
+    clearPreviews(); cloudFolder = ""; cloudEntries = []; $('cloud-folder-nav')?.replaceChildren(); epoch++; clearTimeout(idle);
     client?.lock(); client = null; data = null; activeMode = null; vault.lock();
     $('cloud-unlock-help').hidden=true;
     $('cloud-items').replaceChildren(); $('cloud-gallery')?.replaceChildren();
@@ -122,19 +124,19 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
   async function showList(current) {
     status('Loading cloud notebooks… Connecting to reMarkable Cloud.');
     controls();
-    let shown = '';
+    let shown = ''; libraryLoading = true;
     const entries = await client.list({onProgress: ({completed, total, entries: partial}) => {
       if (current !== epoch || !data) return;
       const notebooks = partial.filter(entry => entry.kind !== 'folder');
-      const signature = JSON.stringify(notebooks);
-      if (notebooks.length && signature !== shown) {
+      const signature = JSON.stringify(partial);
+      if (partial.length && signature !== shown) {
         renderEntries(partial); shown = signature; controls();
       }
       status(`Loading cloud notebooks… ${completed} of ${total} items checked · ${notebooks.length} notebooks found. You can browse the list as it fills.`);
     }}).catch(error => {
       if (current === epoch) renderEntries(data?.entries || []);
       throw error;
-    });
+    }).finally(() => { if (current === epoch) { libraryLoading = false; attemptedPreviews.clear(); } });
     if (current !== epoch || !data) return;
     data.cache = client.getCache(); data.entries = entries;
     renderEntries(entries);
@@ -163,12 +165,13 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
     finally { lock(removed ? message : undefined); }
   }
   function pumpPreviews() {
-    if (busy || previewBusy || !data || !activeMode) return;
+    if ((busy && !libraryLoading) || previewBusy || !data || !activeMode) return;
     const next = [...visiblePreviews.entries()].find(([row]) => !attemptedPreviews.has(row.dataset.cloudId));
-    if (next) { attemptedPreviews.add(next[0].dataset.cloudId); next[1](); }
+    if (next) { attemptedPreviews.add(next[0].dataset.cloudId); if (next[0].previewReady) queueMicrotask(pumpPreviews); else next[1](); }
   }
   function renderEntries(entries) {
-    clearPreviews();
+    cloudEntries = entries;
+    previewObserver?.disconnect(); visiblePreviews.clear();
     $('cloud-items').replaceChildren();
     const target = $('cloud-gallery');
     if (!target) return;
@@ -180,8 +183,31 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
       }
       queueMicrotask(pumpPreviews);
     }, {root: null, rootMargin: '0px', threshold: 0});
+    const nav = $('cloud-folder-nav');
+    nav?.replaceChildren();
+    if (nav) {
+      const trail = []; let ancestor = entries.find(item => item.id === cloudFolder);
+      const seen = new Set();
+      while (ancestor && !seen.has(ancestor.id)) {
+        seen.add(ancestor.id); trail.unshift(ancestor); ancestor = entries.find(item => item.id === ancestor.parent);
+      }
+      for (const item of [{id:'',name:'Cloud notebooks'}, ...trail]) {
+        const button = document.createElement('button'); button.textContent = item.name;
+        button.className = 'secondary'; button.disabled = item.id === cloudFolder;
+        button.onclick = () => {cloudFolder = item.id; renderEntries(cloudEntries); controls();}; nav.append(button);
+      }
+    }
     const renderedEpoch = epoch;
-    for (const entry of entries.filter(item => item.kind !== 'folder')) {
+    for (const entry of entries.filter(item => (item.parent || '') === cloudFolder)) {
+      if (entry.kind === 'folder') {
+        const folder = document.createElement('button'); folder.className = 'cloud-notebook-card cloud-folder-card';
+        folder.textContent = `▱ ${entry.name}`;
+        folder.onclick = () => {cloudFolder = entry.id; renderEntries(cloudEntries); controls();}; target.append(folder); continue;
+      }
+      const existing = cloudRows.get(entry.id);
+      if (existing && existing.entryKey === JSON.stringify(entry)) {
+        target.append(existing); if (previewObserver) previewObserver.observe(existing); continue;
+      }
       const row = document.createElement('div'); row.className = 'cloud-notebook-card'; row.dataset.cloudId = entry.id;
       const image = document.createElement('img'); image.className = 'notebook-thumbnail'; image.hidden = true;
       image.alt = `Notebook preview for ${entry.name}`;
@@ -189,16 +215,16 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
       const previewStatus = document.createElement('small'); previewStatus.textContent = 'Preview loads when visible';
       const preview = document.createElement('button'); preview.textContent = 'Load preview'; preview.className = 'secondary';
       preview.onclick = async () => {
-        if (busy || previewBusy || renderedEpoch !== epoch || !data) return;
+        if ((busy && !libraryLoading) || previewBusy || renderedEpoch !== epoch || !data) return;
         previewBusy = true; preview.disabled = true; previewStatus.setAttribute?.('aria-busy','true'); previewStatus.textContent = 'Loading preview…';
         try {
           const bytes = await client.preview(entry.id);
-          if (renderedEpoch !== epoch || !data || !target.children || !Array.from(target.children).includes(row)) return;
-          if (!bytes) { previewStatus.textContent = 'No preview available'; return; }
+          if (renderedEpoch !== epoch || !data) return;
+          if (!bytes) { row.previewReady = true; previewStatus.textContent = 'No preview available'; return; }
           if (previewUrls.has(image.src)) { URL.revokeObjectURL(image.src); previewUrls.delete(image.src); }
           const url = URL.createObjectURL(new Blob([bytes], {type: 'image/png'})); previewUrls.add(url);
           image.onerror = () => { image.hidden = true; previewStatus.textContent = 'Preview unavailable'; };
-          image.src = url; image.hidden = false; previewStatus.textContent = 'Notebook preview'; preview.hidden = true;
+          row.previewReady = true; image.src = url; image.hidden = false; previewStatus.textContent = 'Notebook preview'; preview.hidden = true;
         } catch { if (renderedEpoch === epoch) previewStatus.textContent = 'Preview unavailable. You can still open this notebook.'; }
         finally { previewStatus.setAttribute?.('aria-busy','false'); previewBusy = false; preview.disabled = false; queueMicrotask(pumpPreviews); }
       };
@@ -212,6 +238,7 @@ export function setupCloud({ sessionToken, importArchive, vault = createVault(),
         await importArchive(archive);
         $('cloud-dialog').hidden=true;
       });
+      row.entryKey = JSON.stringify(entry); cloudRows.set(entry.id, row);
       row.append(image, label, previewStatus, preview, button); target.append(row);
       if (previewObserver) { row.loadPreview = preview.onclick; previewObserver.observe(row); }
     }

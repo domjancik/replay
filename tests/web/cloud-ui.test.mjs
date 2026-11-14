@@ -306,3 +306,37 @@ test('cloud loading is visible and renders partial notebooks while awaiting comp
     assert.equal(el('cloud-gallery').children[0].children.at(-1).disabled,true);
   } finally {release();await pending;}
 });
+
+test('cloud folders show direct children and support returning to root',async t=>{
+ const {el,client}=cloudHarness(t,{savedMode:'password'});
+ client.list=async()=>[
+  {id:'a',name:'Sketches',kind:'folder',parent:''},
+  {id:'b',name:'Sketches',kind:'folder',parent:''},
+  {id:'ink',name:'Inside',kind:'document',parent:'a'},
+ ];
+ await el('cloud-open').onclick();await el('cloud-unlock').onclick();
+ const gallery=el('cloud-gallery');
+ assert.equal(gallery.children.length,2);
+ gallery.children[0].onclick();
+ assert.equal(gallery.children.length,1);
+ assert.equal(gallery.children[0].dataset.cloudId,'ink');
+ el('cloud-folder-nav').children[0].onclick();
+ assert.equal(gallery.children.length,2);
+});
+
+test('visible cloud preview starts during scanning and its card survives later batches',async t=>{
+ const {el,client}=cloudHarness(t,{savedMode:'password'});
+ let observe;installGlobal(t,'IntersectionObserver',class{constructor(fn){observe=fn;}observe(){}disconnect(){}});
+ let release,started,progress;
+ const waiting=new Promise(r=>started=r),gate=new Promise(r=>release=r);
+ const entries=[{id:'one',name:'One',kind:'document',parent:''}];
+ client.list=async({onProgress})=>{progress=onProgress;onProgress({completed:2,total:6,entries});started();await gate;return entries;};
+ let reads=0;client.preview=async()=>{reads++;return null;};
+ await el('cloud-open').onclick();const pending=el('cloud-unlock').onclick();await waiting;
+ try {
+  const row=el('cloud-gallery').children[0];observe([{target:row,isIntersecting:true}]);
+  await new Promise(r=>setImmediate(r));assert.equal(reads,1);
+  progress({completed:4,total:6,entries:[...entries,{id:'two',name:'Two',kind:'document',parent:''}]});
+  assert.equal(el('cloud-gallery').children[0],row);
+ } finally {release();await pending;}
+});
