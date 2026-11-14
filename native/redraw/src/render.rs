@@ -138,6 +138,40 @@ mod tests {
 mod cache_tests {
     use super::*;
     #[test]
+    fn sparse_layers_keep_cache_under_budget_and_match_reverse_and_erase() {
+        let mut request:Request=serde_json::from_value(serde_json::json!({"page":{"page_id":"sparse","paper_size":[128,128],"groups":[],"compositing_order":[],"strokes":[]}})).unwrap();
+        for i in 0..1100 {
+            let id = i.to_string();
+            request.page.groups.push(crate::model::Group {
+                group_id: id.clone(),
+                visible: true,
+            });
+            request.page.compositing_order.push(id.clone());
+            if i < 3 {
+                request.page.strokes.push(serde_json::from_value(serde_json::json!({"stroke_id":id,"group_id":id,"rgba":[20,30,40,180],"thickness_scale":2,"tool_code":17,"points":[{"x":8,"y":10+i,"width":8},{"x":20,"y":12+i,"width":8}]})).unwrap());
+            }
+        }
+        let mut cache = CachedRenderer::default();
+        for ids in [
+            vec!["0"],
+            vec!["0", "1"],
+            vec!["0", "1", "2"],
+            vec!["0"],
+            vec![],
+        ] {
+            request.visibility = Some(crate::model::Visibility {
+                completed_stroke_ids: ids.into_iter().map(String::from).collect(),
+                active_stroke_id: None,
+                active_progress: 0.0,
+            });
+            assert_eq!(cache.render(&request).unwrap(), render(&request).unwrap());
+            assert!(
+                cache.identity.is_some(),
+                "empty layers must not disable the entire cache"
+            );
+        }
+    }
+    #[test]
     fn invalid_request_discards_cached_state() {
         let mut request: Request = serde_json::from_str(r#"{"page":{"page_id":"x","paper_size":[2,2],"groups":[],"strokes":[],"compositing_order":[]}}"#).unwrap();
         let mut cache = CachedRenderer::default();
@@ -203,10 +237,56 @@ fn draw_stroke(
     Ok(())
 }
 
+const TILE: usize = 64;
+const CACHE_BYTES: usize = 64 * 1024 * 1024;
+#[derive(Default)]
+struct SparseImage {
+    tiles: std::collections::BTreeMap<(usize, usize), Image>,
+}
+impl SparseImage {
+    fn capture(image: &Image) -> Self {
+        let mut result = Self::default();
+        for y in (0..image.height).step_by(TILE) {
+            for x in (0..image.width).step_by(TILE) {
+                let w = TILE.min(image.width - x);
+                let h = TILE.min(image.height - y);
+                if !(y..y + h).any(|row| {
+                    image.data[(row * image.width + x) * 4..(row * image.width + x + w) * 4]
+                        .chunks_exact(4)
+                        .any(|p| p[3] != 0)
+                }) {
+                    continue;
+                }
+                let mut tile = Image::new(w, h, [0; 4]);
+                for row in 0..h {
+                    tile.data[row * w * 4..(row + 1) * w * 4].copy_from_slice(
+                        &image.data[((y + row) * image.width + x) * 4
+                            ..((y + row) * image.width + x + w) * 4],
+                    );
+                }
+                result.tiles.insert((x, y), tile);
+            }
+        }
+        result
+    }
+    fn bytes(&self) -> usize {
+        self.tiles.values().map(|t| t.data.len()).sum()
+    }
+    fn restore(&self, w: usize, h: usize) -> Image {
+        let mut image = Image::new(w, h, [0; 4]);
+        for (&(x, y), tile) in &self.tiles {
+            for row in 0..tile.height {
+                image.data[((y + row) * w + x) * 4..((y + row) * w + x + tile.width) * 4]
+                    .copy_from_slice(&tile.data[row * tile.width * 4..(row + 1) * tile.width * 4]);
+            }
+        }
+        image
+    }
+}
 struct LayerPrefix {
     indices: Vec<usize>,
     completed: usize,
-    image: Image,
+    image: SparseImage,
 }
 #[derive(Default)]
 pub struct CachedRenderer {
@@ -214,6 +294,8 @@ pub struct CachedRenderer {
     layers: Vec<LayerPrefix>,
     last_visibility: Option<Option<crate::model::Visibility>>,
     last_image: Option<Image>,
+    composition: Option<Image>,
+    previous_partial: std::collections::BTreeSet<(usize, usize)>,
     pub hits: usize,
 }
 impl CachedRenderer {
@@ -221,44 +303,43 @@ impl CachedRenderer {
         *self = Self::default();
     }
     pub fn render(&mut self, request: &Request) -> Result<Image, String> {
-        let result = self.render_inner(request);
+        let result = crate::validation::validate(request)
+            .and_then(|v| self.render_inner_validated(request, v, false));
         if result.is_err() {
             self.clear();
         }
         result
     }
-    fn render_inner(&mut self, request: &Request) -> Result<Image, String> {
-        let viewport = crate::validation::validate(request)?;
+    pub(crate) fn render_prevalidated(
+        &mut self,
+        request: &Request,
+        viewport: crate::model::Viewport,
+    ) -> Result<Image, String> {
+        self.render_inner_validated(request, viewport, true)
+    }
+    fn render_inner_validated(
+        &mut self,
+        request: &Request,
+        viewport: crate::model::Viewport,
+        prepared: bool,
+    ) -> Result<Image, String> {
         let size = crate::validation::composition_size(request, viewport);
         let page = &request.page;
-        let groups: Vec<_> = page
-            .compositing_order
-            .iter()
-            .filter(|id| page.groups.iter().any(|g| g.visible && &g.group_id == *id))
-            .collect();
-        let budget = size
-            .width
-            .saturating_mul(size.height)
-            .saturating_mul(4)
-            .saturating_mul(groups.len())
-            .saturating_add(
-                viewport
-                    .width
-                    .saturating_mul(viewport.height)
-                    .saturating_mul(4),
-            );
-        if budget > 64 * 1024 * 1024 {
-            self.clear();
-            return render(request);
-        }
         let same = self
             .identity
             .as_ref()
-            .is_some_and(|(p, o)| p == page && o == &request.options);
+            .is_some_and(|(p, o)| prepared || (p == page && o == &request.options));
         if !same {
             self.clear();
             self.identity = Some((page.clone(), request.options.clone()));
-            for group in groups {
+            for group in &page.compositing_order {
+                if !page
+                    .groups
+                    .iter()
+                    .any(|g| g.visible && &g.group_id == group)
+                {
+                    continue;
+                }
                 self.layers.push(LayerPrefix {
                     indices: page
                         .strokes
@@ -267,7 +348,7 @@ impl CachedRenderer {
                         .filter_map(|(i, s)| (&s.group_id == group).then_some(i))
                         .collect(),
                     completed: 0,
-                    image: Image::new(size.width, size.height, [0; 4]),
+                    image: SparseImage::default(),
                 });
             }
         }
@@ -306,48 +387,119 @@ impl CachedRenderer {
                 return render(request);
             }
         }
-        let mut result = Image::new(size.width, size.height, request.options.background);
-        for layer in &mut self.layers {
+        let mut dirty = std::mem::take(&mut self.previous_partial);
+        let mut partial = None;
+        let mut prefix_bytes = self.layers.iter().map(|l| l.image.bytes()).sum::<usize>();
+        for (layer_id, layer) in self.layers.iter_mut().enumerate() {
             let count = layer
                 .indices
                 .iter()
                 .take_while(|&&i| completed.contains(page.strokes[i].stroke_id.as_str()))
                 .count();
-            if count < layer.completed {
-                layer.image = Image::new(size.width, size.height, [0; 4]);
-                layer.completed = 0;
-            }
-            for &index in &layer.indices[layer.completed..count] {
-                let stroke = &page.strokes[index];
-                if !stroke.points.is_empty() {
-                    draw_stroke(&mut layer.image, &stroke.points, stroke, request)?;
+            if count != layer.completed {
+                dirty.extend(layer.image.tiles.keys().copied());
+                let mut image = if count < layer.completed {
+                    layer.completed = 0;
+                    Image::new(size.width, size.height, [0; 4])
+                } else {
+                    layer.image.restore(size.width, size.height)
+                };
+                for &i in &layer.indices[layer.completed..count] {
+                    let stroke = &page.strokes[i];
+                    if !stroke.points.is_empty() {
+                        draw_stroke(&mut image, &stroke.points, stroke, request)?;
+                    }
                 }
+                layer.completed = count;
+                prefix_bytes -= layer.image.bytes();
+                layer.image = SparseImage::capture(&image);
+                prefix_bytes += layer.image.bytes();
+                if prefix_bytes > CACHE_BYTES {
+                    self.clear();
+                    return render(request);
+                }
+                dirty.extend(layer.image.tiles.keys().copied());
             }
-            layer.completed = count;
-            if let Some(&index) = layer
+            if let Some(&i) = layer
                 .indices
                 .get(count)
                 .filter(|&&i| Some(page.strokes[i].stroke_id.as_str()) == active)
             {
-                let stroke = &page.strokes[index];
+                let stroke = &page.strokes[i];
                 let points = geometry::prefix_points(
                     stroke,
                     request.visibility.as_ref().unwrap().active_progress,
                 );
-                let mut partial = layer.image.clone();
+                let mut image = layer.image.restore(size.width, size.height);
                 if !points.is_empty() {
-                    draw_stroke(&mut partial, &points, stroke, request)?;
+                    draw_stroke(&mut image, &points, stroke, request)?;
                 }
-                result.alpha_composite(&partial, 0, 0);
-            } else {
-                result.alpha_composite(&layer.image, 0, 0);
+                let image = SparseImage::capture(&image);
+                self.previous_partial.extend(image.tiles.keys().copied());
+                self.previous_partial
+                    .extend(layer.image.tiles.keys().copied());
+                dirty.extend(self.previous_partial.iter().copied());
+                partial = Some((layer_id, image));
             }
+        }
+        let mut result = match self.composition.take() {
+            Some(image) => image,
+            None => {
+                for layer in &self.layers {
+                    dirty.extend(layer.image.tiles.keys().copied());
+                }
+                Image::new(size.width, size.height, request.options.background)
+            }
+        };
+        // Only recomposite affected tiles, in the original layer order. Drawing
+        // stays in global pixel coordinates, preserving texture phase and edges.
+        for (x, y) in dirty {
+            let w = TILE.min(size.width - x);
+            let h = TILE.min(size.height - y);
+            let mut tile = Image::new(w, h, request.options.background);
+            for (i, layer) in self.layers.iter().enumerate() {
+                let source = partial
+                    .as_ref()
+                    .filter(|(id, _)| *id == i)
+                    .map_or(&layer.image, |(_, image)| image);
+                if let Some(image) = source.tiles.get(&(x, y)) {
+                    tile.alpha_composite(image, 0, 0);
+                }
+            }
+            for row in 0..h {
+                result.data[((y + row) * size.width + x) * 4..((y + row) * size.width + x + w) * 4]
+                    .copy_from_slice(&tile.data[row * w * 4..(row + 1) * w * 4]);
+            }
+        }
+        let mut retained = self.layers.iter().map(|l| l.image.bytes()).sum::<usize>();
+        // Bound retained RGBA buffers; evict prefixes individually rather than
+        // disabling caching for the entire page when layer count grows.
+        let reserve =
+            (size.width * size.height * 4).saturating_add(viewport.width * viewport.height * 4);
+        let mut evicted = false;
+        for layer in &mut self.layers {
+            if retained.saturating_add(reserve) <= CACHE_BYTES {
+                break;
+            }
+            retained = retained.saturating_sub(layer.image.bytes());
+            layer.image = SparseImage::default();
+            layer.completed = 0;
+            evicted = true;
+        }
+        if !evicted && retained.saturating_add(reserve) <= CACHE_BYTES {
+            self.composition = Some(result.clone());
         }
         if (size.width, size.height) != (viewport.width, viewport.height) {
             result = result.resized(viewport.width, viewport.height, Filter::Box);
         }
         self.last_visibility = Some(request.visibility.clone());
-        self.last_image = Some(result.clone());
+        if retained + result.data.len() + self.composition.as_ref().map_or(0, |i| i.data.len())
+            <= CACHE_BYTES
+        {
+            self.last_image = Some(result.clone());
+        } else {
+            self.last_image = None;
+        }
         Ok(result)
     }
 }

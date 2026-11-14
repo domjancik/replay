@@ -77,7 +77,7 @@ export async function createBrowserApi(){
   }catch(error){if(error.message.includes('outside the selected canvas'))error.code='canvas_clipping';throw error;}
  }
  async function storeResult(job,result){
-  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,input:job.input,source_reference:job.source_reference,crop:job.crop,reverse_speed:job.reverse_speed,frames:result.frames,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,parser:job.parser,finalEqualsStatic:true})],{type:'application/json'})]]){if(!blob)continue;await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
+  for(const [file,blob] of [['static.png',result.image],['replay.mp4',result.video],['manifest.json',new Blob([JSON.stringify({settings:job.settings,input:job.input,source_reference:job.source_reference,crop:job.crop,reverse_speed:job.reverse_speed,frames:result.frames,timings:result.timings,engine:'Rust/WASM',anchor_evidence:job.anchor_evidence,parser:job.parser,finalEqualsStatic:true})],{type:'application/json'})]]){if(!blob)continue;await put(job.id+'/'+file,blob);urls.set(job.id+'/'+file,URL.createObjectURL(blob));}
   job.extension=result.extension;job.frames=job.expected_frames=result.frames;job.state='complete';job.finished=Date.now()/1000;
  }
  async function pump(){

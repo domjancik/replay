@@ -76,6 +76,10 @@ for name in [
     "browser-api.mjs",
     "worker.mjs",
     "rotation.mjs",
+    "replay-frames.mjs",
+    "benchmark.html",
+    "benchmark.mjs",
+    "benchmark-worker.mjs",
     "pdf-reference.mjs",
     "largeblob-check.html",
     "largeblob-check.mjs",
@@ -83,6 +87,7 @@ for name in [
 ]:
     shutil.copyfile(root / "native/hosted" / name, public / name)
 shutil.copyfile(root / "native/redraw/renderer.mjs", public / "renderer.mjs")
+shutil.copyfile(root / "native/redraw/benchmark-scenes.mjs", public / "benchmark-scenes.mjs")
 shutil.copyfile(
     root / "native/redraw/target/wasm32-unknown-unknown/release/redraw.wasm",
     public / "renderer.wasm",

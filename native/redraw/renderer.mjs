@@ -30,7 +30,7 @@ export function bindRenderer(exports) {
   const abiVersion = version();
   if (abiVersion !== 1) throw new Error(`Unsupported renderer ABI version ${abiVersion}`);
 
-  function renderJson(json) {
+  function renderJson(json, operation=render, output=true) {
     const bytes = typeof json === 'string' ? encoder.encode(json) : json;
     if (!(bytes instanceof Uint8Array) || !bytes.byteLength || bytes.byteLength > MAX_REQUEST_BYTES) {
       throw new RangeError('Renderer request must be nonempty JSON of at most 32 MiB');
@@ -40,11 +40,12 @@ export function bindRenderer(exports) {
     if (!pointer) throw new Error('WASM renderer could not allocate the request');
     try {
       new Uint8Array(memory.buffer, pointer, length).set(bytes);
-      const status = render(pointer, length) >>> 0;
+      const status = operation(pointer, length) >>> 0;
       if (status) {
         const message = decoder.decode(new Uint8Array(memory.buffer, errorPointer() >>> 0, errorLength() >>> 0));
         throw new Error(message || `WASM renderer rejected the request (${status})`);
       }
+      if(!output)return;
       const width = widthOf() >>> 0;
       const height = heightOf() >>> 0;
       const size = outputLength() >>> 0;
@@ -60,6 +61,10 @@ export function bindRenderer(exports) {
 
   return {
     abiVersion,
+    ...(exports.rm_renderer_load_json && exports.rm_renderer_frame_json ? {
+      load: request => renderJson(JSON.stringify(request),exports.rm_renderer_load_json,false),
+      frame: visibility => renderJson(JSON.stringify(visibility??null),exports.rm_renderer_frame_json),
+    } : {}),
     get memoryBytes() { return memory.buffer.byteLength; },
     render: (request) => renderJson(JSON.stringify(request)),
     renderJson,

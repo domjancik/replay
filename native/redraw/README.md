@@ -39,3 +39,17 @@ This crate does not acquire or parse notebooks. Use the separate `rm-rmdoc` read
 Requires Rust 1.88+. MIT project code and MIT-CMU Pillow-derived routines; both license texts are included. [Validation guide](https://github.com/domjancik/replay/blob/main/docs/rust-renderer.md).
 
 [Try rePlay](https://replay.domj.net) · [Support development on Ko-fi](https://ko-fi.com/domjancik)
+
+## Prepared replay sessions
+
+The JavaScript wrapper offers `load(request)` followed by `frame(visibility)`.
+`load` validates and retains the immutable page/options; `frame` sends only visibility.
+Pass `null` for a final image. Loading another page replaces the session. Calling the
+legacy `render(request)` also invalidates the prepared session. Invalid loads clear
+it; invalid frames clear the raster cache. The added `rm_renderer_load_json` and
+`rm_renderer_frame_json` exports extend ABI v1 without changing existing exports.
+
+The cache stores occupied 64-pixel tiles and recomposites affected tiles in layer
+order. Retained RGBA caches are capped at 64 MiB; dense inputs can fall back to the
+stateless renderer. This cap excludes page data, transient raster buffers and WASM
+allocator high-water memory. Coordinates and texture sampling remain unchanged.
