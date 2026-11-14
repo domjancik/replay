@@ -1,13 +1,19 @@
 [package]
-name = "rm-renderer"
+name = "redraw"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.88"
-publish = false
+description = "Deterministic reMarkable ink rendering and progressive stroke reveal for native and WebAssembly hosts"
+repository = "https://github.com/domjancik/replay"
+homepage = "https://replay.domj.net"
+readme = "README.md"
+keywords = ["remarkable", "renderer", "ink", "wasm", "raster"]
+categories = ["graphics", "rendering", "wasm"]
+include = ["src/**", "tests/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE*", "renderer.mjs"]
 license = "MIT AND MIT-CMU"
 
 [lib]
-name = "rm_renderer"
+name = "redraw"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

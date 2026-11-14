@@ -1,3 +1,5 @@
+> **Deprecated prototype.** Use the full Rust/WASM reader and renderer for new work. See [Python and prototype status](../../docs/python-status.md). Retained for research reproducibility.
+
 # Optional pencil kernel
 
 This dependency-free Rust crate implements the current app-PNG pencil coverage kernel. The Python renderer still owns stroke sampling, pressure calibration, compositing and output. Its default remains Python.

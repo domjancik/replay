@@ -1,4 +1,4 @@
-use rm_renderer::{
+use redraw::{
     model::{Point, Stroke},
     raster::Image,
     texture::draw,

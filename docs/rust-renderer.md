@@ -22,9 +22,9 @@ cargo test --locked --manifest-path native/renderer/Cargo.toml --target-dir $rus
 cargo build --locked --release --manifest-path native/renderer/Cargo.toml --target-dir $rustRendererTarget
 cargo build --locked --release --target wasm32-unknown-unknown --manifest-path native/renderer/Cargo.toml --target-dir $rustRendererTarget
 node --test native/renderer/renderer.test.mjs
-node native/renderer/verify.mjs --native "$rustRendererTarget/release/render-json.exe" --wasm "$rustRendererTarget/wasm32-unknown-unknown/release/rm_renderer.wasm"
-.venv/Scripts/python.exe native/renderer/tests/raster_differential.py "$rustRendererTarget/release/rm_renderer.dll"
-node native/renderer/tests/raster_differential.mjs "$rustRendererTarget/wasm32-unknown-unknown/release/rm_renderer.wasm"
+node native/renderer/verify.mjs --native "$rustRendererTarget/release/render-json.exe" --wasm "$rustRendererTarget/wasm32-unknown-unknown/release/redraw.wasm"
+.venv/Scripts/python.exe native/renderer/tests/raster_differential.py "$rustRendererTarget/release/redraw.dll"
+node native/renderer/tests/raster_differential.mjs "$rustRendererTarget/wasm32-unknown-unknown/release/redraw.wasm"
 ```
 
 The corpus contains 114 synthetic cases. It covers all tool codes in the project's `rmscene` pen enum and the existing generic fallback, each at source size and in an anisotropic partial reveal. The corpus also exercises missing width, single and coincident points, fractional and off-canvas points, explicit alpha, translucent backgrounds, layer-local erasure, same-layer highlighter Darken, hidden layers, the two pencil boundary modes, source-resolution BOX, nonprefix visibility and a 29-frame entry-order replay plus static output. The verifier checks SHA-256 for each input golden, tests dimensions and reports changed pixels, maximum channel error, per-channel MAE and the first changed pixel. Any differing byte or render error makes the run fail. Pencil deposit and whole-page output are different checks. Python parity measures compatibility with the existing renderer and its experimental profiles.

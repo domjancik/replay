@@ -93,7 +93,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rm-renderer"
+name = "redraw"
 version = "0.1.0"
 dependencies = [
  "serde",

@@ -7,7 +7,7 @@ import {instantiateRenderer} from '../renderer/renderer.mjs';
 import {instantiateCore} from '../replay-core/core.mjs';
 const root=process.argv[2]||'artifacts/rmdoc-parity';
 const reader=await instantiateReader(readFileSync(new URL('./target/wasm32-unknown-unknown/release/rm_rmdoc.wasm',import.meta.url)));
-const rb=readFileSync(new URL('../renderer/target/wasm32-unknown-unknown/release/rm_renderer.wasm',import.meta.url));
+const rb=readFileSync(new URL('../renderer/target/wasm32-unknown-unknown/release/redraw.wasm',import.meta.url));
 const reference=await instantiateRenderer(rb),candidate=await instantiateRenderer(rb);
 const core=await instantiateCore(readFileSync(new URL('../replay-core/target/wasm32-unknown-unknown/release/rm_replay_core.wasm',import.meta.url)));
 let count=0,rejected=0;

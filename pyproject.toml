@@ -54,6 +54,7 @@ include = [
   "/native/rmctl-pairing/LICENSE",
   "/native/renderer/src", "/native/renderer/tests", "/native/renderer/Cargo.toml",
   "/native/renderer/Cargo.lock", "/native/renderer/LICENSE-PILLOW",
+  "/native/renderer/LICENSE", "/native/renderer/README.md",
   "/native/renderer/generate_goldens.py", "/native/renderer/renderer.mjs",
   "/native/renderer/renderer.test.mjs", "/native/renderer/verify.mjs",
   "/native/renderer/benchmark-cache.mjs",

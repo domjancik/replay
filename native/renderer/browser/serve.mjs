@@ -10,7 +10,7 @@ const assets = new Map([
   ['/app.mjs', new URL('app.mjs', import.meta.url)],
   ['/worker.mjs', new URL('worker.mjs', import.meta.url)],
   ['/renderer.mjs', new URL('../renderer.mjs', import.meta.url)],
-  ['/renderer.wasm', new URL('target/wasm32-unknown-unknown/release/rm_renderer.wasm', artifacts)],
+  ['/renderer.wasm', new URL('target/wasm32-unknown-unknown/release/redraw.wasm', artifacts)],
   ['/encoder.mjs', new URL('../../../artifacts/video-prototype-20261113/site/encoder.mjs', import.meta.url)],
   ...cases.flatMap(({ request, rgba }) => [
     [`/sample/${request}`, new URL(request, synthetic)],

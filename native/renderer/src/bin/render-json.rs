@@ -24,7 +24,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let bytes = read_request(fs::File::open(&args[1])?)?;
     let request = serde_json::from_slice(&bytes)?;
-    let image = rm_renderer::render::render(&request)?;
+    let image = redraw::render::render(&request)?;
     fs::write(&args[2], &image.data)?;
     println!(
         "{}",

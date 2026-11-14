@@ -69,7 +69,7 @@ for name in [
     shutil.copyfile(root / "native/hosted" / name, public / name)
 shutil.copyfile(root / "native/renderer/renderer.mjs", public / "renderer.mjs")
 shutil.copyfile(
-    root / "native/renderer/target/wasm32-unknown-unknown/release/rm_renderer.wasm",
+    root / "native/renderer/target/wasm32-unknown-unknown/release/redraw.wasm",
     public / "renderer.wasm",
 )
 shutil.copyfile(

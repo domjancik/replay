@@ -1,4 +1,4 @@
-use rm_renderer::{
+use redraw::{
     calligraphy, generic,
     model::{Point, Stroke},
     raster::Image,
