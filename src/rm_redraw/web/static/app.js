@@ -172,7 +172,7 @@ async function requestSelectionPreview(version) {
   selectionPreview=pending;showNotebookPreview();
   const settings={};
   for(const key of ['width','height','offset-x','offset-y'])settings[key.replaceAll('-','_')]=Number($(key).value);
-  Object.assign(settings,{seconds:6,fps:6,output_width:234,backend:rendererBackend});
+  Object.assign(settings,{seconds:6,fps:6,output_width:234,backend:rendererBackend,rotation:Number($('rotation').value||0)});
   try {
     let result=await api('/api/page-preview',{document:pending.document,page:pending.page,settings});
     while(version===pageRequest && selectionPreview===pending){
@@ -214,6 +214,7 @@ async function generate() {
   try {
     const settings={};
     for(const key of ['width','height','offset-x','offset-y','seconds','fps','output-width'])settings[key.replaceAll('-','_')]=Number($(key).value);
+    settings.rotation=Number($('rotation').value||0);
     settings.seconds=readDuration();
     settings.backend=rendererBackend;
     settings.ordering=$('ordering').value;
@@ -251,10 +252,11 @@ function restoreReplaySettings(settings){
   for(const id of ['width','height','offset-x','offset-y','seconds','fps','output-width']){
     const value=settings[id.replaceAll('-','_')];if(value!==undefined)$(id).value=value;
   }
+  $('rotation').value=String(settings.rotation||0);
   $('ordering').value=settings.ordering||'layer';
   resetClipping();$('allow-clipping').checked=settings.allow_clipping===true;
   $('seconds').oninput?.();
-  for(const id of ['fps','ordering','output-width'])$(id).onchange?.();
+  for(const id of ['fps','ordering','output-width','rotation'])$(id).onchange?.();
   canvasSummary();
 }
 async function useReplaySettings(job){
@@ -686,7 +688,7 @@ function setLibrarySource(source){
 function setupSettingPicker(id, buttonsId){
   const select=$(id),buttons=$(buttonsId).querySelectorAll('button');
   const sync=()=>buttons.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.value===select.value)));
-  buttons.forEach(button=>button.onclick=()=>{select.value=button.dataset.value;sync();});
+  buttons.forEach(button=>button.onclick=()=>{select.value=button.dataset.value;sync();if(id==='rotation'&&pageReady)requestSelectionPreview(pageRequest);});
   select.onchange=sync;sync();
 }
 function setupGallery(){
@@ -709,6 +711,7 @@ function setupGallery(){
   window.addEventListener('resize',()=>renderGallery());
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
   for(const [id,delta] of [['page-prev',-1],['page-next',1]])$(id).onclick=safely(async()=>{const pages=[...$('page').options].filter(p=>!p.disabled);const i=pages.findIndex(p=>p.value===$('page').value);const next=pages[i+delta];if(next){$('page').value=next.value;await selectPage();}});
+  setupSettingPicker('rotation','rotation-buttons');
   setupSettingPicker('ordering','ordering-buttons');setupSettingPicker('fps','fps-buttons');setupSettingPicker('output-width','output-width-buttons');
   const syncDuration=()=>{
     $('duration-warning').hidden=!(Number($('seconds').value)>120);

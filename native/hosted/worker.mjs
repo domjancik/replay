@@ -1,3 +1,4 @@
+import {rotateFrame} from './rotation.mjs';
 import {instantiateRenderer} from './renderer.mjs';
 let reader, renderer, anchorCore;
 async function bytes(url){const r=await fetch(url);if(!r.ok)throw Error(`Could not load browser engine (${r.status})`);return new Uint8Array(await r.arrayBuffer());}
@@ -7,7 +8,8 @@ async function execute(data,id){
  if(data.op==='render'){
   renderer??=await instantiateRenderer(await bytes('/renderer.wasm'));
   const {request,frames,config}=data.prepared;
-  const final=renderer.render({...request,visibility:null});
+  const nativeFinal=renderer.render({...request,visibility:null});
+  const final=rotateFrame(nativeFinal,config.rotation||0);
   const image=await png(final);
   if(data.preview)return {image};
   const {encodeReplay}=await import('/encoder.mjs');
@@ -17,7 +19,7 @@ async function execute(data,id){
   const width=crop?crop[2]:final.width,height=crop?crop[3]:final.height;
   function cropped(rgba){if(!crop)return rgba;const [x,y,w,h]=crop;const result=new Uint8Array(w*h*4);for(let row=0;row<h;row++)result.set(rgba.subarray(((row+y)*final.width+x)*4,((row+y)*final.width+x+w)*4),row*w*4);return result;}
   async function* produce(){for(let i=0;i<indices.length;i++){
-   const rgba=renderer.render({...request,visibility:frames[indices[i]]}).rgba;
+   const rgba=rotateFrame(renderer.render({...request,visibility:frames[indices[i]]}),config.rotation||0).rgba;
    if(i===frames.length-1 && !rgba.every((v,k)=>v===final.rgba[k]))throw Error('Final replay frame differs from static rendering');
    postMessage({id,progress:i+1,total:indices.length,...(i%config.fps===0?{image:await png({width,height,rgba:cropped(rgba)})}:{})});yield cropped(rgba);
   }}

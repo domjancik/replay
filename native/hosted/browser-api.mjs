@@ -67,6 +67,10 @@ export async function createBrowserApi(){
     }
    }
    const result=await parser.call({op:'prepare',...src,settings:body.settings,anchor_result});
+   const rotation=body.settings.rotation??0;
+   if(![0,90,180,270].includes(rotation))throw Error('Invalid page rotation');
+   result.config.rotation=rotation;
+   if(rotation%180)result.config.viewport=[result.config.viewport[1],result.config.viewport[0]];
    if(anchor_result)result.anchor_evidence=anchor_result.evidence;
    return result;
   }catch(error){if(error.message.includes('outside the selected canvas'))error.code='canvas_clipping';throw error;}

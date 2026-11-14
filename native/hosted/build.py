@@ -75,6 +75,7 @@ for name in [
     "bootstrap.mjs",
     "browser-api.mjs",
     "worker.mjs",
+    "rotation.mjs",
     "pdf-reference.mjs",
     "largeblob-check.html",
     "largeblob-check.mjs",
