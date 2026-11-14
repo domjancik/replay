@@ -194,13 +194,25 @@ async function unseal(crypto, key, record) {
   }
 }
 
+async function passkeyOperation(stage, run) {
+  try { return await run(); }
+  catch (error) {
+    const known = ['UnknownError', 'NotAllowedError', 'NotSupportedError', 'SecurityError', 'InvalidStateError', 'AbortError', 'NotReadableError'];
+    const code = known.includes(error?.name) ? error.name : 'ProviderError';
+    const advice = code === 'NotAllowedError' || code === 'AbortError'
+      ? 'The prompt was cancelled or timed out. Keep this tab focused and retry.'
+      : 'Your browser or passkey provider could not complete the encryption request. Firefox-based browsers with Windows Hello can fail here. Try another browser or passkey provider, or use a password or session only.';
+    throw new Error(`Passkey ${stage} failed (${code}). ${advice}`);
+  }
+}
+
 async function passkeyKey(crypto, credentials, credentialId, salt) {
-  const credential = await credentials.get({publicKey: {
+  const credential = await passkeyOperation('encryption check', () => credentials.get({publicKey: {
     challenge: crypto.getRandomValues(new Uint8Array(32)),
     allowCredentials: [{type: 'public-key', id: credentialId}],
     userVerification: 'required', timeout: 60000,
     extensions: {prf: {eval: {first: salt}}},
-  }});
+  }}));
   if (!credential || !equalBytes(new Uint8Array(credential.rawId), credentialId)) {
     throw new Error('The selected passkey does not match this connection');
   }
@@ -229,6 +241,7 @@ export function createVault({
 } = {}) {
   let session;
   let prepared;
+  let pendingPasskey;
   let generation = 0;
   let pending = Promise.resolve();
 
@@ -236,6 +249,7 @@ export function createVault({
     generation += 1;
     session = undefined;
     prepared = undefined;
+    pendingPasskey = undefined;
   }
 
   function enqueue(run) {
@@ -257,26 +271,30 @@ export function createVault({
     },
 
     async preparePasskey() {
-      prepared = undefined;
       return enqueue(async (check) => {
         check();
+        if (prepared) return;
         if (!credentials?.create || !credentials?.get || !crypto?.subtle) {
           throw new Error('Passkeys are unavailable here. Choose a password or session only.');
         }
-        const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
-        const credential = await credentials.create({publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)), rp: {name: 'rePlay'},
-          user: {id: crypto.getRandomValues(new Uint8Array(32)), name: 'rePlay cloud connection', displayName: 'rePlay cloud connection'},
-          pubKeyCredParams: [{type: 'public-key', alg: -7}, {type: 'public-key', alg: -257}],
-          authenticatorSelection: {residentKey: 'preferred', userVerification: 'required'},
-          attestation: 'none', timeout: 60000, extensions: {prf: {}},
-        }});
-        check();
-        if (!credential?.getClientExtensionResults()?.prf?.enabled) {
-          throw new Error('This passkey cannot encrypt the connection. Choose a password or session only.');
+        if (!pendingPasskey) {
+          const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+          const credential = await passkeyOperation('creation', () => credentials.create({publicKey: {
+            challenge: crypto.getRandomValues(new Uint8Array(32)), rp: {name: 'rePlay'},
+            user: {id: crypto.getRandomValues(new Uint8Array(32)), name: 'rePlay cloud connection', displayName: 'rePlay cloud connection'},
+            pubKeyCredParams: [{type: 'public-key', alg: -7}, {type: 'public-key', alg: -257}],
+            authenticatorSelection: {residentKey: 'preferred', userVerification: 'required'},
+            attestation: 'none', timeout: 60000, extensions: {prf: {}},
+          }}));
+          check();
+          if (!credential?.getClientExtensionResults()?.prf?.enabled) {
+            throw new Error('This passkey cannot encrypt the connection. Choose a password or session only.');
+          }
+          const credentialId = new Uint8Array(credential.rawId);
+          if (!credentialId.length || credentialId.length > 1024) throw new Error('Invalid passkey identifier');
+          pendingPasskey = {salt, credentialId};
         }
-        const credentialId = new Uint8Array(credential.rawId);
-        if (!credentialId.length || credentialId.length > 1024) throw new Error('Invalid passkey identifier');
+        const {salt, credentialId} = pendingPasskey;
         const key = await passkeyKey(crypto, credentials, credentialId, salt);
         check();
         prepared = {key, salt, mode: 'passkey', credentialId};
@@ -404,6 +422,7 @@ export function createVault({
         if (!created) throw new Error('A browser vault already exists');
         session = {...protection, iv: record.iv};
         prepared = undefined;
+        pendingPasskey = undefined;
       });
     } finally { plaintext.fill(0); }
   }

@@ -46,3 +46,9 @@ The connector uses rmctl's unofficial cloud transport. The app uses rmctl to lis
 The app checks the selected UUID, type, visibility and reported source size before export. It accepts one matching archive up to 128 MiB through the local import path. Metadata commands time out after 60 seconds and export after 180 seconds. rmctl stages the download locally before archive validation. Cloud imports carry raw ink and no paired native PDF. Pages that need native reference data can use the app's existing local PDF attachment workflow. [rmctl archive layout](https://github.com/altessa-s/rmctl/blob/v1.2.0/docs/pages-and-archives.md#archives)
 
 Adapter tests use the v1.2.0 source contract and a mocked companion. The patched companion builds on Windows and its account command tests use synthetic codes and fake services. Live registration, real cloud exports and behavior on an account without Connect remain unverified. [Cloud and browser feasibility](cloud-app-feasibility.md)
+
+## Passkey provider failures
+
+Creation and PRF-assertion failures show the operation stage and a bounded WebAuthn error name, with password/session alternatives. A transient assertion failure retains only the new credential ID and salt in memory so a retry does not create duplicate passkeys. Locking, changing storage mode, or leaving the page clears this retry state. No credentials are persisted until the encryption assertion succeeds.
+
+Zen/Firefox with Windows Hello PIN was reported by the user to fail during creation. A [similar Mozilla report](https://bugzilla.mozilla.org/show_bug.cgi?id=2089460) describes creation-time UnknownError with PRF; it was closed WORKSFORME without a reproducible diagnosis. Treat browser/provider incompatibility as a hypothesis, not a fixed platform defect. Password encryption remains the reliable app fallback; this change does not claim to repair Windows Hello.

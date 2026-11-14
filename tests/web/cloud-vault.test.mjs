@@ -300,3 +300,28 @@ test('locking during a passkey prompt discards the result',async()=>{
   await assert.rejects(preparing,/locked/);await assert.rejects(vault.createPasskey(data),/passkey/);
   assert.equal(await vault.exists(),false);
 });
+
+test('retry after transient passkey verification reuses the created credential', async () => {
+  const storage=memoryStorage();let creates=0,gets=0;
+  const id=new Uint8Array([7]);
+  const credentials={
+    async create(){creates++;return {rawId:id.buffer,getClientExtensionResults:()=>({prf:{enabled:true}})};},
+    async get(){gets++;if(gets===1)throw new DOMException('unknown transient reason','UnknownError');return {rawId:id.buffer,getClientExtensionResults:()=>({prf:{results:{first:new Uint8Array(32).fill(9).buffer}}})};},
+  };
+  const vault=createVault({storage,credentials});
+  await assert.rejects(vault.preparePasskey(), /encryption check.*UnknownError/i);
+  assert.equal(await vault.exists(),false);
+  await vault.preparePasskey();await vault.createPasskey(data);
+  assert.equal(creates,1);assert.equal(gets,2);
+  assert.deepEqual(await vault.unlock(),data);
+});
+
+test('creation failures explain the stage and do not expose raw provider errors', async()=>{
+  const vault=createVault({storage:memoryStorage(),credentials:{async create(){throw new DOMException('provider detail secret','UnknownError');},async get(){}}});
+  await assert.rejects(vault.preparePasskey(),error=>{
+    assert.match(error.message,/creation.*UnknownError/i);
+    assert.match(error.message,/password/i);
+    assert.equal(error.message.includes('provider detail secret'),false);
+    return true;
+  });
+});
