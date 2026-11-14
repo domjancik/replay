@@ -141,6 +141,11 @@ async function upload(input, path) {
     input.value='';
   }
 }
+function readDuration(){
+  const seconds=Number($('seconds').value);
+  if(!Number.isFinite(seconds)||seconds<2||seconds>60)throw new Error('Choose a duration from 2 to 60 seconds.');
+  return seconds;
+}
 async function generate() {
   if(!pageReady)return;
   const version = pageRequest;
@@ -148,6 +153,7 @@ async function generate() {
   try {
     const settings={};
     for(const key of ['width','height','offset-x','offset-y','seconds','fps','output-width'])settings[key.replaceAll('-','_')]=Number($(key).value);
+    settings.seconds=readDuration();
     settings.backend=rendererBackend;
     settings.ordering=$('ordering').value;
     settings.allow_clipping=$('allow-clipping').checked;
@@ -610,7 +616,9 @@ function setupGallery(){
   for(const [id,list] of [['gallery-grid',false],['gallery-list',true]])$(id).onclick=()=>{galleryList=list;$('gallery-grid').setAttribute('aria-pressed',String(!list));$('gallery-list').setAttribute('aria-pressed',String(list));renderGallery();};
   for(const [id,delta] of [['page-prev',-1],['page-next',1]])$(id).onclick=safely(async()=>{const pages=[...$('page').options].filter(p=>!p.disabled);const i=pages.findIndex(p=>p.value===$('page').value);const next=pages[i+delta];if(next){$('page').value=next.value;await selectPage();}});
   setupSettingPicker('ordering','ordering-buttons');setupSettingPicker('fps','fps-buttons');setupSettingPicker('output-width','output-width-buttons');
-  $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('seconds').value=button.dataset.seconds;$('duration-buttons').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));});
+  const syncDuration=()=>$('duration-buttons').querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.seconds)===Number($('seconds').value))));
+  $('seconds').oninput=syncDuration;
+  $('duration-buttons').querySelectorAll('button').forEach(button=>button.onclick=()=>{$('seconds').value=button.dataset.seconds;syncDuration();});
 }
 
 function setupUsbCompanion(){

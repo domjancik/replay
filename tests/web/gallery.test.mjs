@@ -228,3 +228,11 @@ test('frame rate and resolution pickers update render settings and selected stat
   assert.equal(buttons[0].attrs['aria-pressed'],'false');
  }
 });
+
+test('custom duration accepts fractional seconds and rejects values outside the supported range',()=>{
+ const {el,context}=fixture();
+ el('seconds').value='17.5';assert.equal(vm.runInContext('readDuration()',context),17.5);
+ for(const value of ['', '0', '1.5', '-2', '61', 'abc']){
+  el('seconds').value=value;assert.throws(()=>vm.runInContext('readDuration()',context),/duration/i);
+ }
+});
