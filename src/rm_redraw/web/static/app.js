@@ -305,6 +305,11 @@ function showNotebookPreview() {
   const job=jobs.find(j=>j.state==='complete' && j.kind!=='export'
     && j.document_id===$('notebook').value && j.page_id===$('page').value);
   const rendered=selectionPreview?.document===$('notebook').value && selectionPreview?.page===$('page').value ? selectionPreview : null;
+  const hasPage=!!$('notebook').value&&!!$('page').value;
+  const busy=hasPage&&!!rendered&&['queued','running'].includes(rendered.state);
+  $('empty').setAttribute('aria-busy',String(busy));
+  $('empty-title').textContent=!hasPage?'No page selected.':rendered?.state==='failed'?'Preview unavailable':rendered?.state==='running'?'Rendering page preview…':rendered?.state==='queued'?'Page preview queued…':'Page selected';
+  $('empty-detail').textContent=!hasPage?'Select a notebook and page to preview or create a replay.':rendered?.state==='failed'?(rendered.error||'Try selecting the page again.'):busy?'Your preview will appear here when ready.':'Preparing the selected page.';
   if(rendered && (!job || rendered.state==='complete')){
     image.hidden=rendered.state!=='complete';$('empty').hidden=rendered.state==='complete';
     $('notebook-preview-label').textContent=rendered.state==='complete'?'Rendered page preview':rendered.state==='failed'?'Preview unavailable: '+rendered.error:rendered.state==='queued'?'Page preview queued…':'Rendering page preview…';

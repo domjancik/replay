@@ -295,3 +295,19 @@ test('gallery controls initialize at the real script startup position',()=>{
  vm.runInContext(source.replace('safely(start)();','setupGallery();'),context);
  assert.equal(el('custom-duration').hidden,true);
 });
+
+test('selected page preview uses loading and failure states instead of no selection',()=>{
+ const {el,context}=fixture();el('page').value='0';
+ for(const state of ['queued','running','failed']){
+  vm.runInContext(`selectionPreview={document:'1',page:'0',state:'${state}',error:'Example failure'};showNotebookPreview();`,context);
+  assert.equal(el('empty').hidden,false);
+  assert.notEqual(el('empty-title').textContent,'No page selected.');
+  assert.equal(el('empty').attrs['aria-busy'],String(state!=='failed'));
+ }
+ assert.equal(el('empty-title').textContent,'Preview unavailable');
+ vm.runInContext(`selectionPreview={document:'1',page:'0',state:'complete',url:'blob:preview'};showNotebookPreview();`,context);
+ assert.equal(el('empty').hidden,true);
+ el('page').value='';el('notebook-preview').removeAttribute=()=>{};
+ vm.runInContext('selectionPreview=null;showNotebookPreview();',context);
+ assert.equal(el('empty-title').textContent,'No page selected.');
+});
