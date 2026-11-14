@@ -8,13 +8,13 @@ Unsigned preview bundles, built and startup-tested on native CI runners. No Pyth
 
 | Platform | Download | Minimum build baseline |
 | --- | --- | --- |
-| Windows x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-windows-x64.zip) | Windows 10/11 x64 |
-| Mac · Apple Silicon | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-macos-arm64.zip) | macOS 15, Apple Silicon |
-| Mac · Intel | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-macos-x64.zip) | macOS 15, Intel |
-| Linux x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-linux-x64.tar.gz) | Ubuntu 22.04 / glibc 2.35, X11/XWayland |
-| Linux ARM64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.0/rePlay-USB-Companion-linux-arm64.tar.gz) | Ubuntu 24.04 / glibc 2.39, X11/XWayland |
+| Windows x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.1/rePlay-USB-Companion-windows-x64.zip) | Windows 10/11 x64 |
+| Mac · Apple Silicon | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.1/rePlay-USB-Companion-macos-arm64.zip) | macOS 15, Apple Silicon |
+| Mac · Intel | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.1/rePlay-USB-Companion-macos-x64.zip) | macOS 15, Intel |
+| Linux x64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.1/rePlay-USB-Companion-linux-x64.tar.gz) | Ubuntu 22.04 / glibc 2.35, X11/XWayland |
+| Linux ARM64 | [Download](https://github.com/domjancik/replay/releases/download/companion-v0.3.1/rePlay-USB-Companion-linux-arm64.tar.gz) | Ubuntu 24.04 / glibc 2.39, X11/XWayland |
 
-[Release notes and per-download SHA-256 checksums](https://github.com/domjancik/replay/releases/tag/companion-v0.3.0).
+[Release notes and per-download SHA-256 checksums](https://github.com/domjancik/replay/releases/tag/companion-v0.3.1).
 
 ### Open the companion
 
