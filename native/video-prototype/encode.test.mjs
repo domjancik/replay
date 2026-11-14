@@ -93,3 +93,18 @@ test('bounds the muxed bytes before copying and supports seekable writes', async
  await assert.rejects(createReplayEncoder(mocked)({width:2808,height:3744,fps:6,frameCount:400,frames:[]}),/400 frames/);
  assert.ok(mocked.events.includes('start'));
  });
+
+test('fractional bitrate estimates become positive integers for capability checks and encoding', async () => {
+  const {createReplayEncoder} = await importEncoder();
+  const config = {width:1404,height:1872,fps:12,frameCount:1};
+  let checks=0;
+  const mocked=runtime('avc');
+  const create=mocked.create;
+  mocked.canEncode=async (_candidate,options)=>{
+    assert.equal(Number.isInteger(options.bitrate),true);
+    assert.equal(options.bitrate,3784735); checks++;return true;
+  };
+  mocked.create=(candidate,options)=>{assert.equal(options.bitrate,3784735);checks++;return create(candidate);};
+  await createReplayEncoder(mocked)({...config,frames:[new Uint8Array(config.width*config.height*4)]});
+  assert.equal(checks,2);
+});

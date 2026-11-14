@@ -61,7 +61,7 @@ export function createReplayEncoder(runtime) {
       throw new RangeError('Invalid video byte limit.');
     }
 
-    const config = { width, height, fps, bitrate: Math.min(24_000_000, Math.max(2_000_000, width * height * fps * 0.12)), maxBytes };
+    const config = { width, height, fps, bitrate: Math.round(Math.min(24_000_000, Math.max(2_000_000, width * height * fps * 0.12))), maxBytes };
     let selection;
     for (const candidate of candidates) {
       signal?.throwIfAborted();
