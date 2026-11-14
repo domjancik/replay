@@ -4,7 +4,7 @@ The hosted app uses Rust/WASM for archive reading, parsing, normalization and re
 
 ## Deprecated
 
-Do not build new product features on `native/browser-prototype` (Pyodide renderer), `native/wasm-prototype` (pencil-only WASM), or `native/pencil-kernel` (Python pencil acceleration). They remain for historical experiments and reproducibility. Use `native/rmdoc`, `native/renderer` and `native/hosted` instead.
+Do not build new product features on `native/browser-prototype` (Pyodide renderer), `native/wasm-prototype` (pencil-only WASM), or `native/pencil-kernel` (Python pencil acceleration). They remain for historical experiments and reproducibility. Use `native/rmdoc`, `native/redraw` and `native/hosted` instead.
 
 The Python local web utility is a legacy alternative, not the primary distribution. Python parsing/rendering APIs remain calibration and differential references; new production format/rendering work belongs in Rust. `native/hosted/bridge.py` is a test/reference bridge, not deployed browser code.
 

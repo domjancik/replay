@@ -7,7 +7,7 @@ The reader, renderer and replay core are independent Cargo packages:
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo build --locked --release --target wasm32-unknown-unknown --manifest-path native/rmdoc/Cargo.toml
-cargo build --locked --release --target wasm32-unknown-unknown --manifest-path native/renderer/Cargo.toml
+cargo build --locked --release --target wasm32-unknown-unknown --manifest-path native/redraw/Cargo.toml
 cargo build --locked --release --target wasm32-unknown-unknown --manifest-path native/replay-core/Cargo.toml
 ```
 
@@ -26,9 +26,9 @@ Output: `artifacts/hosted-replay`, containing generated Vercel configuration and
 ## Renderer release checks
 
 ```sh
-cargo test --locked --manifest-path native/renderer/Cargo.toml
-cargo package --locked --manifest-path native/renderer/Cargo.toml --list
-cargo publish --dry-run --locked --manifest-path native/renderer/Cargo.toml
+cargo test --locked --manifest-path native/redraw/Cargo.toml
+cargo package --locked --manifest-path native/redraw/Cargo.toml --list
+cargo publish --dry-run --locked --manifest-path native/redraw/Cargo.toml
 ```
 
 Run from a clean checkout, review package contents and licenses. Dry runs do not reserve a name or establish registry ownership. Actual publication is a separate maintainer action.

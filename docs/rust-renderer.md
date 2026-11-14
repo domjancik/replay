@@ -17,14 +17,14 @@ Run from the repository root in PowerShell. The checks use the project's Python 
 ```powershell
 $rustRendererTarget = 'artifacts/rust-renderer/target'
 $env:PYTHONPATH = 'src'
-.venv/Scripts/python.exe native/renderer/generate_goldens.py
-cargo test --locked --manifest-path native/renderer/Cargo.toml --target-dir $rustRendererTarget
-cargo build --locked --release --manifest-path native/renderer/Cargo.toml --target-dir $rustRendererTarget
-cargo build --locked --release --target wasm32-unknown-unknown --manifest-path native/renderer/Cargo.toml --target-dir $rustRendererTarget
-node --test native/renderer/renderer.test.mjs
-node native/renderer/verify.mjs --native "$rustRendererTarget/release/render-json.exe" --wasm "$rustRendererTarget/wasm32-unknown-unknown/release/redraw.wasm"
-.venv/Scripts/python.exe native/renderer/tests/raster_differential.py "$rustRendererTarget/release/redraw.dll"
-node native/renderer/tests/raster_differential.mjs "$rustRendererTarget/wasm32-unknown-unknown/release/redraw.wasm"
+.venv/Scripts/python.exe native/redraw/generate_goldens.py
+cargo test --locked --manifest-path native/redraw/Cargo.toml --target-dir $rustRendererTarget
+cargo build --locked --release --manifest-path native/redraw/Cargo.toml --target-dir $rustRendererTarget
+cargo build --locked --release --target wasm32-unknown-unknown --manifest-path native/redraw/Cargo.toml --target-dir $rustRendererTarget
+node --test native/redraw/renderer.test.mjs
+node native/redraw/verify.mjs --native "$rustRendererTarget/release/render-json.exe" --wasm "$rustRendererTarget/wasm32-unknown-unknown/release/redraw.wasm"
+.venv/Scripts/python.exe native/redraw/tests/raster_differential.py "$rustRendererTarget/release/redraw.dll"
+node native/redraw/tests/raster_differential.mjs "$rustRendererTarget/wasm32-unknown-unknown/release/redraw.wasm"
 ```
 
 The corpus contains 114 synthetic cases. It covers all tool codes in the project's `rmscene` pen enum and the existing generic fallback, each at source size and in an anisotropic partial reveal. The corpus also exercises missing width, single and coincident points, fractional and off-canvas points, explicit alpha, translucent backgrounds, layer-local erasure, same-layer highlighter Darken, hidden layers, the two pencil boundary modes, source-resolution BOX, nonprefix visibility and a 29-frame entry-order replay plus static output. The verifier checks SHA-256 for each input golden, tests dimensions and reports changed pixels, maximum channel error, per-channel MAE and the first changed pixel. Any differing byte or render error makes the run fail. Pencil deposit and whole-page output are different checks. Python parity measures compatibility with the existing renderer and its experimental profiles.
@@ -39,7 +39,7 @@ The private validation rendered a 2,655-stroke, five-layer portrait. The current
 
 ## Browser probe
 
-Run `node native/renderer/browser/serve.mjs 8769` after generating the synthetic cases and building WASM. Open `http://127.0.0.1:8769`. **Render sample** exercises the Rust module and compares the replay and static RGBA with the Python corpus. **Render and encode** additionally streams the generated frames into the pinned local WebCodecs probe. Build that probe first for video. The harness reads the already scheduled normalized replay requests. [Local video probe](../native/video-prototype/README.md)
+Run `node native/redraw/browser/serve.mjs 8769` after generating the synthetic cases and building WASM. Open `http://127.0.0.1:8769`. **Render sample** exercises the Rust module and compares the replay and static RGBA with the Python corpus. **Render and encode** additionally streams the generated frames into the pinned local WebCodecs probe. Build that probe first for video. The harness reads the already scheduled normalized replay requests. [Local video probe](../native/video-prototype/README.md)
 
 The November 13 browser run matched all 29 forward frames and the independent static image. The last forward frame matched static output. `ffprobe` reported 29 H.264 frames in the downloaded 72×54 MP4 at 12 fps. The harness reported 555 ms from the start of rendering through export and static comparison, including local fixture fetches after module load. This was one synthetic run.
 
@@ -67,5 +67,5 @@ The wasm32 release build passes all 114 synthetic Pillow reference cases with ze
 Run after building wasm32 release:
 
 ```sh
-node native/renderer/benchmark-cache.mjs
+node native/redraw/benchmark-cache.mjs
 ```

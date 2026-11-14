@@ -12,7 +12,7 @@ The hosted app parses notebooks and renders ink on your device with Rust compile
 | --- | --- | --- |
 | Hosted app | [native/hosted](native/hosted) | Workers, cloud relay, browser storage and deployment build |
 | Shared UI | [src/rm_redraw/web/static](src/rm_redraw/web/static) | Production gallery, queue, controls and styles |
-| **redraw** | [native/renderer](native/renderer) | Standalone Rust/WASM ink renderer: normalized pages to RGBA |
+| **redraw** | [native/redraw](native/redraw) | Standalone Rust/WASM ink renderer: normalized pages to RGBA |
 | rm-rmdoc | [native/rmdoc](native/rmdoc) | Archive reader, v5/v6 parser and normalization |
 | Replay core | [native/replay-core](native/replay-core) | Scheduling and anchor matching |
 | Python tools | [src/rm_redraw](src/rm_redraw) | USB companion, acquisition, calibration oracle and legacy local app |
@@ -27,7 +27,7 @@ Replay timing and entry order are inferred, not recovered wall-clock history. In
 See the [development guide](docs/development.md), [renderer validation](docs/rust-renderer.md), and [Python deprecation status](docs/python-status.md). The production runtime is Rust/WASM; Python remains a differential reference and development tool.
 
 ```sh
-cargo test --locked --manifest-path native/renderer/Cargo.toml
+cargo test --locked --manifest-path native/redraw/Cargo.toml
 cargo test --locked --manifest-path native/rmdoc/Cargo.toml
 node --test tests/web/*.test.mjs tests/hosted/*.test.mjs
 ```

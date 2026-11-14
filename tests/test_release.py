@@ -79,21 +79,21 @@ def test_rust_renderer_release_includes_sources_not_generated_wasm(tmp_path):
     root = CHECKER.parents[1]
     config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
     included = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
-    assert "/native/renderer/src" in included
-    assert "/native/renderer/LICENSE-PILLOW" in included
+    assert "/native/redraw/src" in included
+    assert "/native/redraw/LICENSE-PILLOW" in included
     for path in (
-        "native/renderer/src/render.rs",
-        "native/renderer/src/bin/render-json.rs",
-        "native/renderer/LICENSE-PILLOW",
-        "native/renderer/Cargo.lock",
-        "native/renderer/renderer.mjs",
-        "native/renderer/browser/worker.mjs",
-        "native/renderer/tests/raster_differential.mjs",
+        "native/redraw/src/render.rs",
+        "native/redraw/src/bin/render-json.rs",
+        "native/redraw/LICENSE-PILLOW",
+        "native/redraw/Cargo.lock",
+        "native/redraw/renderer.mjs",
+        "native/redraw/browser/worker.mjs",
+        "native/redraw/tests/raster_differential.mjs",
         "docs/rust-renderer.md",
     ):
         wheel, sdist = archives(tmp_path, path)
         assert run_check(wheel, sdist).returncode == 0
-    wheel, sdist = archives(tmp_path, "native/renderer/target/release/renderer.wasm")
+    wheel, sdist = archives(tmp_path, "native/redraw/target/release/renderer.wasm")
     assert run_check(wheel, sdist).returncode != 0
 
 

@@ -85,7 +85,7 @@ def allowed_source(name):
             "tests/web/usb-companion.test.mjs",
             "tests/web/gallery.test.mjs",
         }
-    if parts[:2] == ("native", "renderer"):
+    if parts[:2] == ("native", "redraw"):
         if len(parts) == 3:
             return parts[2] in {
                 "Cargo.toml",

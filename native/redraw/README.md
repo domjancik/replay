@@ -8,7 +8,7 @@ Before registry publication, use a checkout path dependency:
 
 ```toml
 [dependencies]
-redraw = { path = "../replay/native/renderer" }
+redraw = { path = "../replay/native/redraw" }
 ```
 
 ```rust

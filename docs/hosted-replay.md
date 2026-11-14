@@ -22,7 +22,7 @@ Anchor matching still requires the corresponding native export and matching sour
 
 ## Build and deploy
 
-1. Build `native/renderer`, `native/replay-core` and `native/rmdoc` for `wasm32-unknown-unknown --release` (see their documentation).
+1. Build `native/redraw`, `native/replay-core` and `native/rmdoc` for `wasm32-unknown-unknown --release` (see their documentation).
 2. Install the video prototype's locked build dependencies. Copy `native/hosted/package.json` and its lockfile into `artifacts/hosted-dependencies`, then run `npm ci --prefix artifacts/hosted-dependencies --ignore-scripts` for PDF.js.
 3. Run `node native/video-prototype/build.mjs` and `.venv/Scripts/python.exe native/hosted/build.py`.
 4. Inspect `artifacts/hosted-replay`: only `public/`, the fixed relay, and deployment configuration belong there. User fixtures are never copied. Never deploy the repository root.

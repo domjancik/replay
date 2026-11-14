@@ -81,9 +81,9 @@ for name in [
     "largeblob-probe.mjs",
 ]:
     shutil.copyfile(root / "native/hosted" / name, public / name)
-shutil.copyfile(root / "native/renderer/renderer.mjs", public / "renderer.mjs")
+shutil.copyfile(root / "native/redraw/renderer.mjs", public / "renderer.mjs")
 shutil.copyfile(
-    root / "native/renderer/target/wasm32-unknown-unknown/release/redraw.wasm",
+    root / "native/redraw/target/wasm32-unknown-unknown/release/redraw.wasm",
     public / "renderer.wasm",
 )
 shutil.copyfile(
@@ -93,7 +93,7 @@ shutil.copyfile(
     root / "artifacts/video-prototype-20261113/site/MEDIABUNNY-LICENSE",
     public / "MEDIABUNNY-LICENSE",
 )
-shutil.copyfile(root / "native/renderer/LICENSE-PILLOW", public / "LICENSE-PILLOW")
+shutil.copyfile(root / "native/redraw/LICENSE-PILLOW", public / "LICENSE-PILLOW")
 for name in ["LICENSE", "THIRD_PARTY_NOTICES.md"]:
     shutil.copyfile(root / name, public / name)
 shutil.copytree(root / "native/hosted/licenses", public / "licenses", dirs_exist_ok=True)

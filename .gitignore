@@ -35,7 +35,7 @@ diff/
 fixtures/RM-REDRAW-ALL-REFERENCES-TILT-20260925/
 
 /native/pencil-kernel/target/
-/native/renderer/target/
+/native/redraw/target/
 
 # Local uv metadata must not enter source archives.
 .uv-cache/
