@@ -42,7 +42,7 @@ html = html.replace(
     (
         "Downloaded ink is parsed and rendered in this browser. Imported notebooks and generated "
         "videos are stored unencrypted in this browser’s local library; cloud pairing "
-        "credentials are encrypted separately."
+        "credentials use the protection option you selected."
     ),
 )
 html = html.replace(

@@ -83,6 +83,20 @@ function indexedStorage(indexedDB) {
 }
 
 function validateRecord(record) {
+  if (record?.version === 2) {
+    const validIv = record.iv instanceof Uint8Array && record.iv.length === IV_BYTES;
+    if (record.mode === 'unprotected' && validIv && Object.keys(record).length === 4) {
+      serialize(record.data).fill(0);
+      return;
+    }
+    if (record.mode === 'passkey' && validIv && Object.keys(record).length === 6
+        && record.credentialId instanceof Uint8Array && record.credentialId.length > 0
+        && record.credentialId.length <= 1024
+        && record.salt instanceof Uint8Array && record.salt.length === SALT_BYTES
+        && record.ciphertext instanceof Uint8Array && record.ciphertext.length > TAG_BYTES
+        && record.ciphertext.length <= MAX_PAYLOAD + TAG_BYTES) return;
+    throw new Error('The browser vault record is invalid or unsupported');
+  }
   if (!record || typeof record !== 'object'
       || Object.keys(record).length !== 4 || record.version !== VERSION
       || !['version', 'salt', 'iv', 'ciphertext'].every((field) => Object.hasOwn(record, field))
@@ -145,13 +159,22 @@ async function deriveKey(crypto, passphrase, salt) {
   );
 }
 
-function cipherParams(iv) {
-  return { name: 'AES-GCM', iv, additionalData: associatedData, tagLength: TAG_BYTES * 8 };
+function cipherParams(iv, protection) {
+  const aad = protection?.mode === 'passkey'
+    ? encoder.encode(JSON.stringify(['rePlay/cloud-vault/v2', 'passkey', [...protection.credentialId], [...protection.salt]]))
+    : associatedData;
+  return { name: 'AES-GCM', iv, additionalData: aad, tagLength: TAG_BYTES * 8 };
 }
 
-async function seal(crypto, key, salt, plaintext) {
+async function seal(crypto, key, salt, plaintext, protection) {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-  const ciphertext = await crypto.subtle.encrypt(cipherParams(iv), key, plaintext);
+  if (protection?.mode === 'unprotected') {
+    return {version: 2, mode: 'unprotected', iv, data: JSON.parse(decoder.decode(plaintext))};
+  }
+  const ciphertext = await crypto.subtle.encrypt(cipherParams(iv, protection), key, plaintext);
+  if (protection?.mode === 'passkey') {
+    return {version: 2, mode: 'passkey', salt, iv, credentialId: protection.credentialId, ciphertext: new Uint8Array(ciphertext)};
+  }
   return { version: VERSION, salt, iv, ciphertext: new Uint8Array(ciphertext) };
 }
 
@@ -159,7 +182,7 @@ async function unseal(crypto, key, record) {
   let plaintext;
   try {
     plaintext = new Uint8Array(await crypto.subtle.decrypt(
-      cipherParams(record.iv), key, record.ciphertext,
+      cipherParams(record.iv, record), key, record.ciphertext,
     ));
     const data = JSON.parse(decoder.decode(plaintext));
     validatePayload(data);
@@ -171,6 +194,30 @@ async function unseal(crypto, key, record) {
   }
 }
 
+async function passkeyKey(crypto, credentials, credentialId, salt) {
+  const credential = await credentials.get({publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    allowCredentials: [{type: 'public-key', id: credentialId}],
+    userVerification: 'required', timeout: 60000,
+    extensions: {prf: {eval: {first: salt}}},
+  }});
+  if (!credential || !equalBytes(new Uint8Array(credential.rawId), credentialId)) {
+    throw new Error('The selected passkey does not match this connection');
+  }
+  const output = credential.getClientExtensionResults()?.prf?.results?.first;
+  if (!(output instanceof ArrayBuffer) || output.byteLength !== 32) {
+    throw new Error('This passkey cannot encrypt the connection. Choose a password or session only.');
+  }
+  const secret = new Uint8Array(output);
+  try {
+    const material = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey']);
+    return await crypto.subtle.deriveKey(
+      {name: 'HKDF', hash: 'SHA-256', salt, info: encoder.encode('rePlay/cloud-vault/passkey/v2')},
+      material, {name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt'],
+    );
+  } finally { secret.fill(0); }
+}
+
 /**
  * Persist one encrypted cloud profile. The injected storage adapter must use
  * atomic create, replace, and remove operations. The caller owns plaintext returned by
@@ -178,14 +225,17 @@ async function unseal(crypto, key, record) {
  */
 export function createVault({
   storage = indexedStorage(globalThis.indexedDB), crypto = globalThis.crypto,
+  credentials = globalThis.navigator?.credentials,
 } = {}) {
   let session;
+  let prepared;
   let generation = 0;
   let pending = Promise.resolve();
 
   function lock() {
     generation += 1;
     session = undefined;
+    prepared = undefined;
   }
 
   function enqueue(run) {
@@ -199,6 +249,50 @@ export function createVault({
   }
 
   return {
+    async mode() {
+      const record = await storage.read();
+      if (record === undefined) return null;
+      validateRecord(record);
+      return record.version === 1 ? 'password' : record.mode;
+    },
+
+    async preparePasskey() {
+      prepared = undefined;
+      return enqueue(async (check) => {
+        check();
+        if (!credentials?.create || !credentials?.get || !crypto?.subtle) {
+          throw new Error('Passkeys are unavailable here. Choose a password or session only.');
+        }
+        const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+        const credential = await credentials.create({publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)), rp: {name: 'rePlay'},
+          user: {id: crypto.getRandomValues(new Uint8Array(32)), name: 'rePlay cloud connection', displayName: 'rePlay cloud connection'},
+          pubKeyCredParams: [{type: 'public-key', alg: -7}, {type: 'public-key', alg: -257}],
+          authenticatorSelection: {residentKey: 'preferred', userVerification: 'required'},
+          attestation: 'none', timeout: 60000, extensions: {prf: {}},
+        }});
+        check();
+        if (!credential?.getClientExtensionResults()?.prf?.enabled) {
+          throw new Error('This passkey cannot encrypt the connection. Choose a password or session only.');
+        }
+        const credentialId = new Uint8Array(credential.rawId);
+        if (!credentialId.length || credentialId.length > 1024) throw new Error('Invalid passkey identifier');
+        const key = await passkeyKey(crypto, credentials, credentialId, salt);
+        check();
+        prepared = {key, salt, mode: 'passkey', credentialId};
+      });
+    },
+
+    async createPasskey(data) {
+      if (!prepared) throw new Error('Set up a passkey before saving the connection');
+      const protection = prepared;
+      return createProtected(data, protection);
+    },
+
+    async createUnprotected(data, {acknowledged = false} = {}) {
+      if (acknowledged !== true) throw new Error('Acknowledge the risks of unprotected storage first');
+      return createProtected(data, {mode: 'unprotected'});
+    },
     async exists() {
       return (await storage.read()) !== undefined;
     },
@@ -228,7 +322,6 @@ export function createVault({
     },
 
     async unlock(passphrase) {
-      checkPassphrase(passphrase);
       lock();
       return enqueue(async (check) => {
         check();
@@ -236,11 +329,18 @@ export function createVault({
         check();
         if (record === undefined) throw new Error('There is no saved browser vault');
         validateRecord(record);
-        const key = await deriveKey(crypto, passphrase, record.salt);
+        let key;
+        if (record.version === 1) {
+          checkPassphrase(passphrase);
+          key = await deriveKey(crypto, passphrase, record.salt);
+        } else if (record.mode === 'passkey') {
+          if (!credentials?.get) throw new Error('Passkeys are unavailable in this browser');
+          key = await passkeyKey(crypto, credentials, record.credentialId, record.salt);
+        }
         check();
-        const data = await unseal(crypto, key, record);
+        const data = record.mode === 'unprotected' ? record.data : await unseal(crypto, key, record);
         check();
-        session = { key, salt: record.salt, iv: record.iv };
+        session = { key, salt: record.salt, iv: record.iv, mode: record.mode, credentialId: record.credentialId };
         return data;
       });
     },
@@ -253,7 +353,7 @@ export function createVault({
           check();
           if (!session) throw new Error('The vault is locked');
           const { key, salt, iv } = session;
-          const record = await seal(crypto, key, salt, plaintext);
+          const record = await seal(crypto, key, salt, plaintext, session);
           check();
           const saved = await storage.replace(iv, record);
           check();
@@ -261,7 +361,7 @@ export function createVault({
             lock();
             throw new Error('The vault changed in another tab. Unlock it again.');
           }
-          session = { key, salt, iv: record.iv };
+          session = { ...session, iv: record.iv };
         });
       } finally {
         plaintext.fill(0);
@@ -289,4 +389,22 @@ export function createVault({
       });
     },
   };
+
+  async function createProtected(data, protection) {
+    const plaintext = serialize(data);
+    try {
+      await enqueue(async (check) => {
+        check();
+        if (await storage.read() !== undefined) throw new Error('A browser vault already exists');
+        check();
+        const record = await seal(crypto, protection.key, protection.salt, plaintext, protection);
+        check();
+        const created = await storage.create(record);
+        check();
+        if (!created) throw new Error('A browser vault already exists');
+        session = {...protection, iv: record.iv};
+        prepared = undefined;
+      });
+    } finally { plaintext.fill(0); }
+  }
 }

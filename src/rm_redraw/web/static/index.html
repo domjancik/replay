@@ -61,22 +61,44 @@
 <p class="hint">Keeps the forward end hold, then reverses to the first frame. No new ink rendering. Exports use the selected rectangle's pixel resolution.</p>
 <p id="export-status" role="status"></p><button id="export-save" class="primary" disabled>Export video</button>
 </dialog>
-<dialog id="cloud-dialog">
-<div class="section-heading"><h2>Your reMarkable notebooks</h2><button id="cloud-close" class="quiet">Close</button></div>
-<details class="privacy-details"><summary>How your connection stays private</summary><p>Your pairing and notebook tree are encrypted in this browser. No companion CLI is needed. The relay forwards requests without saving credentials or the tree. While unlocked, it sees the credentials needed for cloud access.</p>
-<p class="hint">Use a unique vault passphrase, not your reMarkable password. Page scripts can access credentials while unlocked; lock the vault on shared computers. The cloud token can authorize writes, although this app only reads documents.</p></details>
-<details open><summary>Pair or unlock this browser</summary>
-<p>Get a one-time code from <a href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">your reMarkable account</a>, then pair this browser below.</p>
-<label for="cloud-code">One-time pairing code</label><input id="cloud-code" type="password" autocomplete="off" spellcheck="false" maxlength="8" pattern="[A-Za-z0-9]{8}" placeholder="8-character code" disabled>
-<label for="cloud-passphrase">Vault passphrase</label><input id="cloud-passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024">
-<label for="cloud-confirm">Repeat passphrase when pairing</label><input id="cloud-confirm" type="password" autocomplete="off" minlength="12" maxlength="1024">
-<button id="cloud-pair">Pair and remember</button><button id="cloud-unlock" class="secondary">Unlock saved pairing</button><button id="cloud-lock" class="quiet">Lock</button>
-<p class="hint">At least 12 characters. The passphrase is never sent to the relay. Forgotten passphrases require pairing again. Closing this dialog locks the vault.</p>
-<p class="hint">The code is sent through the relay to reMarkable and cleared from the field. Only the resulting pairing is saved, encrypted in this browser.</p>
+<dialog id="cloud-dialog" aria-labelledby="cloud-heading">
+<div class="section-heading"><h2 id="cloud-heading">Connect reMarkable</h2><button id="cloud-close" class="quiet">Close</button></div>
+<div id="cloud-new">
+<p>Bring your notebooks into rePlay. Your originals stay untouched.</p>
+<p><a class="cloud-code-link" href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noreferrer">1. Get a pairing code ↗</a> <span class="hint">Opens your reMarkable account in a new tab.</span></p>
+<label for="cloud-code">2. Paste your pairing code</label><input id="cloud-code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="8" pattern="[A-Za-z0-9]{8}" placeholder="8-character code">
+<label for="cloud-storage">Keep this connection</label>
+<select id="cloud-storage" aria-describedby="cloud-storage-help">
+<option id="cloud-passkey-option" value="passkey">With a passkey (recommended)</option>
+<option value="password">With a password</option>
+<option value="session">For this session only</option>
+<option value="unprotected">Without protection</option>
+</select>
+<p id="cloud-storage-help" class="hint"></p>
+<div id="cloud-unprotected-warning" class="cloud-warning" hidden>
+<strong>Anyone with access to this browser profile could access your cloud notebooks.</strong>
+<p>Your cloud credential and notebook list will be saved without encryption. Malicious site scripts, extensions with access to this site, or someone who copies your browser data could steal the credential. Although rePlay only reads drawings, the credential can also authorize cloud changes. Closing the connection does not protect saved credentials. Avoid shared or public computers.</p>
+<label class="checkbox"><input id="cloud-unprotected-confirm" type="checkbox"> I understand and want to save without protection.</label>
+</div>
+<button id="cloud-password-fallback" class="secondary" hidden>Use a password instead</button>
+</div>
+<div id="cloud-password-fields" hidden>
+<label for="cloud-passphrase">Browser unlock password</label><input id="cloud-passphrase" type="password" autocomplete="new-password" minlength="12" maxlength="1024" aria-describedby="cloud-password-help">
+<p id="cloud-password-help" class="hint">At least 12 characters. This protects the saved connection on this browser.</p>
+<div id="cloud-confirm-fields"><label for="cloud-confirm">Repeat password</label><input id="cloud-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="1024"></div>
+</div>
+<button id="cloud-pair" class="primary">Connect</button><button id="cloud-unlock" class="primary" hidden>Unlock connection</button>
+<div id="cloud-connected" hidden><p id="cloud-connection-state"></p><button id="cloud-refresh" class="secondary">Refresh notebooks</button><button id="cloud-lock" class="quiet">Lock connection</button></div>
+<p id="cloud-status" role="status" aria-live="polite"></p><div id="cloud-items" hidden></div>
+<details id="cloud-disconnect" hidden><summary>Disconnect or remove saved connection</summary>
+<p>Disconnect revokes this reMarkable registration and removes the saved connection. Removing only the saved connection leaves the registration active. Imported notebooks and videos remain. Removing a saved connection does not delete its passkey from your password manager.</p>
+<label class="checkbox"><input id="cloud-revoke-confirm" type="checkbox"> Confirm removing this connection</label>
+<button id="cloud-revoke" class="secondary" disabled>Disconnect from reMarkable</button><button id="cloud-forget" class="quiet" disabled>Remove saved connection only</button></details>
+<details class="privacy-details"><summary>Privacy and connection help</summary>
+<p>Passkey and password options encrypt the saved cloud credential and notebook list in this browser. Session only saves neither. Without protection saves both unencrypted. Our server forwards cloud requests and sees the credentials needed for access, but does not save them or your notebook list.</p>
+<p>Passkeys require encryption support from your browser and passkey provider. If unavailable, choose a password or session only. A synced passkey does not sync this browser’s saved connection. Clearing site data, changing site address, or losing your unlock method requires pairing again.</p>
+<p>Protection applies while locked; site scripts can access credentials while connected. Imported notebooks and videos are stored separately and are not protected by your connection password or passkey. rePlay only reads documents, but its cloud credential can authorize writes.</p>
+<p class="hint">Downloaded ink feeds the same local replay engine. Templates and PDF backgrounds are omitted. Text-anchored pages may need a separately attached matching PDF. This unofficial cloud connector may be affected by changes at reMarkable.</p>
 </details>
-<button id="cloud-refresh" class="secondary">Refresh cloud notebooks</button>
-<details><summary>Disconnect this browser</summary><p>Revoke removes this cloud registration and browser vault. Forget only removes this browser's saved pairing and tree. Imported notebooks and videos remain in the local replay library.</p><label class="checkbox"><input id="cloud-revoke-confirm" type="checkbox"> Confirm disconnecting this browser</label><button id="cloud-revoke" class="secondary" disabled>Revoke cloud access</button><button id="cloud-forget" class="quiet" disabled>Forget browser vault only</button></details>
-<p id="cloud-status" role="status"></p><div id="cloud-items"></div>
-<p class="hint">Downloaded ink feeds the same local replay engine. Templates and PDF backgrounds are omitted. Text-anchored pages may need a separately attached matching PDF. Live cloud-account validation is pending; this connector is experimental.</p>
 </dialog>
 </body></html>

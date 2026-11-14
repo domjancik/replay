@@ -149,8 +149,128 @@ test('unlocked cloud notebooks appear in gallery and explicit lock clears them',
  assert.equal(el('cloud-gallery').children[0].children[1].textContent,'Drawings/Test notebook');
  assert.equal(el('cloud-gallery-refresh').disabled,false);
  el('cloud-dialog').close();assert.equal(el('cloud-gallery').children.length,1);
- assert.equal(previewReads,0);
+ assert.equal(previewReads,1); // Unlock now refreshes automatically.
  observe([{target:el('cloud-gallery').children[0],isIntersecting:true}]);
  await new Promise(resolve=>setImmediate(resolve));assert.equal(previewReads,1);
  el('cloud-lock').onclick();assert.equal(el('cloud-gallery').children.length,0);assert.equal(el('cloud-gallery-refresh').disabled,true);
+});
+
+function cloudHarness(t, {savedMode=null, prepareError=null, storageError=false}={}) {
+  const elements = new Map();
+  const make = () => ({dataset:{}, children:[], value:'', checked:false, disabled:false, hidden:false, textContent:'', handlers:{},
+    querySelectorAll(){return [];}, append(...items){this.children.push(...items);}, replaceChildren(...items){this.children=items;},
+    addEventListener(name, fn){this.handlers[name]=fn;}, showModal(){this.open=true;}, close(){this.open=false;}});
+  const el=id=>{if(!elements.has(id))elements.set(id,make());return elements.get(id);};
+  installGlobal(t,'document',{getElementById:el,createElement:make,addEventListener(){}});
+  installGlobal(t,'window',{addEventListener(){}});
+  installGlobal(t,'navigator',{credentials:{create(){},get(){}}, storage:{persist:async()=>false}});
+  const calls=[];
+  const entries=[{id:'test',name:'Drawing',kind:'notebook'}];
+  const vault={
+    async mode(){if(storageError)throw new Error('Storage unavailable');return savedMode;},
+    async exists(){if(storageError)throw new Error('Storage unavailable');return !!savedMode;},
+    async preparePasskey(){calls.push('prepare');if(prepareError)throw new Error(prepareError);},
+    async createPasskey(){calls.push('passkey');savedMode='passkey';},
+    async create(){calls.push('password');savedMode='password';},
+    async createUnprotected(_data,options){assert.equal(options.acknowledged,true);calls.push('unprotected');savedMode='unprotected';},
+    async unlock(){calls.push('unlock');return {deviceToken:'test',entries};},
+    async save(){calls.push('save');}, lock(){}, async forget(){savedMode=null;},
+  };
+  const client={async pair(){calls.push('pair');return 'test';},async list(){calls.push('list');return entries;},getCache(){return {};},
+    setDeviceToken(){},lock(){},async preview(){calls.push('preview');return null;}};
+  el('source-cloud').onclick=()=>calls.push('gallery');
+  t.mock.timers.enable({apis:['setTimeout']});
+  setupCloud({sessionToken:()=>'',importArchive(){},vault,clientFactory:()=>client});
+  return {el,calls,vault};
+}
+
+test('first-time flow prefers passkey, then loads gallery automatically',async t=>{
+  const {el,calls}=cloudHarness(t);
+  await el('cloud-open').onclick();
+  assert.equal(el('cloud-storage').value,'passkey');
+  assert.equal(el('cloud-unlock').hidden,true);
+  el('cloud-code').value='AB12CD34';
+  await el('cloud-pair').onclick();
+  assert.deepEqual(calls,['prepare','pair','passkey','gallery','list','save']);
+  assert.equal(el('cloud-dialog').open,false);
+  assert.equal(el('cloud-gallery').children.length,1);
+  assert.equal(el('cloud-items').children.length,0);
+});
+
+test('session-only connects without saving even when browser storage is unavailable',async t=>{
+  const {el,calls}=cloudHarness(t,{storageError:true});
+  await el('cloud-open').onclick();
+  el('cloud-storage').value='session';el('cloud-storage').onchange();el('cloud-code').value='AB12CD34';
+  await el('cloud-pair').onclick();
+  assert.deepEqual(calls,['pair','gallery','list']);
+  assert.equal(el('cloud-lock').textContent,'End session');
+  el('cloud-lock').onclick();
+  assert.equal(el('cloud-gallery').children.length,0);
+});
+
+test('unprotected choice requires warning acknowledgement before pairing',async t=>{
+  const {el,calls}=cloudHarness(t);await el('cloud-open').onclick();
+  el('cloud-storage').value='unprotected';el('cloud-storage').onchange();el('cloud-code').value='AB12CD34';
+  assert.equal(el('cloud-unprotected-warning').hidden,false);
+  await el('cloud-pair').onclick();assert.deepEqual(calls,[]);
+  el('cloud-unprotected-confirm').checked=true;await el('cloud-pair').onclick();
+  assert.deepEqual(calls,['pair','unprotected','gallery','list','save']);
+  assert.match(el('cloud-connection-state').textContent,/without protection/);
+});
+
+test('unsupported passkey offers password retry without consuming code or pairing',async t=>{
+  const {el,calls}=cloudHarness(t,{prepareError:'This passkey cannot encrypt the connection'});
+  await el('cloud-open').onclick();el('cloud-code').value='AB12CD34';await el('cloud-pair').onclick();
+  assert.deepEqual(calls,['prepare']);assert.equal(el('cloud-code').value,'AB12CD34');
+  assert.equal(el('cloud-password-fallback').hidden,false);
+  el('cloud-password-fallback').onclick();
+  el('cloud-passphrase').value='synthetic long password';el('cloud-confirm').value='synthetic long password';
+  await el('cloud-pair').onclick();
+  assert.deepEqual(calls,['prepare','pair','password','gallery','list','save']);
+});
+
+test('saved password connection shows only unlock and refreshes after opening cached gallery',async t=>{
+  const {el,calls}=cloudHarness(t,{savedMode:'password'});await el('cloud-open').onclick();
+  assert.equal(el('cloud-new').hidden,true);assert.equal(el('cloud-confirm-fields').hidden,true);
+  el('cloud-passphrase').value='synthetic long password';await el('cloud-unlock').onclick();
+  assert.deepEqual(calls,['unlock','gallery','list','save']);
+  assert.equal(el('cloud-dialog').open,false);
+});
+
+test('thumbnail loading leaves connection status and notebook actions usable',async t=>{
+  let observe;
+  installGlobal(t,'IntersectionObserver',class {constructor(fn){observe=fn;} observe(){} disconnect(){}});
+  const {el,calls}=cloudHarness(t);await el('cloud-open').onclick();
+  el('cloud-storage').value='session';el('cloud-storage').onchange();el('cloud-code').value='AB12CD34';
+  await el('cloud-pair').onclick();
+  const row=el('cloud-gallery').children[0];const message=el('cloud-gallery-status').textContent;
+  observe([{target:row,isIntersecting:true}]);await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.filter(call=>call==='list').length,1);
+  assert.equal(calls.filter(call=>call==='preview').length,1);
+  assert.equal(el('cloud-gallery-status').textContent,message);
+  assert.equal(el('cloud-gallery-refresh').disabled,false);
+  assert.equal(row.children[2].textContent,'No preview available');
+});
+
+test('failed save can continue session-only without pairing twice',async t=>{
+  const {el,calls,vault}=cloudHarness(t);
+  vault.create=async()=>{throw new Error('Storage full');};
+  await el('cloud-open').onclick();el('cloud-storage').value='password';el('cloud-storage').onchange();
+  el('cloud-passphrase').value=el('cloud-confirm').value='synthetic password';el('cloud-code').value='AB12CD34';
+  await el('cloud-pair').onclick();
+  assert.match(el('cloud-status').textContent,/saving failed/);
+  assert.equal(el('cloud-dialog').open,true);
+  el('cloud-storage').value='session';el('cloud-storage').onchange();await el('cloud-pair').onclick();
+  assert.equal(calls.filter(call=>call==='pair').length,1);
+  assert.equal(el('cloud-dialog').open,false);
+  assert.equal(el('cloud-gallery').children.length,1);
+});
+
+test('saved passkey and unprotected connections reopen without password fields',async t=>{
+  for(const mode of ['passkey','unprotected'])await t.test(mode,async t=>{
+    const {el,calls}=cloudHarness(t,{savedMode:mode});await el('cloud-open').onclick();
+    assert.equal(el('cloud-password-fields').hidden,true);
+    await el('cloud-unlock').onclick();
+    assert.deepEqual(calls,['unlock','gallery','list','save']);
+  });
 });

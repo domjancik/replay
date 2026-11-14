@@ -221,3 +221,82 @@ test('forget while locked preserves any revision written after its read', async 
   await locked.forget();
   assert.equal(await locked.exists(), false);
 });
+
+test('passkey encrypts, survives restart and never persists PRF output', async () => {
+  const storage = memoryStorage();
+  const secret = new Uint8Array(32).fill(73);
+  const credentialId = new Uint8Array([1, 2, 3]);
+  const calls = [];
+  const credentials = {
+    async create(options) { calls.push(options); return { rawId: credentialId.buffer, getClientExtensionResults: () => ({prf:{enabled:true}}) }; },
+    async get(options) { calls.push(options); return { rawId: credentialId.buffer, getClientExtensionResults: () => ({prf:{results:{first:secret.slice().buffer}}}) }; },
+  };
+  const vault = createVault({storage, credentials});
+  assert.equal(typeof vault.preparePasskey, 'function');
+  await vault.preparePasskey();
+  await vault.createPasskey(data);
+  assert.equal(await vault.mode(), 'passkey');
+  const record = await storage.read();
+  assert.equal(JSON.stringify(record).includes(data.deviceToken), false);
+  assert.equal(Object.hasOwn(record, 'key'), false);
+  vault.lock();
+  const fresh = createVault({storage, credentials});
+  assert.deepEqual(await fresh.unlock(), data);
+  await fresh.save({...data, tree:[]});
+  assert.deepEqual((await fresh.unlock()).tree, []);
+  assert.equal(calls[0].publicKey.authenticatorSelection.userVerification, 'required');
+  assert.equal(calls[1].publicKey.userVerification, 'required');
+  assert.deepEqual(calls[1].publicKey.allowCredentials[0].id, credentialId);
+  assert.notDeepEqual(calls[1].publicKey.challenge, calls[2].publicKey.challenge);
+  secret.fill(12);
+  await assert.rejects(fresh.unlock(), /incorrect|corrupt/);
+  await assert.rejects(fresh.save(data), /locked/);
+});
+
+test('unsupported or cancelled passkey never saves or silently falls back', async () => {
+  for (const failure of ['unsupported', 'cancelled', 'wrong-id']) {
+    const storage = memoryStorage();
+    const credentials = {
+      async create() {
+        if (failure === 'cancelled') throw new DOMException('cancel', 'NotAllowedError');
+        return {rawId: new Uint8Array([1]).buffer, getClientExtensionResults:()=>({prf:{enabled:failure !== 'unsupported'}})};
+      },
+      async get() {return {rawId:new Uint8Array([2]).buffer, getClientExtensionResults:()=>({prf:{results:{first:new Uint8Array(32).buffer}}})};},
+    };
+    const vault = createVault({storage, credentials});
+    assert.equal(typeof vault.preparePasskey, 'function');
+    await assert.rejects(vault.preparePasskey());
+    assert.equal(await vault.exists(), false);
+    await assert.rejects(vault.createPasskey(data), /passkey/i);
+  }
+});
+
+test('unprotected persistence requires explicit acknowledgement and retains revision safety', async () => {
+  const storage = memoryStorage();
+  const vault = createVault({storage});
+  assert.equal(typeof vault.createUnprotected, 'function');
+  await assert.rejects(vault.createUnprotected(data), /acknowledge/i);
+  assert.equal(await vault.exists(), false);
+  await vault.createUnprotected(data, {acknowledged:true});
+  assert.equal(await vault.mode(), 'unprotected');
+  assert.equal((await storage.read()).data.deviceToken, data.deviceToken);
+  const other = createVault({storage});
+  assert.deepEqual(await other.unlock(), data);
+  await vault.save({...data,tree:[]});
+  await assert.rejects(other.save(data), /changed/);
+  await vault.forget();
+  assert.equal(await vault.exists(), false);
+});
+
+test('locking during a passkey prompt discards the result',async()=>{
+  const storage=memoryStorage();let resume,entered;
+  const started=new Promise(resolve=>{entered=resolve;});
+  const credentials={
+    async create(){await new Promise(resolve=>{resume=resolve;entered();});return {rawId:new Uint8Array([1]).buffer,getClientExtensionResults:()=>({prf:{enabled:true}})};},
+    async get(){throw new Error('Should not evaluate PRF after locking');},
+  };
+  const vault=createVault({storage,credentials});const preparing=vault.preparePasskey();
+  await started;vault.lock();resume();
+  await assert.rejects(preparing,/locked/);await assert.rejects(vault.createPasskey(data),/passkey/);
+  assert.equal(await vault.exists(),false);
+});
