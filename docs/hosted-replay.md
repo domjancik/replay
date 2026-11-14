@@ -1,6 +1,7 @@
 # Hosted rePlay
 
-Production: https://replay-phi-liard.vercel.app/
+Production: https://replay.domj.net/
+Vercel alias: https://replay-phi-liard.vercel.app/
 Vercel project: `domjanciks-projects/replay`.
 
 The hosted build reuses the notebook gallery, encrypted cloud vault, queue, selected-page replay list, and crop/loop controls. No local Python, FFmpeg, or CLI is required. The optional USB companion remains separate.
@@ -45,4 +46,4 @@ WASM differential validation covers 46 pages and 184 parse/info/prepare/anchor c
 
 The final migration checks passed 30 Rust tests (including the package usage example and exact decoded-block oracle), 172 relevant Python tests and 47 browser JavaScript tests. There are also 23 explicit-layout projection comparisons. Pixel checks cover 6 synthetic, 19 controlled and 3 natural successful preparations (including birthday page 12): all 28 outputs match, and all final/static checks pass. The fourth natural page remains explicitly unresolved and is not counted as a pixel success. The Python-free local browser exercised v5/v6 import, native-PDF anchors, preview, video, crop and reverse loops. Cargo package verification and Clippy passed.
 
-On November 14 the deployment attempt was blocked because Vercel CLI credentials were absent. The generated build is ready at `artifacts/hosted-replay`; the production URL above must not be assumed to contain this migration until deployment is retried successfully.
+Deployed November 14 after Vercel sign-in was restored: `dpl_GSC3RVjU8hcet3G7CE1oNd2Rqj8Z`. Public HTTPS checks on `replay.domj.net` returned 200 for the app, native worker and reader WASM. The deployed reader SHA-256 matches the locally tested binary and has no host imports. The removed `/runtime/pyodide.mjs` returns 404.
