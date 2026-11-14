@@ -200,18 +200,23 @@ export function setupCloud({ sessionToken, importArchive, getSavedNotebooks = as
       for (const item of [{id:'',name:'Cloud notebooks'}, ...trail]) {
         const button = document.createElement('button'); button.textContent = item.name;
         button.className = 'secondary'; button.disabled = item.id === cloudFolder;
-        button.onclick = () => {cloudFolder = item.id; renderEntries(cloudEntries); controls();}; nav.append(button);
+        button.onclick = () => {$('cloud-search').value = ''; cloudFolder = item.id; renderEntries(cloudEntries); controls();}; nav.append(button);
       }
     }
     const renderedEpoch = epoch;
-    const children = entries.filter(item => (item.parent || '') === cloudFolder).sort((a, b) =>
+    const query = $('cloud-search').value.trim().toLocaleLowerCase();
+    const children = entries.filter(item => query ? (item.path || item.name).toLocaleLowerCase().includes(query) : (item.parent || '') === cloudFolder).sort((a, b) =>
       Number(b.kind === 'folder') - Number(a.kind === 'folder') ||
       a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    if (query && !children.length) {
+      const empty = document.createElement('p'); empty.className = 'hint';
+      empty.textContent = libraryLoading ? 'No matches yet. Cloud scan is still running.' : 'No matches in your cloud library.'; target.append(empty);
+    }
     for (const entry of children) {
       if (entry.kind === 'folder') {
         const folder = document.createElement('button'); folder.className = 'cloud-notebook-card cloud-folder-card';
         folder.textContent = `▱ ${entry.name}`;
-        folder.onclick = () => {cloudFolder = entry.id; renderEntries(cloudEntries); controls();}; target.append(folder); continue;
+        folder.onclick = () => {$('cloud-search').value = ''; cloudFolder = entry.id; renderEntries(cloudEntries); controls();}; target.append(folder); continue;
       }
       const existing = cloudRows.get(entry.id);
       if (existing && existing.entryKey === JSON.stringify([entry, savedNotebooks.filter(doc => doc.cloud_source?.id === entry.id).map(doc => doc.cloud_source.version)])) {
@@ -264,6 +269,7 @@ export function setupCloud({ sessionToken, importArchive, getSavedNotebooks = as
       if (previewObserver && entry.hasPreview === true) { row.loadPreview = preview.onclick; previewObserver.observe(row); }
     }
   }
+  $('cloud-search').oninput = () => {renderEntries(cloudEntries); controls();};
   $('cloud-open').onclick = async () => {
     $('cloud-dialog').hidden=false;
     await action(async () => {

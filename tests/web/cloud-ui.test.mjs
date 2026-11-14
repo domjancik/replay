@@ -395,3 +395,13 @@ test('cloud cards distinguish saved current versions from updates',async t=>{
  assert.ok(two.children.some(child=>child.textContent==='Update available'));
  assert.equal(two.children.at(-1).textContent,'Save updated notebook');
 });
+
+test('cloud search finds nested notebooks by name or path and clearing restores folder view',async t=>{
+ const {el,client}=cloudHarness(t,{savedMode:'password'});
+ client.list=async()=>[{id:'f',name:'Art',path:'Art',kind:'folder',parent:''},{id:'n',name:'Portrait',path:'Art/Portrait',kind:'document',parent:'f'}];
+ await el('cloud-open').onclick();await el('cloud-unlock').onclick();
+ el('cloud-search').value='PORTRAIT';el('cloud-search').oninput();
+ assert.equal(el('cloud-gallery').children.length,1);assert.equal(el('cloud-gallery').children[0].dataset.cloudId,'n');
+ el('cloud-search').value='missing';el('cloud-search').oninput();assert.match(el('cloud-gallery').children[0].textContent,/No matches/);
+ el('cloud-search').value='';el('cloud-search').oninput();assert.equal(el('cloud-gallery').children[0].textContent,'▱ Art');
+});

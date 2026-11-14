@@ -76,3 +76,5 @@ header{max-width:none;padding:12px 38px}.wordmark{font-family:Georgia,serif;font
 .selection-heading .page-details{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
 .selection-heading #page-info{flex:1 1 150px;margin:0;font-size:11px;line-height:1.5}
 .selection-heading #pair-open{flex:0 0 auto;white-space:nowrap;font-size:11px;min-height:28px;padding:4px 0}
+
+#cloud-search{max-width:420px;margin:12px 0 16px}
