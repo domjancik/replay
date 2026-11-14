@@ -2,7 +2,7 @@ import { createVault } from './cloud-vault.mjs';
 import { createCloudClient } from './cloud-client.mjs';
 
 const STORAGE_HELP = {
-  passkey: 'Recommended. Protect this saved connection with your device or password manager. You may be asked to confirm twice during setup.',
+  passkey: 'Requires a passkey provider with PRF encryption support. Ordinary passkey sign-in support is not enough; Windows Hello support varies. Setup may ask for a second confirmation. Password and session only are available if this fails.',
   password: 'Choose a browser unlock password, not your reMarkable password. It stays on this device.',
   session: 'Nothing about this connection is saved. Pair again after closing or reloading this tab.',
   unprotected: 'Reconnect without an unlock prompt. Only use this on a private, trusted browser.',

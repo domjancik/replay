@@ -217,8 +217,12 @@ async function passkeyKey(crypto, credentials, credentialId, salt) {
     throw new Error('The selected passkey does not match this connection');
   }
   const output = credential.getClientExtensionResults()?.prf?.results?.first;
+  return derivePasskeyKey(crypto, output, salt);
+}
+
+async function derivePasskeyKey(crypto, output, salt) {
   if (!(output instanceof ArrayBuffer) || output.byteLength !== 32) {
-    throw new Error('This passkey cannot encrypt the connection. Choose a password or session only.');
+    throw new Error('Passkey encryption check returned no PRF key. Signing in with a passkey and encrypting browser storage require different capabilities. Try another passkey provider, or choose a password or session only.');
   }
   const secret = new Uint8Array(output);
   try {
@@ -284,15 +288,22 @@ export function createVault({
             user: {id: crypto.getRandomValues(new Uint8Array(32)), name: 'rePlay cloud connection', displayName: 'rePlay cloud connection'},
             pubKeyCredParams: [{type: 'public-key', alg: -7}, {type: 'public-key', alg: -257}],
             authenticatorSelection: {residentKey: 'preferred', userVerification: 'required'},
-            attestation: 'none', timeout: 60000, extensions: {prf: {}},
+            attestation: 'none', timeout: 60000, extensions: {prf: {eval: {first: salt}}},
           }}));
           check();
-          if (!credential?.getClientExtensionResults()?.prf?.enabled) {
-            throw new Error('This passkey cannot encrypt the connection. Choose a password or session only.');
+          const prf = credential?.getClientExtensionResults()?.prf;
+          if (!prf?.enabled) {
+            throw new Error('Passkey created, but the selected provider did not enable PRF encryption. A passkey can work for sign-in without supporting encrypted browser storage. Try another provider, or choose a password or session only.');
           }
           const credentialId = new Uint8Array(credential.rawId);
           if (!credentialId.length || credentialId.length > 1024) throw new Error('Invalid passkey identifier');
           pendingPasskey = {salt, credentialId};
+          if (prf.results?.first) {
+            const key = await derivePasskeyKey(crypto, prf.results.first, salt);
+            check();
+            prepared = {key, salt, mode: 'passkey', credentialId};
+            return;
+          }
         }
         const {salt, credentialId} = pendingPasskey;
         const key = await passkeyKey(crypto, credentials, credentialId, salt);

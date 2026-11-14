@@ -325,3 +325,17 @@ test('creation failures explain the stage and do not expose raw provider errors'
     return true;
   });
 });
+
+
+test('creation-time PRF output avoids a second prompt and reopens with the same key',async()=>{
+ const storage=memoryStorage();let creates=0,gets=0;
+ const id=new Uint8Array([5]);const secret=new Uint8Array(32).fill(41);
+ const credentials={
+  async create(options){creates++;assert.equal(options.publicKey.extensions.prf.eval.first.length,16);return {rawId:id.buffer,getClientExtensionResults:()=>({prf:{enabled:true,results:{first:secret.slice().buffer}}})};},
+  async get(){gets++;return {rawId:id.buffer,getClientExtensionResults:()=>({prf:{results:{first:secret.slice().buffer}}})};},
+ };
+ const vault=createVault({storage,credentials});
+ await vault.preparePasskey();await vault.createPasskey(data);
+ assert.equal(creates,1);assert.equal(gets,0);
+ vault.lock();assert.deepEqual(await vault.unlock(),data);assert.equal(gets,1);
+});
