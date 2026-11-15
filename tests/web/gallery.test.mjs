@@ -324,3 +324,16 @@ test('crop rectangles round trip through every page rotation',()=>{
  const {context}=fixture();
  for(const rotation of [0,90,180,270])assert.equal(vm.runInContext(`JSON.stringify(rotateCrop(rotateCrop([10,20,30,40],100,200,${rotation}),${rotation%180?200:100},${rotation%180?100:200},${(360-rotation)%360}))`,context),'[10,20,30,40]');
 });
+
+test('locked crop ratios survive every resize handle and canvas boundaries',()=>{
+ const {context}=fixture();
+ for(const ratio of [1,4/5,9/16])for(const mode of ['nw','n','ne','e','se','s','sw','w','new']){
+  const rect=JSON.parse(vm.runInContext(`JSON.stringify(dragCrop([20,20,40,40/${ratio}],[30,30],[500,500],'${mode}',200,200,2,${ratio}))`,context));
+  assert.ok(Math.abs(rect[2]/rect[3]-ratio)<1e-10,mode);
+  assert.ok(rect[0]>=0&&rect[1]>=0&&rect[0]+rect[2]<=200.00001&&rect[1]+rect[3]<=200.00001,mode);
+ }
+});
+test('ratio presets fit inside existing selection and preserve its center',()=>{
+ const {context}=fixture();
+ assert.equal(vm.runInContext('JSON.stringify(fitCropRatio([10,20,100,100],4/5))',context),'[20,20,80,100]');
+});
