@@ -1,3 +1,9 @@
+export async function exportSavedNotebook(docs,read,id){
+ if(!docs.some(doc=>doc.id===id))throw Error('Notebook not found');
+ const blob=await read('archive/'+id);
+ if(!(blob instanceof Blob))throw Error('Original notebook archive is missing');
+ return blob;
+}
 export function applyGrainPreference(prepared, settings){
  const enabled=settings.high_res_grain??false;
  if(typeof enabled!=='boolean')throw Error('Invalid high-resolution grain option');
@@ -103,6 +109,7 @@ export async function createBrowserApi(){
   const url=new URL(path,location.origin);
   if(url.pathname==='/api/session')return {token:'browser',rust:true,ffmpeg:typeof VideoEncoder!=='undefined',poppler:true,hosted:true};
   if(url.pathname==='/api/library')return docs;
+  if(url.pathname==='/api/notebook-export')return exportSavedNotebook(docs,get,body.id);
   if(url.pathname==='/api/delete-notebook'){docs=await deleteSavedNotebook(db,docs,jobs,body.id);anchorCache.clear();previews.clear();return {};}
   if(url.pathname==='/api/upload'){
    const blob=body instanceof Blob?body:new Blob([body]);if(blob.size>128*1024*1024)throw Error('Notebook exceeds 128 MiB');

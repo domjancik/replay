@@ -721,6 +721,7 @@ function renderGallery(){
   }
   pages.dataset.notebook=notebook?.id || '';pages.replaceChildren();if(!notebook){observeGalleryThumbnails();return;}
   $('notebook-delete').hidden=!capabilities?.hosted;
+  $('notebook-export').hidden=!capabilities?.hosted;
   $('drawer-title').textContent=notebook.name+' · '+notebook.pages.length+' pages';
   for(const page of notebook.pages){
     const card=document.createElement('button');card.className='page-card';card.disabled=!page.available;
@@ -832,6 +833,15 @@ function setupSettingPicker(id, buttonsId){
   select.onchange=sync;sync();
 }
 function setupGallery(){
+  $('notebook-export').onclick=safely(async()=>{
+    const button=$('notebook-export');button.disabled=true;
+    try{
+      const blob=await api('/api/notebook-export',{id:expandedNotebook});
+      const url=URL.createObjectURL(blob),link=document.createElement('a');
+      link.href=url;link.download='notebook.rmdoc';link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }finally{button.disabled=false;}
+  });
   $('source-queue').onclick=()=>setLibrarySource('queue');
   $('queue-filter').onchange=renderJobs;
   $('source-local').onclick=()=>setLibrarySource('local');
