@@ -295,6 +295,7 @@ async function generate() {
     for(const key of ['width','height','offset-x','offset-y','seconds','fps','output-width'])settings[key.replaceAll('-','_')]=Number($(key).value);
     settings.rotation=Number($('rotation').value||0);
     settings.output_kind=$('output-kind').value||'video';
+    if(capabilities.hosted)settings.high_res_grain=$('high-res-grain').checked;
     settings.seconds=settings.output_kind==='image'?6:readDuration();
     settings.backend=rendererBackend;
     settings.ordering=$('ordering').value;
@@ -333,6 +334,7 @@ function restoreReplaySettings(settings){
     const value=settings[id.replaceAll('-','_')];if(value!==undefined)$(id).value=value;
   }
   $('output-kind').value=settings.output_kind||'video';syncOutputKind();
+  $('high-res-grain').checked=settings.high_res_grain===true;
   $('rotation').value=String(settings.rotation||0);
   $('ordering').value=settings.ordering||'layer';
   resetClipping();$('allow-clipping').checked=settings.allow_clipping===true;
@@ -604,7 +606,7 @@ function setupExport(){
 }
 async function start(){
   setupShare();setupExport();setupGallery();setupCanvasEditor();
-  capabilities=await api('/api/session');token=capabilities.token;$('output-kind-picker').hidden=!capabilities.hosted;
+  capabilities=await api('/api/session');token=capabilities.token;$('output-kind-picker').hidden=!capabilities.hosted;$('grain-option').hidden=!capabilities.hosted;
   if(capabilities.hosted){$('usb-companion-use').checked=true;$('usb-companion-settings').hidden=false;}
   const {setupCloud}=await import('/cloud-ui.mjs');
   setupCloud({sessionToken:()=>token,getSavedNotebooks:()=>api('/api/library'),importArchive:async(raw,source)=>{

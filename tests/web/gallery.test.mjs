@@ -345,3 +345,11 @@ test('preview states share one reserved media stage with caption outside',()=>{
  for(const id of ['empty','notebook-preview','video','preview'])assert.ok(stage[1].includes(`id="${id}"`),`${id} belongs to the same stage`);
  assert.ok(!stage[1].includes('id="notebook-preview-label"'),'caption must not change media sizing');
 });
+
+test('high resolution grain restores explicitly and defaults off for older replays',()=>{
+ const {el,context}=fixture();
+ vm.runInContext('restoreReplaySettings({high_res_grain:true})',context);
+ assert.equal(el('high-res-grain').checked,true);
+ vm.runInContext('restoreReplaySettings({})',context);
+ assert.equal(el('high-res-grain').checked,false);
+});

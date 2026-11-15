@@ -223,13 +223,14 @@ fn draw_stroke(
     {
         crate::simple::draw(layer, points, stroke, sx, sy);
     } else if texture::is_textured(stroke) {
-        texture::draw(
+        texture::draw_with_grain(
             layer,
             stroke,
             geometry::length(points),
             sx,
             sy,
             request.options.pencil_boundary,
+            request.options.high_res_grain,
         );
     } else {
         crate::generic::draw(layer, points, stroke, sx, sy);

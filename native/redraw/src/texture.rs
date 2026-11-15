@@ -150,6 +150,26 @@ pub fn draw(
     sy: f64,
     pencil_boundary: bool,
 ) {
+    draw_with_grain(
+        layer,
+        stroke,
+        visible_length,
+        sx,
+        sy,
+        pencil_boundary,
+        false,
+    );
+}
+
+pub fn draw_with_grain(
+    layer: &mut Image,
+    stroke: &Stroke,
+    visible_length: f64,
+    sx: f64,
+    sy: f64,
+    pencil_boundary: bool,
+    high_res_grain: bool,
+) {
     let Some(first) = stroke.points.first() else {
         return;
     };
@@ -222,6 +242,14 @@ pub fn draw(
         scale_x,
         scale_y,
         opacity: f64::from(stroke.rgba[3]),
+        high_res_grain: high_res_grain && sx.min(sy) >= 2.0,
+        supersample: scale,
+        grain_cache: if high_res_grain && sx.min(sy) >= 2.0 && matches!(profile, Profile::AppPencil)
+        {
+            vec![u32::MAX; bounds.width() * bounds.height()]
+        } else {
+            Vec::new()
+        },
     };
     let seed = if scale == 1 {
         let hash = Sha256::digest(stroke.stroke_id.as_bytes());
@@ -276,16 +304,19 @@ pub fn draw(
 }
 
 struct AlphaPlane {
+    grain_cache: Vec<u32>,
+    supersample: usize,
     bounds: Bounds,
     pixels: Vec<u8>,
     scale_x: f64,
     scale_y: f64,
     opacity: f64,
+    high_res_grain: bool,
 }
 
 impl AlphaPlane {
     fn deposit(&mut self, profile: Profile, dab: Dab, seed: u32) {
-        let kernel = Coverage::new(profile, &dab, seed);
+        let kernel = Coverage::new(profile, &dab, seed, self.high_res_grain);
         let extent = kernel.radius + kernel.amplitude;
         let left = self
             .bounds
@@ -310,7 +341,27 @@ impl AlphaPlane {
             let offset = (row - self.bounds.top) * width;
             for col in left..right {
                 let source_x = (col as f64 + 0.5) / self.scale_x;
-                let opacity = kernel.at(source_x, source_y, pixel_scale) * self.opacity;
+                // A shared output-pixel grain decision avoids repeated alpha buildup
+                // in holes when many strokes overlap. Geometry remains supersampled.
+                let (grain_x, grain_y, grain) = if self.grain_cache.is_empty() {
+                    (source_x, source_y, None)
+                } else {
+                    let grain_x = ((col / self.supersample) as f64 + 0.5) * self.supersample as f64
+                        / self.scale_x;
+                    let grain_y = ((row / self.supersample) as f64 + 0.5) * self.supersample as f64
+                        / self.scale_y;
+                    let index = (row / self.supersample - self.bounds.top / self.supersample)
+                        * (self.bounds.width() / self.supersample)
+                        + col / self.supersample
+                        - self.bounds.left / self.supersample;
+                    let value = &mut self.grain_cache[index];
+                    if *value == u32::MAX {
+                        *value = curved_grain(grain_x, grain_y) as u32;
+                    }
+                    (grain_x, grain_y, Some(*value as f64 / 65535.0))
+                };
+                let opacity = kernel.at(source_x, source_y, pixel_scale, grain_x, grain_y, grain)
+                    * self.opacity;
                 let pixel = &mut self.pixels[offset + col - self.bounds.left];
                 *pixel = (*pixel).max(opacity.round_ties_even() as u8);
             }
@@ -328,10 +379,11 @@ struct Coverage<'a> {
     cosine: f64,
     sine: f64,
     seed: u32,
+    high_res_grain: bool,
 }
 
 impl<'a> Coverage<'a> {
-    fn new(profile: Profile, dab: &'a Dab, seed: u32) -> Self {
+    fn new(profile: Profile, dab: &'a Dab, seed: u32, high_res_grain: bool) -> Self {
         let mut radius = dab.radius;
         let (amplitude, occupancy) = match profile {
             Profile::AppPencil => {
@@ -395,15 +447,28 @@ impl<'a> Coverage<'a> {
             cosine: dab.angle.cos(),
             sine: dab.angle.sin(),
             seed,
+            high_res_grain,
         }
     }
 
-    fn at(&self, x: f64, y: f64, pixel_scale: f64) -> f64 {
+    fn at(
+        &self,
+        x: f64,
+        y: f64,
+        pixel_scale: f64,
+        grain_x: f64,
+        grain_y: f64,
+        grain: Option<f64>,
+    ) -> f64 {
         let dx = x - self.dab.x;
         let dy = y - self.dab.y;
         if matches!(self.profile, Profile::AppPencil) {
-            let grain = field(x, y, 1.0, 0);
-            let gain = pencil_gain(x, y);
+            let grain = grain.unwrap_or_else(|| field(x, y, 1.0, 0));
+            let gain = if self.high_res_grain {
+                pencil_gain(grain_x, grain_y)
+            } else {
+                pencil_gain(x, y)
+            };
             let threshold =
                 0.97 * self.occupancy * gain / (1.0 - self.occupancy + self.occupancy * gain);
             if grain >= threshold {
@@ -519,4 +584,13 @@ fn brush_grain(source_x: f64, source_y: f64) -> f64 {
         + field(ix, iy + 1.0, 1.0, 0) * (1.0 - fx) * fy
         + field(ix + 1.0, iy + 1.0, 1.0, 0) * fx * fy;
     0.94 * coarse + 0.06 * field(source_x, source_y, 1.5, 0)
+}
+
+// Two smooth shears preserve area (Jacobian determinant 1): the same uniform
+// grain values and pressure thresholds survive, without axis-aligned square cells.
+// Fine ripples break up the cell edges; the coarse calibrated gain stays untouched.
+fn curved_grain(x: f64, y: f64) -> u16 {
+    let x = x + 0.30 * (y * 2.0 * PI / 3.17).sin() + 0.08 * (y * 2.0 * PI / 0.73).sin();
+    let y = y + 0.30 * (x * 2.0 * PI / 2.89).sin() + 0.08 * (x * 2.0 * PI / 0.67).sin();
+    field_bits(x, y, 1.0, 0)
 }

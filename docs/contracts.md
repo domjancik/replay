@@ -157,3 +157,12 @@ The browser stores attached reference PDFs locally. Native-reference matching do
 `rm-rmdoc` decodes bounded `.rmdoc` archives and explicitly dispatched v5/v6 page formats, with no renderer or acquisition dependency. Its version-1 owned-buffer WASM ABI accepts raw bytes separately from JSON options; it has no host imports. Normalized geometry, channels, groups, IDs, metadata and order retain the existing parsed-page contract. Diagnostic framing is implementation-specific and preserves unknown payloads, extensions and numeric enum values. Caller-supplied text layout remains evidence-bearing.
 
 Unknown file major versions fail. Unreadable potentially geometric or unknown block types remain available to diagnostic consumers but reject render projection; informational types 0, 9 and 10 may remain diagnostic-only. This is intentionally stricter than permissive Python projection. ZIP64 directories and multidisk archives reject. API/schema changes and new format support follow `native/rmdoc/FORMAT_UPDATES.md`; compatibility is established by synthetic and opt-in private differential fixtures, not by accepting an upstream version number.
+
+The hosted renderer also accepts opt-in `high_res_grain` for current pencil and
+mechanical pencil at twice source resolution or higher. It warps only the occupancy field with
+two area-preserving shears; pressure knots, gain field, boundary, geometry and
+compositing stay unchanged. Rasterized ink mass is checked separately and is not
+mathematically identical on finite strokes. This is an experimental appearance
+variant, not native-calibrated fidelity. False/omitted preserves texture-v7 output;
+below twice source resolution the option is inert. Settings, job manifests and
+renderer cache identity retain the choice. Static/replay equivalence still applies.

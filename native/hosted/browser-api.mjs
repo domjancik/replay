@@ -1,3 +1,9 @@
+export function applyGrainPreference(prepared, settings){
+ const enabled=settings.high_res_grain??false;
+ if(typeof enabled!=='boolean')throw Error('Invalid high-resolution grain option');
+ prepared.request.options={...prepared.request.options,high_res_grain:enabled};
+ prepared.config.high_res_grain=enabled;
+}
 export function pageInkBounds(page){
  const visible=new Set(page.groups.filter(g=>g.visible).map(g=>g.group_id));
    const order=new Set(page.replay_order);let bounds=null;
@@ -67,6 +73,7 @@ export async function createBrowserApi(){
     }
    }
    const result=await parser.call({op:'prepare',...src,settings:body.settings,anchor_result});
+   applyGrainPreference(result,body.settings);
    const rotation=body.settings.rotation??0;
    if(![0,90,180,270].includes(rotation))throw Error('Invalid page rotation');
    result.config.rotation=rotation;

@@ -59,6 +59,9 @@ pub struct Options {
     pub background: [u8; 4],
     #[serde(default)]
     pub pencil_boundary: bool,
+    /// Experimental curved pencil grain above source resolution; default preserves calibrated output.
+    #[serde(default)]
+    pub high_res_grain: bool,
 }
 fn white() -> [u8; 4] {
     [255; 4]
@@ -69,6 +72,7 @@ impl Default for Options {
             viewport: None,
             background: white(),
             pencil_boundary: false,
+            high_res_grain: false,
         }
     }
 }

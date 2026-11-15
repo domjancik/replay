@@ -53,3 +53,15 @@ The cache stores occupied 64-pixel tiles and recomposites affected tiles in laye
 order. Retained RGBA caches are capped at 64 MiB; dense inputs can fall back to the
 stateless renderer. This cap excludes page data, transient raster buffers and WASM
 allocator high-water memory. Coordinates and texture sampling remain unchanged.
+## Experimental high-resolution grain
+
+`options.high_res_grain: true` opts into curved grain cells for current pencil
+and mechanical pencil, only when both composition scales are at least twice source resolution.
+It defaults to false. Pressure knots, coarse density gain, boundary texture,
+stroke geometry and layer composition are unchanged. Two area-preserving shears
+warp the occupancy field, adding fine edge variation without increasing the
+underlying noise frequency. Finite strokes and raster sampling can still change
+ink mass slightly; this is an aesthetic departure, not additional native fidelity.
+The option participates in cache identity and works with prepared replay sessions.
+It can be slower. See `scripts/compare_high_res_grain.py` for pressure/angle/overlap
+comparisons and optional private drawing crops. No new app-export calibration is claimed.
