@@ -90,3 +90,11 @@ header{max-width:none;padding:12px 38px}.wordmark{font-family:Georgia,serif;font
 #preview-display>.section-heading{display:none}.gallery-layout #preview-display #notebook-preview,.gallery-layout #preview-display video,.gallery-layout #preview-display #preview{width:100%;object-fit:contain}
 
 .crop-ratios{width:100%;margin-top:12px}.inline-crop .crop-ratios button{margin:0;flex:1}.inline-crop .checkbox{margin:10px 0}
+
+/* A stable media stage prevents loading, image and video swaps moving settings. */
+#preview-stage{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);height:clamp(280px,34vw,430px);background:#fffefa;border:1px solid #dfddd5;overflow:hidden}
+.gallery-layout #preview-stage>:is(#empty,#notebook-preview,#preview,video){grid-area:1/1;width:100%;height:100%;min-height:0;max-height:100%;margin:0;border:0;object-fit:contain}
+#preview-stage #empty{padding:20px}
+#preview-display #notebook-preview-label{min-height:1.65em;margin:6px 0 0;font-size:10px}
+#preview-display #notebook-preview-label[hidden]{display:block!important;visibility:hidden}
+@media(max-width:800px){#preview-stage{height:clamp(280px,55svh,400px)}}

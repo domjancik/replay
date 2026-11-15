@@ -337,3 +337,11 @@ test('ratio presets fit inside existing selection and preserve its center',()=>{
  const {context}=fixture();
  assert.equal(vm.runInContext('JSON.stringify(fitCropRatio([10,20,100,100],4/5))',context),'[20,20,80,100]');
 });
+
+test('preview states share one reserved media stage with caption outside',()=>{
+ const html=readFileSync(new URL('../../src/rm_redraw/web/static/index.html',import.meta.url),'utf8');
+ const stage=html.match(/<div id="preview-stage">([\s\S]*?)<\/div><!-- preview-stage -->/);
+ assert.ok(stage,'reserve a stage even while all media are hidden');
+ for(const id of ['empty','notebook-preview','video','preview'])assert.ok(stage[1].includes(`id="${id}"`),`${id} belongs to the same stage`);
+ assert.ok(!stage[1].includes('id="notebook-preview-label"'),'caption must not change media sizing');
+});
